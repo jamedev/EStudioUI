@@ -1,0 +1,64 @@
+name: Build and test
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  windows:
+    name: Windows / MSVC 2022 / x64-windows-estudioui
+    runs-on: windows-2022
+    timeout-minutes: 30
+    env:
+      VCPKG_DEFAULT_BINARY_CACHE: ${{ runner.temp }}/estudioui-binary-cache
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: ${{ env.VCPKG_DEFAULT_BINARY_CACHE }}
+          key: windows-v143-${{ hashFiles('vcpkg.json', 'vcpkg-configuration.json', 'cmake/triplets/*.cmake') }}-${{ github.sha }}
+          restore-keys: |
+            windows-v143-${{ hashFiles('vcpkg.json', 'vcpkg-configuration.json', 'cmake/triplets/*.cmake') }}-
+      - name: Install, build, and test Release and Debug
+        shell: powershell
+        run: |
+          New-Item -ItemType Directory -Path $env:VCPKG_DEFAULT_BINARY_CACHE -Force | Out-Null
+          $checkout = Join-Path $env:RUNNER_TEMP 'estudioui-vcpkg'
+          ./Build.ps1 -VcpkgRoot $checkout -Configuration Release -SkipGpuTest
+          ./Build.ps1 -VcpkgRoot $checkout -Configuration Debug -SkipGpuTest
+        # Hosted Windows runners do not expose a guaranteed OpenGL 3.3 GPU.
+        # The same script runs the native GPU test by default on developer PCs.
+
+  linux:
+    name: Linux / vcpkg / software OpenGL
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    env:
+      VCPKG_ROOT: ${{ runner.temp }}/estudioui-vcpkg
+      VCPKG_DEFAULT_BINARY_CACHE: ${{ runner.temp }}/estudioui-binary-cache
+      VCPKG_MAX_CONCURRENCY: 2
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: ${{ env.VCPKG_DEFAULT_BINARY_CACHE }}
+          key: linux-${{ hashFiles('vcpkg.json', 'vcpkg-configuration.json') }}-${{ github.sha }}
+          restore-keys: |
+            linux-${{ hashFiles('vcpkg.json', 'vcpkg-configuration.json') }}-
+      - name: Install system headers and bootstrap vcpkg
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential cmake ninja-build pkg-config curl zip unzip tar xorg-dev libgl1-mesa-dev libosmesa6
+          mkdir -p "$VCPKG_DEFAULT_BINARY_CACHE"
+          git clone --branch 2025.04.09 --single-branch https://github.com/microsoft/vcpkg.git "$VCPKG_ROOT"
+          "$VCPKG_ROOT/bootstrap-vcpkg.sh" -disableMetrics
+      - name: Build and run core and real GL framebuffer tests
+        run: ./scripts/Build-Linux.sh Release

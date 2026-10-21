@@ -1,0 +1,89 @@
+/* EStudioUI CSS subset. Edit this file and press F5 in the running demo. */
+window {
+    background: #edf0f7;
+    color: #25304b;
+    font-size: 16px;
+    padding: 28px;
+    gap: 18px;
+}
+panel { flex-direction: column; }
+#header { flex-direction: row; height: 82px; align-items: center; gap: 20px; }
+#brand { width: 0; flex-grow: 1; gap: 4px; }
+#title { font-size: 34px; height: 46px; color: #19223a; }
+.subtitle { font-size: 14px; color: #66718a; height: 24px; }
+#themes { flex-direction: row; gap: 8px; align-items: center; }
+#themes button { height: 38px; font-size: 14px; padding: 8px 14px; }
+#workspace { flex-direction: row; height: 0; flex-grow: 1; gap: 20px; }
+.card {
+    width: 0;
+    flex-grow: 1;
+    background: #ffffff;
+    border: 1px solid #d8deeb;
+    border-radius: 16px;
+    padding: 22px;
+    gap: 12px;
+    box-shadow: 0px 8px 14px rgba(38, 52, 85, 0.07);
+}
+.eyebrow { font-size: 11px; color: #6372cc; height: 18px; }
+.section-title { font-size: 23px; height: 32px; }
+.description { font-size: 14px; height: 40px; color: #6a7690; }
+.row { flex-direction: row; gap: 10px; height: 44px; }
+button {
+    height: 44px;
+    padding: 10px 17px;
+    border-radius: 8px;
+    background: #f0f3fa;
+    color: #25304b;
+    border: 1px solid #c8d1e4;
+    font-size: 15px;
+    text-align: center;
+}
+button:hover { background: #e4eaf7; border-color: #7f91b8; }
+button:focus { border: 2px solid #6477d6; }
+button:active { background: #d5def2; border-color: #566cc8; }
+button.primary { background: #6578df; color: #ffffff; border-color: #6578df; }
+button.primary:hover { background: #7c8eea; }
+button.primary:active { background: #5368cd; }
+button:disabled { background: #eef0f5; color: #a4aec4; border-color: #e1e6f0; }
+#click-count { font-size: 14px; height: 24px; color: #687790; }
+.divider { height: 1px; background: #e0e6f1; margin: 4px 0px; }
+.field-label { font-size: 12px; height: 18px; color: #6b7893; }
+textbox {
+    height: 44px;
+    padding: 10px 13px;
+    background: #f6f8fd;
+    color: #25314c;
+    border: 1px solid #c9d3e6;
+    border-radius: 8px;
+    font-size: 15px;
+    placeholder-color: #94a0b7;
+    caret-color: #4d64c4;
+    selection-background-color: #6279d8;
+    selection-color: #ffffff;
+}
+textbox:hover { border-color: #879bc4; }
+textbox:focus { border: 2px solid #6578df; background: #f2f5ff; }
+textbox:read-only { background: #eef2fa; color: #7d8aa6; }
+textbox:disabled { opacity: 0.5; }
+#message {
+    height: 0;
+    min-height: 80px;
+    flex-grow: 1;
+    padding: 14px;
+    border-radius: 10px;
+    background: #eaf7f3;
+    color: #27785e;
+    font-size: 14px;
+}
+#css-sample {
+    height: 100px;
+    padding: 10px 12px;
+    border-radius: 8px;
+    background: #f0f3fb;
+    border: 1px solid #d8e0ef;
+    color: #586fae;
+    font-size: 13px;
+}
+#edit-status { height: 20px; font-size: 12px; color: #6980a4; }
+#footer { height: 24px; font-size: 12px; color: #7787a4; }
+.error { color: #b43c4f !important; }

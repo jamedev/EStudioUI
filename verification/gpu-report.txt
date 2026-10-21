@@ -1,0 +1,4 @@
+EStudioUI GPU integration: PASS
+Driver: llvmpipe (LLVM 20.1.2, 256 bits) | 4.5 (Core Profile) Mesa 25.1.7-1ubuntu2~24.04.2
+Initial demo: 1 draw call, 20 shapes, 744 glyph instances, 71 cached glyphs, 85544 outline/band bytes.
+Checked: callbacks, capture, keyboard, Tab, Unicode editing, clipboard, undo, read-only, CSS reload, theme pixels, resize, clipping, blending, vector glyph coverage, high-DPI.

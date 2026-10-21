@@ -1,0 +1,6 @@
+Renderer stress scene: 640 rounded boxes, 3840 analytic glyphs, 1600x900, one draw call.
+Driver: llvmpipe (LLVM 20.1.2, 256 bits) | 4.5 (Core Profile) Mesa 25.1.7-1ubuntu2~24.04.2
+30 measured frames after 5 warm-up frames.
+Average: 11.0321 ms; median: 10.3694 ms.
+Includes CPU submission and synchronous readback. Excludes widget layout and shaping.
+Software OpenGL timings describe this CPU environment, not hardware GPU performance.

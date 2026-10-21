@@ -1,0 +1,7 @@
+/build/
+/.tools/
+/vcpkg_installed/
+/verification-local/
+/benchmark-local/
+CMakeUserPresets.json
+*.user

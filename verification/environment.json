@@ -1,0 +1,30 @@
+{
+  "date_utc": "2026-10-21",
+  "project": "EStudioUI 0.2.0",
+  "system": "Linux",
+  "machine": "x86_64",
+  "compiler": "c++ (Ubuntu 13.3.0-6ubuntu2~24.04) 13.3.0",
+  "cmake": "4.4.4",
+  "ninja": "1.13.2",
+  "powershell_parser_and_mock_host": "7.6.7",
+  "vcpkg_baseline": "ce613c41372b23b1f51333815feb3edd87ef8a8b",
+  "target_triplet_tested_locally": "x64-linux",
+  "windows_triplet_supplied": "x64-windows-estudioui",
+  "dependencies": {
+    "glfw3": "3.4#1",
+    "freetype": "2.13.3",
+    "harfbuzz": "10.2.0#3",
+    "utf8proc": "2.10.0"
+  },
+  "default_package_features": "all disabled",
+  "renderer": "llvmpipe (LLVM 20.1.2, 256 bits)",
+  "opengl": "4.5 Core Profile Mesa 25.1.7-1ubuntu2~24.04.2; shaders target 3.3 core",
+  "core_checks": 78,
+  "powershell_mock_checks": 24,
+  "debug_ctest": "2/2 pass",
+  "release_ctest": "2/2 pass",
+  "address_and_undefined_sanitizers": "2/2 pass, own C++ code instrumented",
+  "leak_sanitizer": "host ptrace restriction; detect_leaks=0",
+  "native_windows_msvc": "See GitHub Actions; not executed by the local Linux host",
+  "native_platform_clipboard": "not exercised by headless tests"
+}

@@ -1,0 +1,12 @@
+PowerShell mocked orchestration: PASS / 24 checks
+release: PASS
+debug: PASS
+failure-install: PASS
+failure-configure: PASS
+failure-build: PASS
+failure-ctest: PASS
+failure-gpu: PASS
+bootstrap: PASS
+preserve-existing: PASS
+missing-vs: PASS
+cmake-fallback: PASS

@@ -1,0 +1,9 @@
+Test project /workspace/scratch/e2c95811cd0a/EStudioUI/build/debug
+    Start 1: Core
+1/2 Test #1: Core .............................   Passed    0.21 sec
+    Start 2: GpuIntegration
+2/2 Test #2: GpuIntegration ...................   Passed    0.69 sec
+
+100% tests passed out of 2
+
+Total Test time (real) =   0.90 sec
