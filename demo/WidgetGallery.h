@@ -3,6 +3,7 @@
 #include "DemoScene.h"
 #include "AnimationGallery.h"
 #include "RichCssGallery.h"
+#include "SketchGallery.h"
 
 #include <EStudioUI/ContextMenu.h>
 #include <EStudioUI/ListWidget.h>
@@ -108,5 +109,8 @@ class WidgetGallery
 
     //! Owns the animation playground and its scheduler connection.
     std::unique_ptr<AnimationGallery> m_Animations;
+
+    //! Owns the infinite-canvas CAD sketching page.
+    std::unique_ptr<SketchGallery> m_Sketch;
 };
 } // namespace EStudioUI

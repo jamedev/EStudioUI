@@ -1,0 +1,21 @@
+Test project /workspace/scratch/e2c95811cd0a/EStudioUI/build/release
+    Start 1: Core
+1/8 Test #1: Core .............................   Passed    0.01 sec
+    Start 2: WidgetsAndLayout
+2/8 Test #2: WidgetsAndLayout .................   Passed    0.02 sec
+    Start 3: Animation
+3/8 Test #3: Animation ........................   Passed    0.01 sec
+    Start 4: RichCss
+4/8 Test #4: RichCss ..........................   Passed    0.07 sec
+    Start 5: CanvasScene
+5/8 Test #5: CanvasScene ......................   Passed    0.15 sec
+    Start 6: SketchDocument
+6/8 Test #6: SketchDocument ...................   Passed    0.61 sec
+    Start 7: CanvasWidget
+7/8 Test #7: CanvasWidget .....................   Passed    0.01 sec
+    Start 8: GpuIntegration
+8/8 Test #8: GpuIntegration ...................   Passed    2.60 sec
+
+100% tests passed out of 8
+
+Total Test time (real) =   3.48 sec

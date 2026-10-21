@@ -140,3 +140,13 @@ openglwidget:focus { border-color: #5066d9; }
 .layout-caption { font-size: 15px; height: 32px; }
 .layout-description { font-size: 13px; height: 80px; }
 .layout-note { font-size: 14px; height: 48px; color: #586780; }
+
+/* World-anchored regular widgets inherit the ordinary window theme. */
+canvas {
+  background: #e9eff5;
+  border: 1px solid #b4c2d1;
+  border-radius: 8px;
+  padding: 0;
+  grid-color: rgba(54, 81, 107, 0.15);
+  color: #537796;
+}

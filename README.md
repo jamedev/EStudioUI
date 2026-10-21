@@ -7,6 +7,22 @@ manifest; no Qt or commercial SDK is required.
 
 ![EStudioUI widget gallery](verification/widgets-dark.png)
 
+## Infinite canvas and sketcher (0.6)
+
+The **Sketcher** tab adds an editable CAD geometry prototype: lines, rectangles,
+circles, outline picking, box selection, movement, snapping, undo/redo, and
+save/open. Pan and pointer-centered zoom use a double-precision camera. Real
+CSS-styled text boxes/buttons can be hosted at world-space positions.
+
+Dense items use contiguous scene data, shared compiled CSS styles, a balanced
+dynamic BVH, and viewport-only GPU submission. The **200,000 items** button loads
+a stress scene; `--profile-canvas` records build/query/frame costs. Idle canvases
+do not continuously redraw. No new dependency is added. See [CANVAS.md](CANVAS.md)
+for controls, APIs, measurements, and the distinction between this geometry
+editor and a future parametric constraint solver.
+
+![CAD sketcher rendered by EStudioUI](verification/canvas-sketcher.png)
+
 ## Rich GPU styling (0.5)
 
 The **Rich CSS** tab contains twelve working button styles and a focusable text

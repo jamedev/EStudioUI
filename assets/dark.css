@@ -140,3 +140,13 @@ openglwidget:focus { border-color: #8c9bff; }
 .layout-caption { font-size: 15px; height: 32px; }
 .layout-description { font-size: 13px; height: 80px; }
 .layout-note { font-size: 14px; height: 48px; color: #a0acc5; }
+
+/* The canvas surface is a normal widget; dense item paint uses its shared palette. */
+canvas {
+  background: #0d1827;
+  border: 1px solid #33445a;
+  border-radius: 8px;
+  padding: 0;
+  grid-color: rgba(136, 167, 197, 0.13);
+  color: #769bb8;
+}

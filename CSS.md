@@ -249,3 +249,19 @@ affects labels/buttons; editable lines scroll horizontally around their caret.
 Widget `position`/edge offsets do not replace the layout API; those declarations
 are intended for decorative layers. Unsupported declarations fail during parsing
 rather than being silently interpreted as full browser CSS.
+
+## Canvas items
+
+The `canvas` widget itself uses the ordinary window stylesheet. Dense scene
+items use `CanvasWidget::SetItemStyleSheet` and integer handles returned by
+`RegisterItemStyle`; identities support type, ID, class, and `:selected` selectors.
+Normal/selected presentations are compiled into a small shared palette at reload,
+not resolved for every entity during paint. A synthetic `canvas` parent allows
+selectors such as `canvas > canvas-item` within this palette.
+
+Lines use `color`, `border-width`, and opacity. Rectangles/circles support static
+backgrounds/gradients, borders, shadows, and opacity; rectangle radius stays in
+logical pixels. Dense-item transforms, layout declarations, pseudo-elements,
+and automatic transitions/keyframes are not applied. Hosted ordinary widgets
+retain the existing CSS behavior. See [CANVAS.md](CANVAS.md) for examples and the
+screen-space stroke versus world-space geometry contract.

@@ -83,6 +83,9 @@ class UiContext
     //! Routes wheel deltas to the nearest scrollable ancestor.
     void Scroll(Point position, Point delta, Modifiers modifiers = {});
 
+    //! Returns the latest pointer or wheel position in logical window coordinates.
+    std::optional<Point> GetPointerPosition() const;
+
     //! Bubbles a right-click or Menu-key request through the hit ancestor path.
     void ContextMenu(Point position);
 

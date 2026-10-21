@@ -47,6 +47,16 @@ void main()
     vec2 corner=corners[gl_VertexID];
     float padding=(aData.w==0 || aData.w==4)?aAux.w:0.0;
     vec2 p=aRect.xy-vec2(padding)+corner*(aRect.zw+2.0*padding);
+    if(aData.w==5)
+    {
+        vec2 segment=aAux.zw-aAux.xy;
+        float extent=length(segment);
+        vec2 direction=extent>0.0?segment/extent:vec2(1,0);
+        vec2 normal=vec2(-direction.y,direction.x);
+        float margin=aBands.x+aBands.y;
+        p=aAux.xy+direction*(-margin+corner.x*(extent+2.0*margin))
+            +normal*((corner.y*2.0-1.0)*margin);
+    }
     vec2 world=p;
     if(aEffects.x!=0)
     {
@@ -170,6 +180,16 @@ void main()
     {
         result=texture(uImage,vEm)*vColor;
         result.a*=clipCoverage;
+        return;
+    }
+    if(vData.w==5)
+    {
+        vec2 segment=vParams.zw-vParams.xy;
+        vec2 offset=vPosition-vParams.xy;
+        float squaredLength=dot(segment,segment);
+        float t=squaredLength>0.0?clamp(dot(offset,segment)/squaredLength,0.0,1.0):0.0;
+        float d=length(offset-segment*t)-vBands.x;
+        result=vec4(vColor.rgb,vColor.a*coverage(d)*clipCoverage);
         return;
     }
     if(vData.w==0 || vData.w==3 || vData.w==4)
@@ -336,12 +356,32 @@ struct Renderer::Impl
         bool m_BeforeDrawn = false, m_Rounded = false;
         float m_Radius = 0;
         std::uintptr_t m_OwnerIdentity = 0;
+        std::uint64_t m_SubIdentity = 0;
+        bool m_CustomIdentity = false;
         unsigned m_Layer = 0;
+    };
+
+    struct PaintOwner
+    {
+        std::uintptr_t m_Owner;
+        std::uint64_t m_SubIdentity;
+        bool m_Custom;
+        bool operator==(const PaintOwner&) const = default;
+    };
+
+    struct PaintOwnerHash
+    {
+        std::size_t operator()(const PaintOwner& owner) const
+        {
+            return std::hash<std::uintptr_t>{}(owner.m_Owner) ^
+                   (std::hash<std::uint64_t>{}(owner.m_SubIdentity) * 0x9e3779b9u) ^
+                   (static_cast<std::size_t>(owner.m_Custom) * 0x85ebca6bu);
+        }
     };
 
     struct PaintKey
     {
-        std::uintptr_t m_Owner;
+        PaintOwner m_Owner;
         std::uint64_t m_Sequence;
         bool operator==(const PaintKey&) const = default;
     };
@@ -350,20 +390,21 @@ struct Renderer::Impl
     {
         std::size_t operator()(const PaintKey& key) const
         {
-            return std::hash<std::uintptr_t>{}(key.m_Owner) ^
-                   (std::hash<std::uint64_t>{}(key.m_Sequence) * 0x9e3779b9u);
+            return PaintOwnerHash{}(key.m_Owner) ^ (std::hash<std::uint64_t>{}(key.m_Sequence) * 0x9e3779b9u);
         }
     };
 
     std::vector<PaintKey> m_PaintKeys, m_PreviousKeys;
-    std::unordered_map<std::uintptr_t, std::array<unsigned, 15>> m_OwnerCounters;
+    static constexpr std::size_t s_PrimitiveKinds = 6;
+    std::unordered_map<PaintOwner, std::array<unsigned, 3 * s_PrimitiveKinds>, PaintOwnerHash> m_OwnerCounters;
 
     PaintKey NextPaintKey(std::size_t kind)
     {
         const auto& state = m_States.back();
-        const auto slot = static_cast<std::size_t>(state.m_Layer) * 5 + kind;
-        auto& sequence = m_OwnerCounters[state.m_OwnerIdentity][slot];
-        return {state.m_OwnerIdentity, (static_cast<std::uint64_t>(sequence++) << 8) | slot};
+        const auto slot = static_cast<std::size_t>(state.m_Layer) * s_PrimitiveKinds + kind;
+        const PaintOwner owner{state.m_OwnerIdentity, state.m_SubIdentity, state.m_CustomIdentity};
+        auto& sequence = m_OwnerCounters[owner][slot];
+        return {owner, (static_cast<std::uint64_t>(sequence++) << 8) | slot};
     }
 
     void Record(Instance instance)
@@ -1061,12 +1102,23 @@ void Renderer::SetWidgetPaint(Rect bounds, Rect inheritedClip, const Style* befo
     auto& state = m_Impl->m_States.back();
     state.m_Owner = bounds;
     state.m_OwnerIdentity = ownerIdentity;
+    state.m_SubIdentity = 0;
+    state.m_CustomIdentity = false;
     state.m_Layer = 0;
     state.m_IgnoredClip = inheritedClip;
     state.m_Before = before;
     state.m_BeforeDrawn = false;
     state.m_Rounded = rounded;
     state.m_Radius = radius;
+}
+
+void Renderer::SetPaintIdentity(std::uintptr_t ownerIdentity, std::uint64_t subIdentity)
+{
+    auto& state = m_Impl->m_States.back();
+    state.m_OwnerIdentity = ownerIdentity;
+    state.m_SubIdentity = subIdentity;
+    state.m_CustomIdentity = true;
+    state.m_Layer = 0;
 }
 
 void Renderer::DrawDecoration(Rect owner, const Style& style, Rect clip, float opacity, unsigned layer)
@@ -1178,6 +1230,50 @@ void Renderer::DrawSolid(Rect bounds, Color color, Rect clip)
         // Preserve logical slots for transparent row/cell backgrounds so a
         // selection change does not invalidate surrounding grid primitives.
         m_Impl->NextPaintKey(0);
+}
+
+void Renderer::DrawLine(Point from, Point to, Color color, float width, Rect clip)
+{
+    if (!std::isfinite(from.m_X) || !std::isfinite(from.m_Y) || !std::isfinite(to.m_X) || !std::isfinite(to.m_Y) ||
+        !std::isfinite(width))
+        throw std::invalid_argument("Line coordinates and width must be finite.");
+    auto& self = *m_Impl;
+    if (width <= 0 || color.m_A <= 0)
+    {
+        self.NextPaintKey(5);
+        return;
+    }
+    const float radius = width * 0.5f;
+    const float padding = std::max(1.0f, std::max(self.m_Width / static_cast<float>(self.m_FramebufferWidth),
+                                                  self.m_Height / static_cast<float>(self.m_FramebufferHeight)));
+    const float margin = radius + padding;
+    // The rasterized quad follows the segment. Its conservative axis-aligned
+    // bounds are used only for damage and coarse clipping, never as a filled quad.
+    const Rect bounds{std::min(from.m_X, to.m_X) - margin, std::min(from.m_Y, to.m_Y) - margin,
+                      std::abs(to.m_X - from.m_X) + 2 * margin, std::abs(to.m_Y - from.m_Y) + 2 * margin};
+    const auto [scissor, effects] = self.DrawingState(clip);
+    if (effects[1] < 0 || !self.Visible(bounds, scissor))
+        return;
+    ++self.m_ShapeCount;
+    self.Record({Values(bounds),
+                 {from.m_X, from.m_Y, to.m_X, to.m_Y},
+                 color,
+                 {},
+                 Values(scissor),
+                 {radius, padding, 0, 0},
+                 {0, 0, 0, 5},
+                 effects});
+}
+
+void Renderer::DrawCircle(Point center, float radius, const Style& style, Rect clip, float opacity)
+{
+    if (!std::isfinite(center.m_X) || !std::isfinite(center.m_Y) || !std::isfinite(radius))
+        throw std::invalid_argument("Circle coordinates and radius must be finite.");
+    if (radius <= 0)
+        return;
+    auto circleStyle = style;
+    circleStyle.m_Radius = radius;
+    DrawBox({center.m_X - radius, center.m_Y - radius, radius * 2, radius * 2}, circleStyle, clip, opacity);
 }
 
 void Renderer::DrawText(const TextLayout& layout, Point baseline, Color color, Rect clip)

@@ -1,0 +1,4 @@
+Driver: llvmpipe (LLVM 20.1.2, 256 bits) | 4.5 (Core Profile) Mesa 25.1.7-1ubuntu2~24.04.2
+800x600, 4 warmup + 32 completed pan frames; 100 isolated CPU BVH queries per scene.
+Same visible density for 20k/200k. Times are host measurements, not Windows GPU utilization.
+No full-scene-overview/LOD throughput claim: drawing all visible geometry remains O(visible).

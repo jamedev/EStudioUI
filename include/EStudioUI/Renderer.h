@@ -104,6 +104,9 @@ class Renderer
     void SetWidgetPaint(Rect bounds, Rect inheritedClip, const Style* before, bool rounded, float radius,
                         std::uintptr_t ownerIdentity = 0);
 
+    //! Assigns a stable item identity within an owner, isolated from ordinary widget paint keys.
+    void SetPaintIdentity(std::uintptr_t ownerIdentity, std::uint64_t subIdentity = 0);
+
     //! Draws a CSS pseudo-element in layer 1 (before) or 2 (after).
     void DrawDecoration(Rect owner, const Style& style, Rect clip, float opacity, unsigned layer = 1);
 
@@ -112,6 +115,12 @@ class Renderer
 
     //! Appends an unbordered solid rectangle.
     void DrawSolid(Rect bounds, Color color, Rect clip);
+
+    //! Appends an analytic round-capped line with width in local logical pixels.
+    void DrawLine(Point from, Point to, Color color, float width, Rect clip);
+
+    //! Appends an analytic circle with CSS fill, border, gradient, and shadows.
+    void DrawCircle(Point center, float radius, const Style& style, Rect clip, float opacity = 1);
 
     //! Appends a cached shaped run at its baseline origin.
     void DrawText(const TextLayout& layout, Point baseline, Color color, Rect clip);

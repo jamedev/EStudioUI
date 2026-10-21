@@ -1,5 +1,7 @@
 #include "GpuWorkload.h"
 #include "WidgetGallery.h"
+#include "CanvasPrimitiveProbe.h"
+#include "CanvasProbe.h"
 
 #include <EStudioUI/Button.h>
 #include <EStudioUI/TextBox.h>
@@ -226,7 +228,7 @@ class Demo
             });
         if (!LoadCss(m_CurrentCss))
             throw std::runtime_error("Initial CSS could not be loaded.");
-        m_Tabs->SetCurrentIndex(5);
+        m_Tabs->SetCurrentIndex(6);
     }
 
     ~Demo()
@@ -357,6 +359,9 @@ class Demo
         VerifyPrimitives(output);
         m_Gallery->Verify(m_Assets, output);
         VerifyGpuWorkload(m_Window, m_Assets, output);
+        VerifyCanvasPrimitives(m_Assets, output, m_Window.IsHeadless());
+        VerifyCanvas(m_Assets, output, m_Window.IsHeadless());
+        m_Window.RenderFrame();
         std::ofstream report(output / "gpu-report.txt");
         report << "EStudioUI GPU integration: PASS\nDriver: " << gpu.GetDriverDescription()
                << "\nInitial demo: " << stats.m_DrawCalls << " draw call, " << stats.m_Shapes << " shapes, "
@@ -457,6 +462,7 @@ int main(int argc, char** argv)
         bool selfTest = false;
         bool benchmark = false;
         bool profile = false;
+        bool profileCanvas = false;
         for (int i = 1; i < argc; ++i)
         {
             const std::string argument = argv[i];
@@ -472,6 +478,8 @@ int main(int argc, char** argv)
                 selfTest = true;
             else if (argument == "--profile-ui")
                 profile = true;
+            else if (argument == "--profile-canvas")
+                profileCanvas = true;
             else if (argument == "--benchmark")
                 benchmark = true;
             else if (argument == "--font")
@@ -483,6 +491,7 @@ int main(int argc, char** argv)
             else if (argument == "--help")
             {
                 std::cout << "EStudioUIDemo [--css FILE] [--font FILE] [--self-test] [--benchmark] [--profile-ui] "
+                             "[--profile-canvas] "
                              "[--headless] "
                              "[--output DIR]\n"
                           << "F5 reloads CSS; F6 switches themes. Headless mode requires OSMesa (Linux).\n";
@@ -490,6 +499,11 @@ int main(int argc, char** argv)
             }
             else
                 throw std::runtime_error("Unknown argument: " + argument);
+        }
+        if (profileCanvas)
+        {
+            ProfileCanvas(assets, output, options.m_Headless);
+            return 0;
         }
         Window window(options, font);
         Demo demo(window, assets, css);
@@ -510,7 +524,8 @@ int main(int argc, char** argv)
             return 0;
         }
         if (options.m_Headless)
-            throw std::runtime_error("Use --self-test, --benchmark, or --profile-ui with --headless.");
+            throw std::runtime_error(
+                "Use --self-test, --benchmark, --profile-ui, or --profile-canvas with --headless.");
         return window.Run();
     }
     catch (const std::exception& error)

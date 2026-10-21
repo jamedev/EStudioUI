@@ -240,3 +240,22 @@ profiling at larger widget counts. Collection selection is single-item/cell;
 menus are single-level and large menus are clipped rather than scrollable. Performance measurements must
 separate shaping, style/layout, instance submission, and GPU time rather than
 inferring throughput from draw-call count alone.
+
+## Canvas scene and CAD editing
+
+`CanvasScene` owns dense analytic geometry and stable generational slots, with a
+balanced dynamic AABB BVH for insertion, movement, deletion, and spatial queries.
+`CanvasWidget` owns a double-precision camera, a cached viewport query, and a small
+shared normal/selected CSS palette. Only candidates reach the GPU paint stream;
+item identities are separate from widget paint identities so selection and
+visibility changes do not renumber unrelated paint records. `DrawLine` uses one
+oriented analytic capsule instance. Coordinates become floats after camera
+subtraction; view-spanning lines are clipped before conversion.
+
+`SketchDocument` layers analytic picking, snapping, selection, and bounded edit
+commands over that model. Logical command records survive deleted/recreated scene
+IDs so undo can safely restore geometry and painter order. `SketchWidget` keeps
+in-progress gestures as transient previews and commits one command at release.
+Sparse hosted widget trees remain ordinary owned children with normal input and
+CSS; they are an overlay, not the representation of dense geometric objects.
+See [CANVAS.md](CANVAS.md) for API contracts, format, and scaling boundaries.

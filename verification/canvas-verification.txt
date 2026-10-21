@@ -1,0 +1,4 @@
+Canvas GPU PASS
+Driver: llvmpipe (LLVM 20.1.2, 256 bits) | 4.5 (Core Profile) Mesa 25.1.7-1ubuntu2~24.04.2
+10 retained/full RGBA comparisons; unchanged and offscreen edit zero repaint.
+200000 items / visible 336 / BVH nodes 805 / recorded shapes 338

@@ -729,6 +729,7 @@ namespace EStudioUI
 {
 void UiContext::Scroll(Point position, Point delta, Modifiers modifiers)
 {
+    m_PointerPosition = position;
     Prepare(m_Width, m_Height);
     std::vector<WidgetRef> path;
     for (auto* node = HitTest(m_Popup.Get() ? *m_Popup.Get() : m_Root, position); node; node = node->m_Parent)
@@ -736,6 +737,11 @@ void UiContext::Scroll(Point position, Point delta, Modifiers modifiers)
     for (auto& reference : path)
         if (auto* node = reference.Get(); node && node->IsEnabled() && node->OnScroll(delta, modifiers))
             return;
+}
+
+std::optional<Point> UiContext::GetPointerPosition() const
+{
+    return m_PointerPosition;
 }
 
 void UiContext::ContextMenu(Point position)

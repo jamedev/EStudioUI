@@ -1,0 +1,21 @@
+Test project /workspace/scratch/e2c95811cd0a/EStudioUI/build/sanitize
+    Start 1: Core
+1/8 Test #1: Core .............................   Passed    0.42 sec
+    Start 2: WidgetsAndLayout
+2/8 Test #2: WidgetsAndLayout .................   Passed    0.45 sec
+    Start 3: Animation
+3/8 Test #3: Animation ........................   Passed    0.36 sec
+    Start 4: RichCss
+4/8 Test #4: RichCss ..........................   Passed    2.14 sec
+    Start 5: CanvasScene
+5/8 Test #5: CanvasScene ......................   Passed    2.18 sec
+    Start 6: SketchDocument
+6/8 Test #6: SketchDocument ...................   Passed    6.28 sec
+    Start 7: CanvasWidget
+7/8 Test #7: CanvasWidget .....................   Passed    0.28 sec
+    Start 8: GpuIntegration
+8/8 Test #8: GpuIntegration ...................   Passed    8.82 sec
+
+100% tests passed out of 8
+
+Total Test time (real) =  20.93 sec

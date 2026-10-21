@@ -1,0 +1,4 @@
+Canvas analytic GPU primitives: PASS
+32 complete retained/full RGBA frame comparisons at 1x and 2x logical scale.
+Checked: round caps, zero-length lines, diagonals, CSS circle fill/border/shadow, clips, transforms,
+item removal/reinsertion/generation IDs, distinct canvas owners, overlapping painter order, idle reuse.
