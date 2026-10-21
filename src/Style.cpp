@@ -1,4 +1,5 @@
 #include <EStudioUI/Style.h>
+#include <EStudioUI/StyleProperty.h>
 
 #include <algorithm>
 #include <charconv>
@@ -167,6 +168,624 @@ bool IdentifierCharacter(char c)
 {
     return std::isalnum(static_cast<unsigned char>(c)) || c == '_' || c == '-';
 }
+
+std::vector<std::string> Split(std::string_view text, char delimiter)
+{
+    std::vector<std::string> result;
+    int depth = 0;
+    char quote = 0;
+    std::size_t start = 0;
+    for (std::size_t i = 0; i < text.size(); ++i)
+    {
+        const char c = text[i];
+        if (quote)
+        {
+            if (c == quote && (i == 0 || text[i - 1] != '\\'))
+                quote = 0;
+            continue;
+        }
+        if (c == '\'' || c == '"')
+            quote = c;
+        else if (c == '(')
+            ++depth;
+        else if (c == ')')
+            --depth;
+        else if (c == delimiter && depth == 0)
+        {
+            result.push_back(Trim(text.substr(start, i - start)));
+            start = i + 1;
+        }
+        if (depth < 0)
+            throw std::runtime_error("Unbalanced CSS function.");
+    }
+    if (quote || depth)
+        throw std::runtime_error("Unterminated CSS function or string.");
+    result.push_back(Trim(text.substr(start)));
+    return result;
+}
+
+float Angle(std::string value)
+{
+    if (value.ends_with("deg"))
+        return Number(value.substr(0, value.size() - 3), true);
+    if (value.ends_with("turn"))
+        return Number(value.substr(0, value.size() - 4), true) * 360;
+    if (value.ends_with("rad"))
+        return Number(value.substr(0, value.size() - 3), true) * 180 / 3.14159265358979323846f;
+    if (value == "0")
+        return 0;
+    throw std::runtime_error("Angles require deg, rad, or turn.");
+}
+
+float Percent(const std::string& text)
+{
+    if (!text.ends_with('%'))
+        throw std::runtime_error("Expected a percentage.");
+    return Number(text.substr(0, text.size() - 1), true) / 100;
+}
+
+Gradient ParseGradient(const std::string& value)
+{
+    if (value == "none")
+        return {};
+    Gradient result;
+    const bool linear = value.starts_with("linear-gradient(");
+    if (!linear && !value.starts_with("radial-gradient("))
+        throw std::runtime_error("Supported background images: linear-gradient and radial-gradient.");
+    if (!value.ends_with(')'))
+        throw std::runtime_error("Unterminated gradient.");
+    const auto open = value.find('(');
+    const auto parts = Split(std::string_view(value).substr(open + 1, value.size() - open - 2), ',');
+    result.m_Kind = linear ? Gradient::Kind::Linear : Gradient::Kind::Radial;
+    std::size_t first = 0;
+    if (!parts.empty() && linear &&
+        (parts[0].starts_with("to ") || parts[0].ends_with("deg") || parts[0].ends_with("turn") ||
+         parts[0].ends_with("rad")))
+    {
+        const auto& direction = parts[0];
+        if (direction == "to right")
+            result.m_Angle = 90;
+        else if (direction == "to left")
+            result.m_Angle = 270;
+        else if (direction == "to top")
+            result.m_Angle = 0;
+        else if (direction == "to bottom")
+            result.m_Angle = 180;
+        else if (direction == "to top right" || direction == "to right top")
+            result.m_Angle = 45;
+        else if (direction == "to bottom right" || direction == "to right bottom")
+            result.m_Angle = 135;
+        else if (direction == "to bottom left" || direction == "to left bottom")
+            result.m_Angle = 225;
+        else if (direction == "to top left" || direction == "to left top")
+            result.m_Angle = 315;
+        else
+            result.m_Angle = Angle(direction);
+        first = 1;
+    }
+    if (!parts.empty() && !linear &&
+        (parts[0].starts_with("ellipse") || parts[0].starts_with("circle") || parts[0].starts_with("at ")))
+    {
+        auto words = Words(parts[0]);
+        std::size_t index = 0;
+        if (words[0] == "ellipse" || words[0] == "circle")
+            ++index;
+        if (index < words.size() && words[index] != "at")
+        {
+            result.m_Radius.m_X = Percent(words[index++]);
+            result.m_Radius.m_Y =
+                index < words.size() && words[index] != "at" ? Percent(words[index++]) : result.m_Radius.m_X;
+        }
+        if (index < words.size())
+        {
+            if (words[index++] != "at" || words.size() - index != 2)
+                throw std::runtime_error("Radial gradients use: ellipse [rx% ry%] at x% y%.");
+            result.m_Center = {Percent(words[index]), Percent(words[index + 1])};
+        }
+        first = 1;
+    }
+    if (parts.size() - first < 2 || parts.size() - first > 8)
+        throw std::runtime_error("Gradients require two to eight stops.");
+    std::vector<bool> specified;
+    for (std::size_t i = first; i < parts.size(); ++i)
+    {
+        const auto words = Words(parts[i]);
+        if (words.empty() || words.size() > 2)
+            throw std::runtime_error("Gradient stops use color [position%].");
+        result.m_Stops.push_back({words.size() == 2 ? Percent(words[1]) : 0, ParseColor(words[0])});
+        specified.push_back(words.size() == 2);
+    }
+    if (!specified.front())
+    {
+        specified.front() = true;
+        result.m_Stops.front().m_Position = 0;
+    }
+    if (!specified.back())
+    {
+        specified.back() = true;
+        result.m_Stops.back().m_Position = 1;
+    }
+    std::size_t anchor = 0;
+    for (std::size_t i = 1; i < result.m_Stops.size(); ++i)
+    {
+        if (!specified[i])
+            continue;
+        auto& stop = result.m_Stops[i];
+        stop.m_Position = std::max(stop.m_Position, result.m_Stops[anchor].m_Position);
+        for (std::size_t j = anchor + 1; j < i; ++j)
+            result.m_Stops[j].m_Position = std::lerp(result.m_Stops[anchor].m_Position, stop.m_Position,
+                                                     static_cast<float>(j - anchor) / static_cast<float>(i - anchor));
+        anchor = i;
+    }
+    return result;
+}
+
+Transform ParseTransform(const std::string& value)
+{
+    Transform result;
+    if (value == "none")
+        return result;
+    std::size_t start = 0;
+    while (start < value.size())
+    {
+        start = value.find_first_not_of(" \t\r\n", start);
+        if (start == std::string::npos)
+            break;
+        const auto open = value.find('(', start);
+        const auto close = value.find(')', open);
+        if (open == std::string::npos || close == std::string::npos)
+            throw std::runtime_error("Unterminated transform.");
+        const auto name = Lower(Trim(std::string_view(value).substr(start, open - start)));
+        auto body = value.substr(open + 1, close - open - 1);
+        std::replace(body.begin(), body.end(), ',', ' ');
+        const auto parts = Words(body);
+        TransformOperation operation;
+        const auto count = parts.size();
+        if (count == 0)
+            throw std::runtime_error("Transform arguments are required.");
+        if (name == "translate" || name == "translatex" || name == "translatey")
+        {
+            if (count > (name == "translate" ? 2u : 1u))
+                throw std::runtime_error("Invalid translation arguments.");
+            operation.m_Kind = TransformOperation::Kind::Translate;
+            const auto length = [](const std::string& word)
+            { return word.ends_with('%') ? Percent(word) * 100 : Number(word, true); };
+            if (name == "translatey")
+            {
+                operation.m_Values[1] = length(parts[0]);
+                operation.m_PercentY = parts[0].ends_with('%');
+            }
+            else
+            {
+                operation.m_Values[0] = length(parts[0]);
+                operation.m_PercentX = parts[0].ends_with('%');
+                if (count == 2)
+                {
+                    operation.m_Values[1] = length(parts[1]);
+                    operation.m_PercentY = parts[1].ends_with('%');
+                }
+            }
+        }
+        else if (name == "scale" || name == "scalex" || name == "scaley")
+        {
+            if (count > (name == "scale" ? 2u : 1u))
+                throw std::runtime_error("Invalid scale arguments.");
+            operation.m_Kind = TransformOperation::Kind::Scale;
+            operation.m_Values[0] = name == "scaley" ? 1 : Number(parts[0], true);
+            operation.m_Values[1] = name == "scalex" ? 1 : Number(parts[count == 2 ? 1 : 0], true);
+        }
+        else if (name == "rotate" || name == "skewx" || name == "skewy")
+        {
+            if (count != 1)
+                throw std::runtime_error("Angles require one argument.");
+            operation.m_Kind = name == "rotate"  ? TransformOperation::Kind::Rotate
+                               : name == "skewx" ? TransformOperation::Kind::SkewX
+                                                 : TransformOperation::Kind::SkewY;
+            operation.m_Values[0] = Angle(parts[0]);
+        }
+        else if (name == "matrix")
+        {
+            if (count != 6)
+                throw std::runtime_error("matrix requires six numbers.");
+            operation.m_Kind = TransformOperation::Kind::Matrix;
+            for (std::size_t i = 0; i < 6; ++i)
+                operation.m_Values[i] = Number(parts[i], true);
+        }
+        else
+            throw std::runtime_error("Unsupported 2D transform: " + name);
+        result.m_Operations.push_back(operation);
+        if (result.m_Operations.size() > 8)
+            throw std::runtime_error("Transforms support at most eight operations.");
+        start = close + 1;
+    }
+    if (result.m_Operations.empty())
+        throw std::runtime_error("Expected a transform list.");
+    return result;
+}
+
+std::vector<Shadow> ParseShadows(const std::string& value)
+{
+    if (value == "none")
+        return {};
+    std::vector<Shadow> result;
+    for (const auto& part : Split(value, ','))
+    {
+        auto words = Words(part);
+        Shadow shadow;
+        if (!words.empty() && words.front() == "inset")
+        {
+            shadow.m_Inset = true;
+            words.erase(words.begin());
+        }
+        if (!words.empty() && words.back() == "inset")
+        {
+            shadow.m_Inset = true;
+            words.pop_back();
+        }
+        if (words.size() < 3 || words.size() > 5)
+            throw std::runtime_error("Shadows use [inset] x y [blur [spread]] color.");
+        shadow.m_Color = ParseColor(words.back());
+        words.pop_back();
+        shadow.m_X = Number(words[0], true);
+        shadow.m_Y = Number(words[1], true);
+        if (words.size() > 2)
+            shadow.m_Blur = Number(words[2]);
+        if (words.size() > 3)
+            shadow.m_Spread = Number(words[3], true);
+        result.push_back(shadow);
+        if (result.size() > 8)
+            throw std::runtime_error("Box shadows support at most eight layers.");
+    }
+    return result;
+}
+
+EasingCurve ParseEasing(const std::string& value)
+{
+    using Kind = EasingCurve::Kind;
+    if (value == "step-start")
+        return EasingCurve::Steps(1, true);
+    if (value == "step-end")
+        return EasingCurve::Steps(1);
+    if (value.starts_with("steps(") && value.ends_with(')'))
+    {
+        const auto args = Split(std::string_view(value).substr(6, value.size() - 7), ',');
+        if (args.empty() || args.size() > 2)
+            throw std::runtime_error("steps requires a count and optional start/end.");
+        const float count = Number(args[0]);
+        if (count < 1 || count > 1000000 || std::floor(count) != count)
+            throw std::runtime_error("Step counts require a positive integer.");
+        if (args.size() == 2 && args[1] != "start" && args[1] != "end" && args[1] != "jump-start" &&
+            args[1] != "jump-end")
+            throw std::runtime_error("steps supports start and end jumps.");
+        return EasingCurve::Steps(static_cast<unsigned>(count),
+                                  args.size() == 2 && (args[1] == "start" || args[1] == "jump-start"));
+    }
+    if (value == "linear")
+        return EasingCurve(Kind::Linear);
+    if (value == "ease")
+        return EasingCurve(Kind::Ease);
+    if (value == "ease-in")
+        return EasingCurve(Kind::EaseIn);
+    if (value == "ease-out")
+        return EasingCurve(Kind::EaseOut);
+    if (value == "ease-in-out")
+        return EasingCurve(Kind::EaseInOut);
+    if (value.starts_with("cubic-bezier(") && value.ends_with(')'))
+    {
+        const auto args = Split(std::string_view(value).substr(13, value.size() - 14), ',');
+        if (args.size() == 4)
+            return EasingCurve::CubicBezier(Number(args[0], true), Number(args[1], true), Number(args[2], true),
+                                            Number(args[3], true));
+    }
+    throw std::runtime_error("Unsupported easing curve: " + value);
+}
+
+bool IsEasing(const std::string& value)
+{
+    return value == "linear" || value == "ease" || value == "ease-in" || value == "ease-out" ||
+           value == "ease-in-out" || value.starts_with("cubic-bezier(") || value.starts_with("steps(") ||
+           value == "step-start" || value == "step-end";
+}
+
+bool IsTime(const std::string& value)
+{
+    return !value.empty() &&
+           (std::isdigit(static_cast<unsigned char>(value[0])) || value[0] == '.' || value[0] == '-' ||
+            value[0] == '+') &&
+           value.ends_with('s');
+}
+
+double Time(const std::string& value)
+{
+    if (!IsTime(value))
+        throw std::runtime_error("Durations require s or ms.");
+    return value.ends_with("ms") ? Number(value.substr(0, value.size() - 2)) / 1000.0
+                                 : Number(value.substr(0, value.size() - 1));
+}
+
+std::vector<CssTransition> ParseTransitions(const std::string& value)
+{
+    std::vector<CssTransition> result;
+    if (value == "none")
+        return result;
+    for (const auto& part : Split(value, ','))
+    {
+        CssTransition transition;
+        int times = 0;
+        bool property = false, easing = false;
+        for (const auto& word : Words(part))
+        {
+            if (IsTime(word))
+            {
+                if (times == 0)
+                    transition.m_Duration = Time(word);
+                else if (times == 1)
+                    transition.m_Delay = Time(word);
+                else
+                    throw std::runtime_error("Too many transition times.");
+                ++times;
+            }
+            else if (IsEasing(word))
+            {
+                if (easing)
+                    throw std::runtime_error("Duplicate transition easing.");
+                transition.m_Easing = ParseEasing(word);
+                easing = true;
+            }
+            else
+            {
+                if (property || FindStyleProperties(word).empty())
+                    throw std::runtime_error("Unknown transition property: " + word);
+                transition.m_Property = word;
+                property = true;
+            }
+        }
+        if (Words(part).empty())
+            throw std::runtime_error("Empty transition.");
+        result.push_back(transition);
+        if (result.size() > 32)
+            throw std::runtime_error("At most 32 transition definitions are supported.");
+    }
+    return result;
+}
+
+std::vector<CssAnimation> ParseAnimations(const std::string& value)
+{
+    std::vector<CssAnimation> result;
+    if (value == "none")
+        return result;
+    for (const auto& part : Split(value, ','))
+    {
+        CssAnimation animation;
+        int times = 0;
+        for (const auto& word : Words(part))
+        {
+            if (IsTime(word))
+            {
+                if (times == 0)
+                    animation.m_Duration = Time(word);
+                else if (times == 1)
+                    animation.m_Delay = Time(word);
+                else
+                    throw std::runtime_error("Too many animation times.");
+                ++times;
+            }
+            else if (IsEasing(word))
+                animation.m_Easing = ParseEasing(word);
+            else if (word == "infinite")
+                animation.m_Iterations = 0;
+            else if (word == "normal")
+                animation.m_Reverse = animation.m_Alternate = false;
+            else if (word == "reverse")
+                animation.m_Reverse = true;
+            else if (word == "alternate")
+                animation.m_Alternate = true;
+            else if (word == "alternate-reverse")
+                animation.m_Alternate = animation.m_Reverse = true;
+            else if (word == "none")
+                animation.m_FillBefore = animation.m_FillAfter = false;
+            else if (word == "forwards")
+                animation.m_FillAfter = true;
+            else if (word == "backwards")
+                animation.m_FillBefore = true;
+            else if (word == "both")
+                animation.m_FillBefore = animation.m_FillAfter = true;
+            else if (word == "paused" || word == "running")
+                animation.m_Paused = word == "paused";
+            else if (!word.empty() && std::isdigit(static_cast<unsigned char>(word[0])))
+            {
+                const float count = Number(word);
+                if (count < 1 || std::floor(count) != count)
+                    throw std::runtime_error("Iteration counts require positive integers or infinite.");
+                animation.m_Iterations = static_cast<unsigned>(count);
+            }
+            else
+            {
+                if (!animation.m_Name.empty() || !std::all_of(word.begin(), word.end(), IdentifierCharacter))
+                    throw std::runtime_error("Invalid animation name: " + word);
+                animation.m_Name = word;
+            }
+        }
+        if (animation.m_Name.empty() || (!animation.m_Iterations && animation.m_Duration == 0))
+            throw std::runtime_error("Named animations require a name and infinite loops require a positive duration.");
+        result.push_back(animation);
+        if (result.size() > 8)
+            throw std::runtime_error("At most eight named animations are supported.");
+    }
+    return result;
+}
+
+std::function<void(Style&)> CompileMotionLonghand(const std::string& name, const std::string& value)
+{
+    const auto values = Split(value, ',');
+    if (values.size() > 32)
+        throw std::runtime_error("Too many timing definitions.");
+    if (name.starts_with("transition-"))
+    {
+        if (name != "transition-property" && name != "transition-duration" && name != "transition-delay" &&
+            name != "transition-timing-function")
+            throw std::runtime_error("Unsupported transition longhand: " + name);
+        std::vector<CssTransition> items;
+        for (const auto& text : values)
+        {
+            CssTransition item;
+            if (name == "transition-property")
+            {
+                if (text != "none" && FindStyleProperties(text).empty())
+                    throw std::runtime_error("Unknown transition property: " + text);
+                item.m_Property = text;
+            }
+            else if (name == "transition-duration")
+                item.m_Duration = Time(text);
+            else if (name == "transition-delay")
+                item.m_Delay = Time(text);
+            else
+                item.m_Easing = ParseEasing(text);
+            items.push_back(item);
+        }
+        return [name, items](Style& style)
+        {
+            auto& targets = style.m_Transitions;
+            if (name == "transition-property")
+            {
+                if (items.size() == 1 && items[0].m_Property == "none")
+                {
+                    targets.clear();
+                    return;
+                }
+                const auto seed = targets.empty() ? CssTransition{} : targets.front();
+                targets.resize(items.size(), seed);
+            }
+            else if (targets.empty())
+                targets.resize(items.size());
+            for (std::size_t i = 0; i < targets.size(); ++i)
+            {
+                const auto& item = items[i % items.size()];
+                if (name == "transition-property")
+                    targets[i].m_Property = item.m_Property;
+                else if (name == "transition-duration")
+                    targets[i].m_Duration = item.m_Duration;
+                else if (name == "transition-delay")
+                    targets[i].m_Delay = item.m_Delay;
+                else
+                    targets[i].m_Easing = item.m_Easing;
+            }
+        };
+    }
+    if (values.size() > 8)
+        throw std::runtime_error("At most eight named animations are supported.");
+    std::vector<CssAnimation> items;
+    for (const auto& text : values)
+    {
+        CssAnimation item;
+        if (name == "animation-name")
+        {
+            if (text.empty() || !std::all_of(text.begin(), text.end(), IdentifierCharacter))
+                throw std::runtime_error("Invalid animation name.");
+            item.m_Name = text == "none" ? "" : text;
+        }
+        else if (name == "animation-duration")
+            item.m_Duration = Time(text);
+        else if (name == "animation-delay")
+            item.m_Delay = Time(text);
+        else if (name == "animation-timing-function")
+            item.m_Easing = ParseEasing(text);
+        else if (name == "animation-play-state")
+        {
+            if (text != "paused" && text != "running")
+                throw std::runtime_error("Invalid animation-play-state.");
+            item.m_Paused = text == "paused";
+        }
+        else if (name == "animation-iteration-count")
+        {
+            if (text == "infinite")
+                item.m_Iterations = 0;
+            else
+            {
+                const float count = Number(text);
+                if (count < 1 || std::floor(count) != count)
+                    throw std::runtime_error("Iteration counts require positive integers or infinite.");
+                item.m_Iterations = static_cast<unsigned>(count);
+            }
+        }
+        else if (name == "animation-direction")
+        {
+            if (text != "normal" && text != "reverse" && text != "alternate" && text != "alternate-reverse")
+                throw std::runtime_error("Invalid animation-direction.");
+            item.m_Reverse = text == "reverse" || text == "alternate-reverse";
+            item.m_Alternate = text == "alternate" || text == "alternate-reverse";
+        }
+        else if (name == "animation-fill-mode")
+        {
+            if (text != "none" && text != "forwards" && text != "backwards" && text != "both")
+                throw std::runtime_error("Invalid animation-fill-mode.");
+            item.m_FillBefore = text == "backwards" || text == "both";
+            item.m_FillAfter = text == "forwards" || text == "both";
+        }
+        else
+            throw std::runtime_error("Unsupported animation longhand: " + name);
+        items.push_back(item);
+    }
+    return [name, items](Style& style)
+    {
+        auto& targets = style.m_Animations;
+        if (name == "animation-name")
+        {
+            const auto seed = targets.empty() ? CssAnimation{} : targets.front();
+            targets.resize(items.size(), seed);
+        }
+        else if (targets.empty())
+            targets.resize(items.size());
+        for (std::size_t i = 0; i < targets.size(); ++i)
+        {
+            const auto& item = items[i % items.size()];
+            if (name == "animation-name")
+                targets[i].m_Name = item.m_Name;
+            else if (name == "animation-duration")
+                targets[i].m_Duration = item.m_Duration;
+            else if (name == "animation-delay")
+                targets[i].m_Delay = item.m_Delay;
+            else if (name == "animation-timing-function")
+                targets[i].m_Easing = item.m_Easing;
+            else if (name == "animation-play-state")
+                targets[i].m_Paused = item.m_Paused;
+            else if (name == "animation-iteration-count")
+                targets[i].m_Iterations = item.m_Iterations;
+            else if (name == "animation-direction")
+            {
+                targets[i].m_Reverse = item.m_Reverse;
+                targets[i].m_Alternate = item.m_Alternate;
+            }
+            else if (name == "animation-fill-mode")
+            {
+                targets[i].m_FillBefore = item.m_FillBefore;
+                targets[i].m_FillAfter = item.m_FillAfter;
+            }
+        }
+    };
+}
+
+std::size_t CloseBlock(const std::string& source, std::size_t open)
+{
+    int depth = 1;
+    char quote = 0;
+    for (std::size_t i = open + 1; i < source.size(); ++i)
+    {
+        const char c = source[i];
+        if (quote)
+        {
+            if (c == quote && source[i - 1] != '\\')
+                quote = 0;
+        }
+        else if (c == '"' || c == '\'')
+            quote = c;
+        else if (c == '{')
+            ++depth;
+        else if (c == '}' && --depth == 0)
+            return i;
+    }
+    throw std::runtime_error("Unterminated CSS block.");
+}
 } // namespace
 
 float Length::Resolve(float parent, float fallback) const
@@ -183,7 +802,104 @@ void StyleSheet::Apply(Style& style, const Declaration& declaration)
     const auto& name = declaration.m_Name;
     const auto& value = declaration.m_Value;
     if (name == "background" || name == "background-color")
-        style.m_Background = ParseColor(value);
+    {
+        if (name == "background" && value.find("gradient(") != std::string::npos)
+        {
+            style.m_BackgroundImage = ParseGradient(value);
+            style.m_Background = {0, 0, 0, 0};
+        }
+        else
+        {
+            style.m_Background = ParseColor(value);
+            if (name == "background")
+                style.m_BackgroundImage = {};
+        }
+    }
+    else if (name == "background-image")
+        style.m_BackgroundImage = ParseGradient(value);
+    else if (name == "transform")
+        style.m_Transform = ParseTransform(value);
+    else if (name == "transform-origin")
+    {
+        auto words = Words(value);
+        if (words.empty() || words.size() > 2)
+            throw std::runtime_error("transform-origin requires one or two percentages or edge keywords.");
+        const auto position = [](const std::string& word)
+        {
+            if (word == "left" || word == "top")
+                return 0.0f;
+            if (word == "center")
+                return 0.5f;
+            if (word == "right" || word == "bottom")
+                return 1.0f;
+            return Percent(word);
+        };
+        style.m_Transform.m_Origin = {position(words[0]), words.size() == 2 ? position(words[1]) : 0.5f};
+    }
+    else if (name == "overflow")
+    {
+        if (value != "hidden" && value != "visible")
+            throw std::runtime_error("overflow supports hidden and visible.");
+        style.m_ClipContent = value == "hidden";
+    }
+    else if (name == "content")
+    {
+        if (value != "\"\"" && value != "''" && value != "none")
+            throw std::runtime_error("Decorative content supports an empty string or none.");
+        style.m_Decoration = value != "none";
+    }
+    else if (name == "position")
+    {
+        if (value != "absolute")
+            throw std::runtime_error("Decorative layers support position: absolute.");
+    }
+    else if (name == "inset" || name == "top" || name == "right" || name == "bottom" || name == "left")
+    {
+        const auto length = [](const std::string& word)
+        {
+            if (word == "auto")
+                return Length{};
+            return word.ends_with('%') ? Length{Length::Unit::Percent, Percent(word) * 100}
+                                       : Length{Length::Unit::Pixels, Number(word, true)};
+        };
+        if (name == "inset")
+        {
+            const auto words = Words(value);
+            if (words.empty() || words.size() > 4)
+                throw std::runtime_error("inset requires one to four offsets.");
+            const auto top = length(words[0]);
+            const auto right = words.size() > 1 ? length(words[1]) : top;
+            const auto bottom = words.size() > 2 ? length(words[2]) : top;
+            style.m_Anchors = {top, right, bottom, words.size() > 3 ? length(words[3]) : right};
+        }
+        else
+        {
+            auto& edge = name == "top"      ? style.m_Anchors.m_Top
+                         : name == "right"  ? style.m_Anchors.m_Right
+                         : name == "bottom" ? style.m_Anchors.m_Bottom
+                                            : style.m_Anchors.m_Left;
+            edge = length(value);
+        }
+    }
+    else if (name == "transition")
+        style.m_Transitions = ParseTransitions(value);
+    else if (name == "animation")
+        style.m_Animations = ParseAnimations(value);
+    else if (name == "animation-play-state")
+    {
+        const auto values = Split(value, ',');
+        for (const auto& item : values)
+            if (item != "paused" && item != "running")
+                throw std::runtime_error("Invalid animation-play-state.");
+        for (std::size_t i = 0; i < style.m_Animations.size(); ++i)
+            style.m_Animations[i].m_Paused = values[i % values.size()] == "paused";
+    }
+    else if (name == "animation-timing-function")
+    {
+        const auto curve = ParseEasing(value);
+        for (auto& animation : style.m_Animations)
+            animation.m_Easing = curve;
+    }
     else if (name == "color")
         style.m_Color = ParseColor(value);
     else if (name == "border-color")
@@ -204,6 +920,10 @@ void StyleSheet::Apply(Style& style, const Declaration& declaration)
         style.m_FontSize = std::clamp(Number(value), 0.0f, 512.0f);
     else if (name == "opacity")
         style.m_Opacity = std::clamp(Number(value), 0.0f, 1.0f);
+    else if (name == "translate-x")
+        style.m_TranslateX = Number(value, true);
+    else if (name == "translate-y")
+        style.m_TranslateY = Number(value, true);
     else if (name == "padding")
         style.m_Padding = ParseInsets(value);
     else if (name == "margin")
@@ -295,18 +1015,91 @@ void StyleSheet::Apply(Style& style, const Declaration& declaration)
     }
     else if (name == "box-shadow")
     {
-        if (value == "none")
-            style.m_Shadow = {};
-        else
-        {
-            const auto parts = Words(value);
-            if (parts.size() != 4)
-                throw std::runtime_error("box-shadow requires: x y blur color.");
-            style.m_Shadow = {Number(parts[0], true), Number(parts[1], true), Number(parts[2]), ParseColor(parts[3])};
-        }
+        const auto shadows = ParseShadows(value);
+        style.m_Shadow = shadows.empty() ? Shadow{} : shadows.front();
+        style.m_ShadowLayers.m_Layers =
+            shadows.size() > 1 ? std::vector<Shadow>(shadows.begin() + 1, shadows.end()) : std::vector<Shadow>{};
     }
     else
         throw std::runtime_error("Unsupported CSS property: " + name);
+}
+
+void StyleSheet::Compile(Declaration& declaration)
+{
+    const auto& name = declaration.m_Name;
+    const auto& value = declaration.m_Value;
+    if (name.starts_with("transition-") || name.starts_with("animation-"))
+    {
+        declaration.m_Apply = CompileMotionLonghand(name, value);
+        return;
+    }
+    Style parsed;
+    Apply(parsed, declaration);
+    const auto properties = FindStyleProperties(name);
+    for (auto property : properties)
+        declaration.m_Properties.emplace_back(GetStylePropertyName(property));
+    if (name == "position")
+        declaration.m_Apply = [](Style&) {};
+    else if (name == "transition")
+        declaration.m_Apply = [items = parsed.m_Transitions](Style& style) { style.m_Transitions = items; };
+    else if (name == "animation")
+        declaration.m_Apply = [items = parsed.m_Animations](Style& style) { style.m_Animations = items; };
+    else if (name == "animation-play-state")
+    {
+        const auto values = Split(value, ',');
+        declaration.m_Apply = [values](Style& style)
+        {
+            for (std::size_t i = 0; i < style.m_Animations.size(); ++i)
+                style.m_Animations[i].m_Paused = values[i % values.size()] == "paused";
+        };
+    }
+    else if (name == "animation-timing-function")
+    {
+        const auto curve = ParseEasing(value);
+        declaration.m_Apply = [curve](Style& style)
+        {
+            for (auto& animation : style.m_Animations)
+                animation.m_Easing = curve;
+        };
+    }
+    else if (name == "transform")
+        declaration.m_Apply = [operations = parsed.m_Transform.m_Operations](Style& style)
+        { style.m_Transform.m_Operations = operations; };
+    else if (name == "transform-origin")
+        declaration.m_Apply = [origin = parsed.m_Transform.m_Origin](Style& style)
+        { style.m_Transform.m_Origin = origin; };
+    else if (name.starts_with("padding-"))
+    {
+        float Insets::* member = name == "padding-top"      ? &Insets::m_Top
+                                 : name == "padding-right"  ? &Insets::m_Right
+                                 : name == "padding-bottom" ? &Insets::m_Bottom
+                                                            : &Insets::m_Left;
+        const float distance = parsed.m_Padding.*member;
+        declaration.m_Properties = {"padding"};
+        declaration.m_Apply = [member, distance](Style& style) { style.m_Padding.*member = distance; };
+    }
+    else if (name == "left" || name == "right" || name == "top" || name == "bottom")
+    {
+        Length Anchors::* member = name == "left"    ? &Anchors::m_Left
+                                   : name == "right" ? &Anchors::m_Right
+                                   : name == "top"   ? &Anchors::m_Top
+                                                     : &Anchors::m_Bottom;
+        const auto distance = parsed.m_Anchors.*member;
+        declaration.m_Apply = [member, distance](Style& style) { style.m_Anchors.*member = distance; };
+    }
+    else
+    {
+        if (properties.empty())
+            throw std::runtime_error("Property has no compiled representation: " + name);
+        std::vector<std::pair<StyleProperty, StyleValue>> assignments;
+        for (auto property : properties)
+            assignments.emplace_back(property, GetStyleValue(parsed, property));
+        declaration.m_Apply = [assignments = std::move(assignments)](Style& style)
+        {
+            for (const auto& [property, typed] : assignments)
+                SetStyleValue(style, property, typed);
+        };
+    }
 }
 
 bool StyleSheet::Parse(std::string_view css, std::string& error)
@@ -331,6 +1124,30 @@ bool StyleSheet::Parse(std::string_view css, std::string& error)
         }
 
         std::vector<Rule> rules;
+        std::map<std::string, std::vector<Keyframe>, std::less<>> keyframes;
+        const auto parseDeclarations = [&](std::string_view body)
+        {
+            std::vector<Declaration> declarations;
+            for (const auto& text : Split(body, ';'))
+            {
+                if (text.empty())
+                    continue;
+                const auto colon = text.find(':');
+                if (colon == std::string::npos)
+                    throw std::runtime_error("Expected property: value.");
+                Declaration declaration;
+                declaration.m_Name = Lower(Trim(text.substr(0, colon)));
+                declaration.m_Value = Trim(text.substr(colon + 1));
+                if (declaration.m_Value.ends_with("!important"))
+                {
+                    declaration.m_Important = true;
+                    declaration.m_Value = Trim(declaration.m_Value.substr(0, declaration.m_Value.size() - 10));
+                }
+                Compile(declaration);
+                declarations.push_back(std::move(declaration));
+            }
+            return declarations;
+        };
         while (offset < source.size())
         {
             const auto begin = source.find_first_not_of(" \t\r\n", offset);
@@ -338,44 +1155,85 @@ bool StyleSheet::Parse(std::string_view css, std::string& error)
                 break;
             offset = begin;
             const auto open = source.find('{', begin);
-            const auto close = open == std::string::npos ? std::string::npos : source.find('}', open + 1);
+            const auto close = open == std::string::npos ? std::string::npos : CloseBlock(source, open);
             if (open == std::string::npos || close == std::string::npos)
                 throw std::runtime_error("Expected a selector followed by { declarations }.");
 
-            std::vector<Declaration> declarations;
-            std::size_t position = open + 1;
-            while (position < close)
+            const auto heading = Trim(std::string_view(source).substr(begin, open - begin));
+            if (heading.starts_with('@'))
             {
-                const auto next = std::min(source.find(';', position), close);
-                const auto text = Trim(std::string_view(source).substr(position, next - position));
-                if (!text.empty())
+                if (!heading.starts_with("@keyframes "))
+                    throw std::runtime_error("Only @keyframes at-rules are supported.");
+                const auto name = Trim(std::string_view(heading).substr(11));
+                if (name.empty() || !std::all_of(name.begin(), name.end(), IdentifierCharacter))
+                    throw std::runtime_error("Invalid keyframe name.");
+                std::vector<Keyframe> frames;
+                std::size_t position = open + 1;
+                while (position < close)
                 {
-                    offset = position;
-                    const auto colon = text.find(':');
-                    if (colon == std::string::npos)
-                        throw std::runtime_error("Expected property: value.");
-                    Declaration declaration{Lower(Trim(text.substr(0, colon))), Trim(text.substr(colon + 1)), false};
-                    if (declaration.m_Value.ends_with("!important"))
+                    const auto frameStart = source.find_first_not_of(" \t\r\n", position);
+                    if (frameStart == std::string::npos || frameStart >= close)
+                        break;
+                    const auto frameOpen = source.find('{', frameStart);
+                    if (frameOpen == std::string::npos || frameOpen >= close)
+                        throw std::runtime_error("Expected a keyframe block.");
+                    const auto frameClose = CloseBlock(source, frameOpen);
+                    if (frameClose >= close)
+                        throw std::runtime_error("Unterminated keyframe block.");
+                    const auto declarations =
+                        parseDeclarations(std::string_view(source).substr(frameOpen + 1, frameClose - frameOpen - 1));
+                    Keyframe frame;
+                    for (const auto& declaration : declarations)
                     {
-                        declaration.m_Important = true;
-                        declaration.m_Value = Trim(declaration.m_Value.substr(0, declaration.m_Value.size() - 10));
+                        if (declaration.m_Important)
+                            throw std::runtime_error("!important is not supported in keyframes.");
+                        if (declaration.m_Name == "animation-timing-function")
+                            frame.m_Easing = ParseEasing(declaration.m_Value);
+                        else if (declaration.m_Properties.empty())
+                            throw std::runtime_error("Keyframes can only write style properties.");
+                        frame.m_Properties.insert(frame.m_Properties.end(), declaration.m_Properties.begin(),
+                                                  declaration.m_Properties.end());
                     }
-                    Style validation;
-                    Apply(validation, declaration);
-                    declarations.push_back(std::move(declaration));
+                    frame.m_Apply = [declarations](Style& style)
+                    {
+                        for (const auto& declaration : declarations)
+                            declaration.m_Apply(style);
+                    };
+                    for (const auto& selector :
+                         Split(std::string_view(source).substr(frameStart, frameOpen - frameStart), ','))
+                    {
+                        frame.m_Offset = selector == "from" ? 0 : selector == "to" ? 1 : Percent(selector);
+                        if (frame.m_Offset < 0 || frame.m_Offset > 1)
+                            throw std::runtime_error("Keyframe offsets must be in [0%,100%].");
+                        frames.push_back(frame);
+                        if (frames.size() > 256)
+                            throw std::runtime_error("At most 256 keyframe blocks are supported per animation.");
+                    }
+                    position = frameClose + 1;
                 }
-                position = next + 1;
+                std::stable_sort(frames.begin(), frames.end(),
+                                 [](const auto& a, const auto& b) { return a.m_Offset < b.m_Offset; });
+                keyframes[name] = std::move(frames);
+                offset = close + 1;
+                continue;
             }
+            const auto declarations = parseDeclarations(std::string_view(source).substr(open + 1, close - open - 1));
 
             const auto selectors = source.substr(begin, open - begin);
             std::size_t selectorStart = 0;
             while (selectorStart <= selectors.size())
             {
                 const auto comma = selectors.find(',', selectorStart);
-                const auto selector = Trim(std::string_view(selectors).substr(selectorStart, comma - selectorStart));
+                auto selector = Trim(std::string_view(selectors).substr(selectorStart, comma - selectorStart));
                 if (selector.empty())
                     throw std::runtime_error("Empty CSS selector.");
                 Rule rule;
+                if (selector.ends_with("::before") || selector.ends_with("::after"))
+                {
+                    rule.m_PseudoElement = selector.ends_with("::before") ? 1 : 2;
+                    selector.resize(selector.size() - (rule.m_PseudoElement == 1 ? 8 : 7));
+                    ++rule.m_Specificity;
+                }
                 rule.m_Declarations = declarations;
                 std::size_t i = 0;
                 bool child = false;
@@ -470,6 +1328,7 @@ bool StyleSheet::Parse(std::string_view css, std::string& error)
             offset = close + 1;
         }
         m_Rules = std::move(rules);
+        m_Keyframes = std::move(keyframes);
         ++m_Revision;
         error.clear();
         return true;
@@ -522,7 +1381,7 @@ bool StyleSheet::Matches(const Rule& rule, const StyleNode& node)
     return match(match, rule.m_Parts.size() - 1, &node);
 }
 
-Style StyleSheet::Compute(const StyleNode& node, const Style* inherited) const
+Style StyleSheet::Compute(const StyleNode& node, const Style* inherited, int pseudoElement) const
 {
     Style style;
     if (inherited)
@@ -531,7 +1390,7 @@ Style StyleSheet::Compute(const StyleNode& node, const Style* inherited) const
         style.m_FontSize = inherited->m_FontSize;
         style.m_TextAlign = inherited->m_TextAlign;
     }
-    if (node.m_Type == "button" || node.m_Type == "toolbutton" || node.m_Type == "textbox")
+    if (pseudoElement == 0 && (node.m_Type == "button" || node.m_Type == "toolbutton" || node.m_Type == "textbox"))
     {
         style.m_Height = {Length::Unit::Pixels, 44};
         style.m_Padding = {10, 14, 10, 14};
@@ -551,7 +1410,7 @@ Style StyleSheet::Compute(const StyleNode& node, const Style* inherited) const
 
     std::vector<Match> matches;
     for (const auto& rule : m_Rules)
-        if (Matches(rule, node))
+        if (rule.m_PseudoElement == pseudoElement && Matches(rule, node))
             for (const auto& declaration : rule.m_Declarations)
                 matches.push_back({&declaration, rule.m_Specificity});
     std::stable_sort(matches.begin(), matches.end(),
@@ -562,10 +1421,16 @@ Style StyleSheet::Compute(const StyleNode& node, const Style* inherited) const
                          return a.m_Specificity < b.m_Specificity;
                      });
     for (const auto& match : matches)
-        Apply(style, *match.m_Declaration);
+        match.m_Declaration->m_Apply(style);
     style.m_MaxWidth = std::max(style.m_MaxWidth, style.m_MinWidth);
     style.m_MaxHeight = std::max(style.m_MaxHeight, style.m_MinHeight);
     return style;
+}
+
+const std::vector<StyleSheet::Keyframe>* StyleSheet::FindKeyframes(std::string_view name) const
+{
+    const auto found = m_Keyframes.find(name);
+    return found == m_Keyframes.end() ? nullptr : &found->second;
 }
 
 unsigned StyleSheet::GetRevision() const

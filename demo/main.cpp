@@ -1,3 +1,4 @@
+#include "GpuWorkload.h"
 #include "WidgetGallery.h"
 
 #include <EStudioUI/Button.h>
@@ -11,6 +12,7 @@
 #include <filesystem>
 #include <fstream>
 #include <iostream>
+#include <iterator>
 #include <stdexcept>
 #include <string>
 
@@ -44,6 +46,7 @@ void Benchmark(Window& window, const fs::path& output)
     window.SetSize(1600, 900);
     window.RenderFrame();
     auto& gpu = window.Graphics();
+    gpu.SetPartialRedrawEnabled(false);
     const auto label = window.Ui().GetFont().Shape("Button", 11);
     const Rect clip{0, 0, 1600, 900};
     Style style;
@@ -110,7 +113,7 @@ class Demo
         brand.SetId("brand");
         auto& title = brand.Add<Label>("EStudioUI / widget lab");
         title.SetId("title");
-        auto& subtitle = brand.Add<Label>("GPU controls. Explicit layouts. Independent 3D contexts.");
+        auto& subtitle = brand.Add<Label>("GPU controls. Property animation. Independent 3D contexts.");
         subtitle.AddClass("subtitle");
         auto& themes = header.Add<Widget>();
         themes.SetId("themes");
@@ -174,7 +177,7 @@ class Demo
                                        "  F5: reload CSS    F6: theme");
         footer.SetId("footer");
 
-        m_Gallery = std::make_unique<WidgetGallery>(window, *m_Tabs);
+        m_Gallery = std::make_unique<WidgetGallery>(window, *m_Tabs, m_Assets);
 
         m_Increment->Clicked().Connect(
             [this]
@@ -223,7 +226,7 @@ class Demo
             });
         if (!LoadCss(m_CurrentCss))
             throw std::runtime_error("Initial CSS could not be loaded.");
-        m_Tabs->SetCurrentIndex(1);
+        m_Tabs->SetCurrentIndex(5);
     }
 
     ~Demo()
@@ -232,10 +235,26 @@ class Demo
         m_Window.Ui().Root().ClearChildren();
     }
 
+    void Profile(const fs::path& output)
+    {
+        ProfileUiWorkload(m_Window, *m_Tabs, m_Assets, output);
+    }
+
     bool LoadCss(const fs::path& path)
     {
         std::string error;
-        if (!m_Window.Ui().LoadStyleSheet(path, error))
+        std::ifstream theme(path, std::ios::binary);
+        std::ifstream animation(m_Assets / "animation-start.css", std::ios::binary);
+        std::ifstream rich(m_Assets / "rich-buttons.css", std::ios::binary);
+        bool loaded = false;
+        if (theme && animation && rich)
+            loaded = m_Window.Ui().SetStyleSheet(std::string(std::istreambuf_iterator<char>(theme), {}) + "\n" +
+                                                     std::string(std::istreambuf_iterator<char>(animation), {}) + "\n" +
+                                                     std::string(std::istreambuf_iterator<char>(rich), {}),
+                                                 error);
+        else
+            error = "Cannot read theme, animation-start.css, or rich-buttons.css.";
+        if (!loaded)
         {
             m_Message->AddClass("error");
             m_Message->SetText("CSS reload failed; previous theme retained.\n" + error);
@@ -337,6 +356,7 @@ class Demo
         gpu.SavePpm(output / "resized.ppm");
         VerifyPrimitives(output);
         m_Gallery->Verify(m_Assets, output);
+        VerifyGpuWorkload(m_Window, m_Assets, output);
         std::ofstream report(output / "gpu-report.txt");
         report << "EStudioUI GPU integration: PASS\nDriver: " << gpu.GetDriverDescription()
                << "\nInitial demo: " << stats.m_DrawCalls << " draw call, " << stats.m_Shapes << " shapes, "
@@ -436,6 +456,7 @@ int main(int argc, char** argv)
         WindowOptions options;
         bool selfTest = false;
         bool benchmark = false;
+        bool profile = false;
         for (int i = 1; i < argc; ++i)
         {
             const std::string argument = argv[i];
@@ -449,6 +470,8 @@ int main(int argc, char** argv)
                 options.m_Headless = true;
             else if (argument == "--self-test")
                 selfTest = true;
+            else if (argument == "--profile-ui")
+                profile = true;
             else if (argument == "--benchmark")
                 benchmark = true;
             else if (argument == "--font")
@@ -459,7 +482,8 @@ int main(int argc, char** argv)
                 output = value();
             else if (argument == "--help")
             {
-                std::cout << "EStudioUIDemo [--css FILE] [--font FILE] [--self-test] [--benchmark] [--headless] "
+                std::cout << "EStudioUIDemo [--css FILE] [--font FILE] [--self-test] [--benchmark] [--profile-ui] "
+                             "[--headless] "
                              "[--output DIR]\n"
                           << "F5 reloads CSS; F6 switches themes. Headless mode requires OSMesa (Linux).\n";
                 return 0;
@@ -472,8 +496,13 @@ int main(int argc, char** argv)
         if (selfTest)
         {
             demo.Verify(output);
-            if (!benchmark)
+            if (!benchmark && !profile)
                 return 0;
+        }
+        if (profile)
+        {
+            demo.Profile(output);
+            return 0;
         }
         if (benchmark)
         {
@@ -481,7 +510,7 @@ int main(int argc, char** argv)
             return 0;
         }
         if (options.m_Headless)
-            throw std::runtime_error("Use --self-test or --benchmark with --headless.");
+            throw std::runtime_error("Use --self-test, --benchmark, or --profile-ui with --headless.");
         return window.Run();
     }
     catch (const std::exception& error)

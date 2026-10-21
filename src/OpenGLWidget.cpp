@@ -12,6 +12,10 @@ namespace EStudioUI
 {
 namespace
 {
+// GUI-thread content generations remain distinct even when GL reuses a deleted
+// texture name and a replacement widget occupies the same address.
+std::uint64_t s_TextureRevision = 0;
+
 //! Restores the caller's context even when scene initialization/rendering throws.
 class ContextScope
 {
@@ -37,6 +41,7 @@ struct OpenGLWidget::Impl
     GLFWwindow* m_Owner = nullptr;
     GLuint m_Framebuffer = 0;
     GLuint m_Texture = 0;
+    std::uint64_t m_Revision = 0;
     GLuint m_Depth = 0;
     GLsync m_Consumer = nullptr;
     int m_Width = 0;
@@ -273,6 +278,7 @@ void OpenGLWidget::PrepareFrame(double time, float scaleX, float scaleY)
             throw std::runtime_error("Scene callbacks must leave the OpenGLWidget context current.");
         if (glGetError() != GL_NO_ERROR)
             throw std::runtime_error("An OpenGLWidget scene callback produced an OpenGL error.");
+        self.m_Revision = ++s_TextureRevision;
         completed = glFenceSync(GL_SYNC_GPU_COMMANDS_COMPLETE, 0);
         glFlush();
     }
@@ -288,7 +294,8 @@ void OpenGLWidget::PrepareFrame(double time, float scaleX, float scaleY)
 void OpenGLWidget::Paint(Renderer& renderer, FontFace& font, double time, float opacity) const
 {
     Widget::Paint(renderer, font, time, opacity);
-    renderer.DrawTexture(GetContentBounds(), m_Impl->m_Texture, GetContentBounds().Intersect(GetClip()), opacity);
+    renderer.DrawTexture(GetContentBounds(), m_Impl->m_Texture, GetContentBounds().Intersect(GetClip()), opacity,
+                         m_Impl->m_Revision);
 }
 
 bool OpenGLWidget::NeedsContinuousRendering() const

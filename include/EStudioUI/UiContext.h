@@ -2,12 +2,25 @@
 
 #include "FontFace.h"
 #include "Widget.h"
+#include "AnimationSystem.h"
 
 #include <functional>
 #include <unordered_map>
 
 namespace EStudioUI
 {
+class CssMotion;
+
+//! Cumulative counters used to verify cache behavior across animation frames.
+struct UiStats
+{
+    //! Number of computed widget or decorative styles.
+    std::size_t m_StyleResolutions = 0;
+
+    //! Number of complete measurement and arrangement passes.
+    std::size_t m_LayoutPasses = 0;
+};
+
 //! Owns one window's widget tree, style resolution, layout, and input routing.
 class UiContext
 {
@@ -32,6 +45,16 @@ class UiContext
 
     //! Loads a UTF-8 stylesheet from disk.
     bool LoadStyleSheet(const std::filesystem::path& path, std::string& error);
+
+    //! Returns the window-local property animation scheduler.
+    AnimationSystem& Animations();
+
+    //! Animates existing widgets from current presentation to a parsed final stylesheet.
+    AnimationId AnimateStyleSheet(std::string_view finalCss, const AnimationOptions& options, std::string& error);
+
+    //! Parses both endpoints before animating existing widgets between complete stylesheets.
+    AnimationId AnimateStyleSheet(std::string_view initialCss, std::string_view finalCss,
+                                  const AnimationOptions& options, std::string& error);
 
     //! Invalidates style/layout caches and requests repaint.
     void Invalidate();
@@ -78,7 +101,7 @@ class UiContext
     //! Records surface-consumer fences after Renderer::EndFrame.
     void FrameSubmitted();
 
-    //! Returns whether visible surfaces request continuous animation.
+    //! Returns whether property timelines or visible surfaces request animation frames.
     bool HasAnimations() const;
 
     //! Reports containers whose fixed/content bases exceed their available space.
@@ -102,8 +125,14 @@ class UiContext
     //! Returns the font service shared by controls and the renderer.
     FontFace& GetFont() const;
 
-    //! Sets the current monotonic time used by caret animation.
+    //! Advances property timelines and the caret clock before layout and painting.
     void SetTime(double time);
+
+    //! Returns cumulative style and layout work.
+    const UiStats& GetStats() const;
+
+    //! Converts window input coordinates into a widget's untransformed layout coordinates.
+    Point ToLayoutPoint(const Widget& widget, Point point) const;
 
     //! Returns current monotonic GUI time.
     double GetTime() const;
@@ -127,17 +156,30 @@ class UiContext
     //! Computes intrinsic and explicit widget dimensions.
     Point Measure(Widget& widget, float parentWidth, float parentHeight);
 
+    //! Measures and arranges the current computed styles without changing input ownership.
+    void Arrange();
+
     //! Places children using the documented flex subset.
     void Layout(Widget& widget, Rect bounds, Rect clip);
 
     //! Finds the frontmost displayed widget inside all ancestor clips.
-    Widget* HitTest(Widget& widget, Point position) const;
+    Widget* HitTest(Widget& widget, Point position, Affine parentTransform = {}) const;
+
+    //! Maps pointer coordinates and preserves world-space ancestor clipping during capture.
+    PointerEvent MakePointerEvent(const Widget& widget, Point position, Modifiers modifiers = {}, int clicks = 1) const;
+
+    //! Refreshes hover after geometry changes without synthesizing pointer callbacks.
+    bool RefreshHover();
 
     //! Draws a subtree in painter order with inherited opacity.
     void PaintTree(Widget& widget, Renderer& renderer, double time, float opacity);
 
     //! Advances keyboard focus in tree order.
     void FocusNext(bool backwards);
+
+    //! Captures endpoint layout once and builds temporary computed-style tracks.
+    AnimationId BeginStyleTransition(std::optional<StyleSheet> initial, StyleSheet final,
+                                     const AnimationOptions& options);
 
     //! Observes the font service, which outlives the context.
     FontFace& m_Font;
@@ -148,6 +190,21 @@ class UiContext
     //! Stores the last valid CSS rules.
     StyleSheet m_StyleSheet;
 
+    //! Owns GUI-thread timelines, destroyed before the widget tree.
+    AnimationSystem m_Animations;
+
+    //! Owns compiled CSS timelines and lightweight decorative presentations.
+    std::unique_ptr<CssMotion> m_CssMotion;
+
+    //! Cumulative cache instrumentation.
+    UiStats m_Stats;
+
+    //! Identifies the current whole-stylesheet transition for replacement.
+    AnimationId m_StyleTransition = 0;
+
+    //! Prevents synchronous completion listeners from overwriting a newer transition identity.
+    std::uint64_t m_StyleTransitionGeneration = 0;
+
     //! Observes the focus target safely across callback-driven destruction.
     WidgetRef m_Focus;
 
@@ -156,6 +213,9 @@ class UiContext
 
     //! Observes the previous pointer ancestor path.
     std::vector<WidgetRef> m_HoverPath;
+
+    //! Remembers the stationary pointer for animated geometry and resize hover updates.
+    std::optional<Point> m_PointerPosition;
 
     //! Caches the logical window width.
     float m_Width = 1;
@@ -168,9 +228,6 @@ class UiContext
 
     //! Marks the framebuffer as needing repaint.
     bool m_Repaint = true;
-
-    //! Stores monotonic event time.
-    double m_Time = 0;
 
     //! Reads platform clipboard text.
     std::function<std::string()> m_GetClipboard;

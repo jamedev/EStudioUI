@@ -1,0 +1,4 @@
+Animation framebuffer checks: PASS
+CSS start/middle/end: actual framebuffer colors, width, position, and endpoint ownership.
+Typed group: synchronized custom double, absolute Rect bounds, colors, translation, and button input.
+Pixel probe: interpolated color/opacity blending, composed geometry, and clearing old bounds.

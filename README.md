@@ -7,6 +7,29 @@ manifest; no Qt or commercial SDK is required.
 
 ![EStudioUI widget gallery](verification/widgets-dark.png)
 
+## Rich GPU styling (0.5)
+
+The **Rich CSS** tab contains twelve working button styles and a focusable text
+box. Edit [assets/rich-buttons.css](assets/rich-buttons.css) and press F5.
+Linear/radial gradients, before/after paint layers, 2D transforms, multiple/inset
+shadows, rounded clipping, state transitions, and named keyframes use the existing
+OpenGL batch. No runtime dependencies were added. See [CSS.md](CSS.md) for the
+exact subset and [ANIMATIONS.md](ANIMATIONS.md) for the C++ animation API.
+
+![Rich CSS buttons rendered by EStudioUI](verification/rich-buttons-rest.png)
+
+Performance checks assert zero style/layout work during 240 paint-only ticks for
+500 widgets. Dense animation remains batched; unchanged frames reuse pixels.
+The framebuffer test writes measured baseline/rich frame times and upload counts
+to `rich-css-performance.txt`; software GL results do not establish hardware FPS.
+
+Version **0.5.1** retains the rendered window and redraws damaged regions, avoiding
+repeated analytic text/effect shading across the whole window. Hidden CSS no
+longer requests frames when interacting with another tab. Presentation is capped
+at 60 Hz independently of input frequency/vsync, and pauses while minimized or
+unfocused. Rich effects and animation timing are preserved. See
+[PERFORMANCE.md](PERFORMANCE.md) for the profiler, counters, and measured results.
+
 ## One-command Windows build
 
 Prerequisites: **Visual Studio 2022** with **Desktop development with C++**, a
@@ -122,6 +145,11 @@ selected alternatives, including FreeType's FTL.
 - Explicit `Fixed`, `Content`, and weighted `Fill` contracts control sizing. The
   allocator redistributes space after a child reaches its maximum and reports
   overflow when hard limits cannot fit. See [LAYOUTS.md](LAYOUTS.md).
+- `AnimationSystem` drives synchronized properties across widgets, with 22 easing
+  presets, custom cubic Bezier curves, pause/seek/resume, delay, and repetition.
+  `UiContext::AnimateStyleSheet` interpolates complete CSS endpoints automatically.
+  Geometry, colors, shadows, typography, and custom setter tracks share one
+  timeline. No new runtime dependency is required. See [ANIMATIONS.md](ANIMATIONS.md).
 - Tab / Shift+Tab move focus. Ctrl+A/C/X/V/Z/Y and Ctrl+Shift+Z edit text.
 - Dark / Light load external CSS. F5 reloads the current file; F6 switches themes.
   Invalid CSS retains the last valid stylesheet and displays a recoverable error.
@@ -177,6 +205,10 @@ The demo opens on Data & actions with 10,000 table rows and 2,006 list items.
 Only viewport rows are painted. Inputs preserves the original editor/button
 examples; 3D surfaces has two independent orbit/zoom scenes; Layout lab exposes
 fixed and bounded Fill behavior at different native window sizes.
+Animations offers editable CSS endpoints, a typed property group, duration/easing
+controls, pause/resume, and repeat/alternate playback.
+
+![CSS animation midpoint from the C++ renderer](verification/animation-css-middle.png)
 
 ![Two independent 3D contexts](verification/opengl-scenes.png)
 
@@ -190,10 +222,10 @@ A single ordered instance stream combines rounded boxes, borders, shadows,
 selection, carets, and glyphs. The Slug-derived fragment shader evaluates quadratic
 font outlines directly, without a bitmap/SDF atlas. Shaping and glyph outlines are
 cached, and the event loop sleeps between changes/caret deadlines unless a
-visible surface requests animation. UI shapes/glyphs use one ordered draw when
-no scene textures are present. Embedded textures split batches where needed to
-preserve painter order; scene rendering has its own submissions. The 640-box /
-3,840-glyph stress scene still uses one draw call.
+visible surface or a property timeline requests animation. Damaged rectangles
+use ordered draws; unchanged regions retain their pixels. Embedded textures split
+batches where needed to preserve painter order; scene rendering has its own
+submissions. The fully redrawn 640-box / 3,840-glyph stress scene uses one draw call.
 
 This is a prototype: text editing is single-line and left-to-right, with one font
 and no font fallback, IME pre-edit integration, full bidi, or color emoji. Layout
@@ -225,6 +257,7 @@ embedding. The first backend uses OpenGL 3.3 core; macOS is not verified.
 ```bash
 ./build/linux-release/EStudioUIDemo --headless --self-test --output verification-local
 ./build/linux-release/EStudioUIDemo --headless --benchmark --output benchmark-local
+./build/linux-release/EStudioUIDemo --headless --profile-ui --output benchmark-local/ui
 ```
 
 On Windows, use the corresponding EXE path and omit `--headless`. Benchmark

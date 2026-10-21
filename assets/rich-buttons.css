@@ -1,0 +1,54 @@
+/* Original EStudioUI examples. Every effect is drawn by the C++ GPU renderer. */
+#rich-css { gap: 10px; }
+#rich-css .rich-heading { font-size: 25px; color: #f1f4ff; height: 30px; }
+#rich-css .rich-description { font-size: 13px; color: #96a5c5; height: 16px; }
+#rich-css .rich-row { gap: 16px; }
+#rich-css .rich-card { background: #141d31; border: 1px solid #283654; border-radius: 14px; padding: 10px 16px; gap: 4px; }
+#rich-css .rich-label { font-size: 11px; color: #8ca0c7; height: 16px; }
+#rich-css .rich-note { font-size: 11px; color: #9eafd0; height: 16px; }
+#rich-css .rich-button { height: 50px; min-height: 50px; border-radius: 10px; font-size: 15px; border: 1px solid transparent; color: white; padding: 10px 16px; background: #273755; }
+#rich-css .rich-button:focus { border-color: #e4edff; }
+#rich-css .aurora { background: linear-gradient(115deg, #2877ff, #8d46ec, #cf4cac); box-shadow: 0 5px 14px #4c50f244; transform: translateY(0px) scale(1); transition: transform .25s ease, box-shadow .25s ease; }
+#rich-css .aurora:hover { transform: translateY(-4px) scale(1.035); box-shadow: 0 9px 22px #8060ff88; }
+#rich-css .aurora:active { transform: translateY(0px) scale(.97); }
+#rich-css .neon { background: #122c2b; border: 1px solid #3af5b7; color: #a1ffe0; box-shadow: 0 0 8px #22efaa22, inset 0 0 10px #22efaa11; transition: box-shadow .3s ease; }
+#rich-css .neon:hover { box-shadow: 0 0 18px 2px #22efaa88, inset 0 0 18px #22efaa33; }
+#rich-css .press { background: linear-gradient(180deg, #ffa84c, #f2792d); box-shadow: 0 6px 0 #9c411b, 0 10px 14px #0007; transform: translateY(0px); transition: transform .12s ease, box-shadow .12s ease; }
+#rich-css .press:active { transform: translateY(5px); box-shadow: 0 1px 0 #9c411b, 0 3px 6px #0005; }
+#rich-css .shine { background: linear-gradient(105deg, #166598, #218dcc); overflow: hidden; }
+#rich-css .shine::before { content: ""; position: absolute; width: 35%; height: 200%; top: -50%; left: -40%; background: linear-gradient(90deg, transparent, #fff8, transparent); transform: translateX(0%) rotate(20deg); transition: transform .7s ease; }
+#rich-css .shine:hover::before { transform: translateX(550%) rotate(20deg); }
+#rich-css .sweep { background: #1a3339; border: 1px solid #26b9a7; overflow: hidden; }
+#rich-css .sweep::before { content: ""; inset: 0; background: linear-gradient(90deg, #087e7a, #149779); transform: scaleX(0); transform-origin: left center; transition: transform .35s cubic-bezier(.2,.8,.2,1); }
+#rich-css .sweep:hover::before { transform: scaleX(1); }
+#rich-css .jelly { background: linear-gradient(135deg, #ed4e97, #b937b0); }
+#rich-css .jelly:hover { animation: jelly .65s ease both; }
+@keyframes jelly {
+    0%, 100% { transform: scale(1,1); }
+    30% { transform: scale(1.12,.86); }
+    55% { transform: scale(.93,1.08); }
+    75% { transform: scale(1.04,.96); }
+}
+#rich-css .pulse { background: #543e9d; animation: breathe 2s ease-in-out infinite alternate; }
+@keyframes breathe {
+    from { box-shadow: 0 0 0 0px #a28aff00; transform: scale(1); }
+    to { box-shadow: 0 0 20px 3px #a28aff66; transform: scale(1.035); }
+}
+#rich-css .border-trace { background: #1d2947; }
+#rich-css .border-trace::after { content: ""; inset: -3px; border: 1px solid #6da5ff; border-radius: 13px; opacity: .5; animation: outline 2.4s ease-in-out infinite alternate; }
+@keyframes outline { from { opacity: .25; transform: scale(.97); } to { opacity: 1; transform: scale(1.025); } }
+#rich-css .radial { background: radial-gradient(ellipse 90% 140% at 15% 20%, #449dec, #3d398c 65%, #252343); transition: background-image .45s ease; }
+#rich-css .radial:hover { background: radial-gradient(ellipse 90% 140% at 85% 80%, #449dec, #3d398c 65%, #252343); }
+#rich-css .morph { background: #293449; border-radius: 6px; box-shadow: inset 3px 3px 8px #0008, inset -3px -3px 8px #7695be44; transition: border-radius .35s ease, box-shadow .35s ease, transform .35s ease; }
+#rich-css .morph:hover { border-radius: 27px; box-shadow: inset 1px 1px 2px #0006, inset -1px -1px 2px #7695be44; transform: rotate(-2deg); }
+#rich-css .spectrum { animation: spectrum 3s linear infinite alternate; }
+@keyframes spectrum {
+    from { background: linear-gradient(45deg, #2686dc, #8855cb, #d44b78); }
+    to { background: linear-gradient(225deg, #2686dc, #8855cb, #d44b78); }
+}
+#rich-css .progress { background: #18394b; overflow: hidden; }
+#rich-css .progress::after { content: ""; left: 16px; right: 16px; bottom: 6px; height: 2px; border-radius: 1px; background: linear-gradient(90deg, #32d9cc, #73a7ff); transform-origin: left center; animation: progress 1.8s ease-in-out infinite alternate; }
+@keyframes progress { from { transform: scaleX(.1); opacity: .5; } to { transform: scaleX(1); opacity: 1; } }
+#rich-css textbox { height: 44px; border-radius: 10px; background: #111d34; border: 1px solid #35486a; transition: border-color .2s ease, box-shadow .2s ease; }
+#rich-css textbox:focus { border-color: #75a7ff; box-shadow: 0 0 14px #438dff44, inset 0 1px 4px #0005; }
+#rich-css .rich-status { height: 20px; color: #aebddb; font-size: 12px; }

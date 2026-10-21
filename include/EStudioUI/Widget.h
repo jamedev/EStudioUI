@@ -4,8 +4,10 @@
 #include "Style.h"
 #include "Layout.h"
 #include "SizeRule.h"
+#include "StyleProperty.h"
 
 #include <memory>
+#include <map>
 #include <optional>
 #include <string>
 #include <utility>
@@ -14,6 +16,7 @@
 namespace EStudioUI
 {
 class UiContext;
+class CssMotion;
 class FontFace;
 class Renderer;
 
@@ -92,6 +95,18 @@ class Widget
 
     //! Places a child outside normal flow at absolute window coordinates.
     void SetFloatingBounds(Rect bounds);
+
+    //! Removes absolute placement and returns this widget to normal layout flow.
+    void ClearFloatingBounds();
+
+    //! Sets a persistent presentation override; explicit layout contracts still win.
+    void SetStyleProperty(StyleProperty property, const StyleValue& value);
+
+    //! Removes one presentation override and returns it to the CSS cascade.
+    void ClearStyleProperty(StyleProperty property);
+
+    //! Removes all presentation overrides, including completed style animations.
+    void ClearStyleProperties();
 
     //! Returns this node's immediate owner, or null for a detached/root node.
     Widget* GetParent() const;
@@ -188,6 +203,8 @@ class Widget
     void SetState(unsigned flag, bool enabled);
 
   private:
+    friend class CssMotion;
+
     //! Attaches or detaches a complete subtree.
     void Attach(UiContext* context, Widget* parent);
 
@@ -196,6 +213,9 @@ class Widget
 
     //! Stores the last computed style.
     Style m_Style;
+
+    //! Stores typed presentation overrides without modifying the stylesheet.
+    std::map<StyleProperty, StyleValue> m_StyleOverrides;
 
     //! Stores the last layout rectangle.
     Rect m_Bounds;

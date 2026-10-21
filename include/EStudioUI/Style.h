@@ -1,8 +1,12 @@
 #pragma once
 
 #include "Types.h"
+#include "VisualStyle.h"
 
 #include <filesystem>
+#include <functional>
+#include <map>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -57,6 +61,9 @@ struct Length
     //! Numeric value for explicit units.
     float m_Value = 0;
 
+    //! Compares both the unit and numeric value.
+    bool operator==(const Length&) const = default;
+
     //! Resolves a dimension against its parent or intrinsic fallback.
     float Resolve(float parent, float fallback) const;
 };
@@ -75,6 +82,9 @@ struct Insets
 
     //! Left distance.
     float m_Left = 0;
+
+    //! Compares all four edges exactly.
+    bool operator==(const Insets&) const = default;
 };
 
 //! A soft analytic shadow behind a widget's rounded rectangle.
@@ -91,6 +101,35 @@ struct Shadow
 
     //! Shadow color; zero alpha disables the shadow.
     Color m_Color{0, 0, 0, 0};
+
+    //! Expands the silhouette before applying blur.
+    float m_Spread = 0;
+
+    //! Draws the shadow inside the box.
+    bool m_Inset = false;
+
+    //! Compares offset, blur, and color exactly.
+    bool operator==(const Shadow&) const = default;
+};
+
+//! Additional shadows after the first, preserving CSS front-to-back order.
+struct ShadowLayers
+{
+    //! At most seven additional layers.
+    std::vector<Shadow> m_Layers;
+
+    //! Compares all layers.
+    bool operator==(const ShadowLayers&) const = default;
+};
+
+//! Optional percentage or pixel offsets for a decorative border box.
+struct Anchors
+{
+    //! Auto edges resolve from the opposite edge or the owner origin.
+    Length m_Top, m_Right, m_Bottom, m_Left;
+
+    //! Compares all edge units and values.
+    bool operator==(const Anchors&) const = default;
 };
 
 //! Computed presentation and basic flex layout values.
@@ -137,6 +176,30 @@ struct Style
 
     //! Optional shadow.
     Shadow m_Shadow;
+
+    //! Additional shadow layers after m_Shadow.
+    ShadowLayers m_ShadowLayers;
+
+    //! Optional analytic gradient over the background color.
+    Gradient m_BackgroundImage;
+
+    //! Ordered visual transform; has no effect on layout allocation.
+    Transform m_Transform;
+
+    //! Clips decoration and descendants to the rounded border box.
+    bool m_ClipContent = false;
+
+    //! Enables an empty decorative pseudo-element through content: "".
+    bool m_Decoration = false;
+
+    //! Decorative box placement relative to the owner border box.
+    Anchors m_Anchors;
+
+    //! Compiled automatic transition specifications.
+    std::vector<CssTransition> m_Transitions;
+
+    //! Compiled keyframe animation specifications.
+    std::vector<CssAnimation> m_Animations;
 
     //! Explicit or intrinsic width.
     Length m_Width;
@@ -194,6 +257,12 @@ struct Style
 
     //! Table grid and scrollbar track color.
     Color m_GridColor{0.4f, 0.5f, 0.7f, 0.2f};
+
+    //! Horizontal translation after layout; flow descendants and hit testing follow.
+    float m_TranslateX = 0;
+
+    //! Vertical translation after layout; flow descendants and hit testing follow.
+    float m_TranslateY = 0;
 };
 
 //! Parses and applies a documented CSS subset with an atomic reload operation.
@@ -207,7 +276,26 @@ class StyleSheet
     bool LoadFile(const std::filesystem::path& path, std::string& error);
 
     //! Resolves matching declarations, inheritance, and selector specificity.
-    Style Compute(const StyleNode& node, const Style* inherited = nullptr) const;
+    Style Compute(const StyleNode& node, const Style* inherited = nullptr, int pseudoElement = 0) const;
+
+    //! One compiled keyframe block with normalized offsets.
+    struct Keyframe
+    {
+        //! Normalized offset in [0,1].
+        double m_Offset = 0;
+
+        //! Applies already parsed values to an underlying style.
+        std::function<void(Style&)> m_Apply;
+
+        //! Canonical properties explicitly present in this block.
+        std::vector<std::string> m_Properties;
+
+        //! Optional easing for the following interval.
+        std::optional<EasingCurve> m_Easing;
+    };
+
+    //! Returns compiled blocks for a case-sensitive animation name.
+    const std::vector<Keyframe>* FindKeyframes(std::string_view name) const;
 
     //! Returns the current stylesheet revision for invalidation.
     unsigned GetRevision() const;
@@ -244,6 +332,12 @@ class StyleSheet
         //! Property value before application.
         std::string m_Value;
 
+        //! Typed assignment compiled once while parsing.
+        std::function<void(Style&)> m_Apply;
+
+        //! Canonical properties written by this declaration.
+        std::vector<std::string> m_Properties;
+
         //! Whether the declaration overrides ordinary specificity.
         bool m_Important = false;
     };
@@ -257,6 +351,9 @@ class StyleSheet
         //! Validated declarations in source order.
         std::vector<Declaration> m_Declarations;
 
+        //! Zero for a widget, one for before, and two for after.
+        int m_PseudoElement = 0;
+
         //! Encodes identifier, class, and type specificity.
         unsigned m_Specificity = 0;
     };
@@ -266,6 +363,12 @@ class StyleSheet
 
     //! Applies one supported declaration or throws a diagnostic.
     static void Apply(Style& style, const Declaration& declaration);
+
+    //! Converts a validated declaration into typed assignments.
+    static void Compile(Declaration& declaration);
+
+    //! Holds compiled named keyframes.
+    std::map<std::string, std::vector<Keyframe>, std::less<>> m_Keyframes;
 
     //! Holds the last successfully parsed rules.
     std::vector<Rule> m_Rules;

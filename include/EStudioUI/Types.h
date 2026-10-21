@@ -13,6 +13,9 @@ struct Point
 
     //! Vertical coordinate.
     float m_Y = 0;
+
+    //! Compares logical coordinates exactly.
+    bool operator==(const Point&) const = default;
 };
 
 //! An axis-aligned rectangle in logical pixels.
@@ -29,6 +32,9 @@ struct Rect
 
     //! Nonnegative height.
     float m_Height = 0;
+
+    //! Compares rectangle components exactly.
+    bool operator==(const Rect&) const = default;
 
     //! Tests the half-open rectangle, excluding empty regions.
     bool Contains(Point point) const
@@ -60,6 +66,9 @@ struct Color
 
     //! Alpha component.
     float m_A = 1;
+
+    //! Compares normalized color components exactly.
+    bool operator==(const Color&) const = default;
 };
 
 //! Physical keyboard commands used by controls independently of GLFW.
@@ -128,7 +137,7 @@ struct Modifiers
 //! Pointer information delivered in logical window coordinates.
 struct PointerEvent
 {
-    //! Absolute pointer position.
+    //! Position in window layout coordinates after inverse visual transforms.
     Point m_Position;
 
     //! Keyboard modifier state.
@@ -136,6 +145,9 @@ struct PointerEvent
 
     //! Successive press count, including double and triple clicks.
     int m_Clicks = 1;
+
+    //! Whether the original window point lies inside every transformed ancestor clip.
+    bool m_InsideClip = true;
 };
 
 //! A normalized keyboard event delivered to an embedded scene.

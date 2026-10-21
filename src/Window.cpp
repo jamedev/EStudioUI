@@ -1,5 +1,6 @@
 #include <EStudioUI/Window.h>
 #include <EStudioUI/TextBox.h>
+#include <EStudioUI/FramePacer.h>
 
 #include <glad/gl.h>
 #define GLFW_INCLUDE_NONE
@@ -114,6 +115,8 @@ struct Window::Impl
     bool m_Initialized = false;
     bool m_Headless = false;
     bool m_Focused = true;
+    bool m_RenderWhenUnfocused = false;
+    FramePacer m_Pacer;
     double m_LastClick = -100;
     Point m_LastClickPosition;
     int m_Clicks = 0;
@@ -178,6 +181,8 @@ Window::Window(const WindowOptions& options, const std::filesystem::path& fontPa
 {
     auto& self = *m_Impl;
     self.m_Headless = options.m_Headless;
+    self.m_RenderWhenUnfocused = options.m_RenderWhenUnfocused;
+    self.m_Pacer = FramePacer(options.m_MaxFrameRate);
     if (s_GlfwUsers > 0 && s_Headless != options.m_Headless)
         throw std::runtime_error("Native and null-platform windows require separate processes.");
     if (s_GlfwUsers == 0)
@@ -335,6 +340,8 @@ Window::Window(const WindowOptions& options, const std::filesystem::path& fontPa
                                                       state.m_Focused = focused != 0;
                                                       if (!focused)
                                                           state.m_Ui->Deactivate();
+                                                      else
+                                                          state.m_Ui->RequestRepaint();
                                                   });
                                });
     self.m_Ui->Prepare(static_cast<float>(options.m_Width), static_cast<float>(options.m_Height));
@@ -369,8 +376,14 @@ Signal<Key>& Window::KeyPressed()
 
 void Window::RenderFrame()
 {
+    RenderFrame(glfwGetTime());
+}
+
+void Window::RenderFrame(double time)
+{
     auto& self = *m_Impl;
     glfwMakeContextCurrent(self.m_Window);
+    self.m_Ui->SetTime(time);
     int width = 0;
     int height = 0;
     int framebufferWidth = 0;
@@ -380,7 +393,7 @@ void Window::RenderFrame()
     if (width <= 0 || height <= 0 || framebufferWidth <= 0 || framebufferHeight <= 0)
         return;
     self.m_Ui->Prepare(static_cast<float>(width), static_cast<float>(height));
-    const double now = glfwGetTime();
+    const double now = time;
     self.m_Ui->PrepareSurfaces(now, static_cast<float>(framebufferWidth) / static_cast<float>(width),
                                static_cast<float>(framebufferHeight) / static_cast<float>(height));
     self.m_Renderer->BeginFrame(static_cast<float>(width), static_cast<float>(height), framebufferWidth,
@@ -395,24 +408,38 @@ int Window::Run()
     auto& self = *m_Impl;
     while (!glfwWindowShouldClose(self.m_Window))
     {
-        const double animationDeadline = glfwGetTime() + 1.0 / 60.0;
-        self.m_Ui->SetTime(glfwGetTime());
-        if (self.m_Ui->NeedsRepaint() || self.m_Ui->HasAnimations())
+        const bool active = glfwGetWindowAttrib(self.m_Window, GLFW_VISIBLE) &&
+                            !glfwGetWindowAttrib(self.m_Window, GLFW_ICONIFIED) &&
+                            (self.m_Focused || self.m_RenderWhenUnfocused);
+        if (active)
         {
-            RenderFrame();
-            glfwSwapBuffers(self.m_Window);
-        }
-        if (self.m_Ui->HasAnimations())
-        {
-            glfwWaitEventsTimeout(std::max(0.0005, animationDeadline - glfwGetTime()));
-            self.m_Ui->RequestRepaint();
-        }
-        else if (const auto* textBox = dynamic_cast<TextBox*>(self.m_Ui->GetFocus());
-                 textBox && !textBox->IsReadOnly() && self.m_Focused)
-        {
-            const auto now = glfwGetTime();
-            glfwWaitEventsTimeout(std::clamp(textBox->NextCaretDeadline(now) - now, 0.001, 0.51));
-            self.m_Ui->RequestRepaint();
+            const double started = glfwGetTime();
+            if ((self.m_Ui->NeedsRepaint() || self.m_Ui->HasAnimations()) && self.m_Pacer.IsDue(started))
+            {
+                RenderFrame(started);
+                glfwSwapBuffers(self.m_Window);
+                self.m_Pacer.Presented(started, glfwGetTime());
+            }
+            double wake = -1;
+            if (self.m_Ui->NeedsRepaint() || self.m_Ui->HasAnimations())
+                wake = self.m_Pacer.GetDeadline();
+            if (const auto* editor = dynamic_cast<TextBox*>(self.m_Ui->GetFocus()); editor && !editor->IsReadOnly())
+            {
+                const double now = glfwGetTime();
+                const double caret = editor->NextCaretDeadline(now);
+                if (wake < 0 || caret < wake)
+                    wake = caret;
+            }
+            if (wake >= 0)
+            {
+                const double now = glfwGetTime();
+                glfwWaitEventsTimeout(std::max(0.0001, wake - now));
+                if (const auto* editor = dynamic_cast<TextBox*>(self.m_Ui->GetFocus());
+                    editor && !editor->IsReadOnly() && glfwGetTime() >= wake && !self.m_Ui->HasAnimations())
+                    self.m_Ui->RequestRepaint();
+            }
+            else
+                glfwWaitEvents();
         }
         else
             glfwWaitEvents();

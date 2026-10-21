@@ -1,0 +1,2 @@
+48 full-frame RGBA comparisons passed (maximum permitted channel difference: 1/255).
+Moving geometry/shadows, translucent overlap and reordered owners, selection/transparent slots, changing glyphs, insertion/removal of pseudo layers, hidden controls, rotated rounded clips, and 1x/2x logical-to-physical scaling.

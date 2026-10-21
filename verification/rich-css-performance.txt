@@ -1,0 +1,5 @@
+Driver: llvmpipe (LLVM 20.1.2, 256 bits) | 4.5 (Core Profile) Mesa 25.1.7-1ubuntu2~24.04.2
+160 buttons / 800x600 / 24 timed frames per case / synchronous framebuffer completion.
+Host timings are observations; software GL does not predict hardware performance.
+Simple baseline: median 3.41987 ms; p95 3.79247 ms; draws 1; shapes 161; glyphs 480; instance bytes 82048; effect bytes 32; timed style resolutions 0; timed layout passes 0.
+Rich + animated: median 8.60215 ms; p95 9.262 ms; draws 1; shapes 641; glyphs 480; instance bytes 143488; effect bytes 74272; timed style resolutions 0; timed layout passes 0.

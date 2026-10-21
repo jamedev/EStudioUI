@@ -1,6 +1,8 @@
 #pragma once
 
 #include "DemoScene.h"
+#include "AnimationGallery.h"
+#include "RichCssGallery.h"
 
 #include <EStudioUI/ContextMenu.h>
 #include <EStudioUI/ListWidget.h>
@@ -17,7 +19,7 @@ class WidgetGallery
 {
   public:
     //! Builds pages after the existing Inputs page.
-    WidgetGallery(Window& window, TabWidget& tabs);
+    WidgetGallery(Window& window, TabWidget& tabs, const std::filesystem::path& assets);
 
     //! Runs interaction/geometry/rendering checks and saves real framebuffer captures.
     void Verify(const std::filesystem::path& assets, const std::filesystem::path& output);
@@ -100,5 +102,11 @@ class WidgetGallery
 
     //! Observes the geometry readout.
     Label* m_LayoutReadout = nullptr;
+
+    //! Owns the CSS paint gallery and its verification probes.
+    std::unique_ptr<RichCssGallery> m_RichCss;
+
+    //! Owns the animation playground and its scheduler connection.
+    std::unique_ptr<AnimationGallery> m_Animations;
 };
 } // namespace EStudioUI

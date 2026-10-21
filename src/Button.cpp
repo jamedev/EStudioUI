@@ -25,13 +25,13 @@ void Button::OnPointerDown(const PointerEvent&)
 void Button::OnPointerMove(const PointerEvent& event)
 {
     if (m_PointerDown)
-        SetState(Pressed, GetBounds().Contains(event.m_Position) && GetClip().Contains(event.m_Position));
+        SetState(Pressed, event.m_InsideClip && ContainsRounded(GetBounds(), GetStyle().m_Radius, event.m_Position));
 }
 
 void Button::OnPointerUp(const PointerEvent& event)
 {
-    const bool activate =
-        m_PointerDown && IsEnabled() && GetBounds().Contains(event.m_Position) && GetClip().Contains(event.m_Position);
+    const bool activate = m_PointerDown && IsEnabled() && event.m_InsideClip &&
+                          ContainsRounded(GetBounds(), GetStyle().m_Radius, event.m_Position);
     m_PointerDown = false;
     SetState(Pressed, false);
     if (activate)
