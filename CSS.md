@@ -225,7 +225,9 @@ switch discretely. Booleans/strings also switch discretely.
 Explicit C++ style overrides take precedence over automatic CSS presentation.
 Existing Fixed/Content/Fill code contracts retain precedence over all CSS motion.
 Transitions apply over named animation presentation. Moving geometry can refresh
-hover beneath a stationary pointer. Hidden widgets do not request animation frames.
+hover beneath a stationary pointer. Hidden widgets do not sample automatic CSS
+tracks or request animation frames, including when native input advances the
+clock on another tab. On reveal, presentation catches up to logical elapsed time.
 Paint-only tracks, including transforms and decoration geometry, retain computed
 style, layout, and text shaping caches; widget dimensions, typography and inherited
 color changes still require the relevant style/layout work.

@@ -3,6 +3,8 @@
 #include "FontFace.h"
 #include "Style.h"
 
+#include <cstddef>
+#include <cstdint>
 #include <filesystem>
 #include <memory>
 #include <string>
@@ -15,10 +17,10 @@ struct RenderStats
     //! Number of instanced draw submissions.
     std::size_t m_DrawCalls = 0;
 
-    //! Number of shape instances.
+    //! Number of recorded shape instances.
     std::size_t m_Shapes = 0;
 
-    //! Number of analytic glyph instances.
+    //! Number of recorded analytic glyph instances.
     std::size_t m_Glyphs = 0;
 
     //! Number of cached unique glyph outlines.
@@ -38,6 +40,27 @@ struct RenderStats
 
     //! Number of outer or inset shadow shapes.
     std::size_t m_Shadows = 0;
+
+    //! Pixels cleared and analytically repainted in the retained framebuffer.
+    std::size_t m_RepaintPixels = 0;
+
+    //! Physical framebuffer area, also copied to the presentation target.
+    std::size_t m_FramebufferPixels = 0;
+
+    //! Actual instances submitted across damaged regions.
+    std::size_t m_SubmittedInstances = 0;
+
+    //! Actual analytic glyph instances submitted across damaged regions.
+    std::size_t m_ReplayedGlyphs = 0;
+
+    //! Nonoverlapping damage rectangles repainted this frame.
+    std::size_t m_DamageRectangles = 0;
+
+    //! Most recent asynchronous GPU timer result, or -1 before a result is available.
+    double m_GpuMilliseconds = -1;
+
+    //! Completed asynchronous GPU timing samples.
+    std::uint64_t m_TimingSamples = 0;
 };
 
 //! Batches analytic shapes and outline glyphs using an OpenGL 3.3 core context.
@@ -56,7 +79,16 @@ class Renderer
     //! GL resources have a single owner.
     Renderer& operator=(const Renderer&) = delete;
 
-    //! Starts a new logical-pixel frame and clears the framebuffer.
+    //! Enables damage-based redraw; disabling provides a full redraw reference path.
+    void SetPartialRedrawEnabled(bool enabled);
+
+    //! Returns whether unchanged framebuffer regions are retained.
+    bool IsPartialRedrawEnabled() const;
+
+    //! Enables asynchronous GPU timers without blocking on pending query results.
+    void SetGpuTimingEnabled(bool enabled);
+
+    //! Starts recording a logical-pixel frame for retained rendering.
     void BeginFrame(float width, float height, int framebufferWidth, int framebufferHeight, Color clear);
 
     //! Saves drawing state and composes a visual transform.
@@ -69,10 +101,11 @@ class Renderer
     void PushClip(Rect bounds, float radius = 0);
 
     //! Supplies the owner and optional before layer for one widget paint call.
-    void SetWidgetPaint(Rect bounds, Rect inheritedClip, const Style* before, bool rounded, float radius);
+    void SetWidgetPaint(Rect bounds, Rect inheritedClip, const Style* before, bool rounded, float radius,
+                        std::uintptr_t ownerIdentity = 0);
 
-    //! Draws one noninteractive CSS pseudo-element.
-    void DrawDecoration(Rect owner, const Style& style, Rect clip, float opacity);
+    //! Draws a CSS pseudo-element in layer 1 (before) or 2 (after).
+    void DrawDecoration(Rect owner, const Style& style, Rect clip, float opacity, unsigned layer = 1);
 
     //! Appends a widget background, optional shadow, and border.
     void DrawBox(Rect bounds, const Style& style, Rect clip, float opacity = 1);
@@ -83,8 +116,8 @@ class Renderer
     //! Appends a cached shaped run at its baseline origin.
     void DrawText(const TextLayout& layout, Point baseline, Color color, Rect clip);
 
-    //! Composites a shared RGBA GL texture, preserving surrounding painter order.
-    void DrawTexture(Rect bounds, std::uint32_t texture, Rect clip, float opacity = 1);
+    //! Composites a shared texture; revision zero conservatively treats its contents as changed.
+    void DrawTexture(Rect bounds, std::uint32_t texture, Rect clip, float opacity = 1, std::uint64_t revision = 0);
 
     //! Uploads changed buffers and submits batches in painting order.
     void EndFrame();

@@ -1,4 +1,5 @@
 #include <EStudioUI/Button.h>
+#include <EStudioUI/FramePacer.h>
 #include <EStudioUI/TextBox.h>
 #include <EStudioUI/UiContext.h>
 
@@ -235,6 +236,35 @@ void CallbackClock(FontFace& font)
           "callback-started transitions and keyframes share elapsed time");
 }
 
+void PresentationDeadlines()
+{
+    FramePacer pacer(60);
+    int frames = 0;
+    for (int event = 0; event < 1000; ++event)
+    {
+        const double time = event / 1000.0;
+        if (pacer.IsDue(time))
+        {
+            ++frames;
+            pacer.Presented(time, time + .001);
+        }
+    }
+    Check(frames >= 58 && frames <= 60, "1000 input wakeups cannot bypass a 60 Hz presentation limit");
+    pacer.Presented(2, 2.050);
+    Check(!pacer.IsDue(2.049) && pacer.IsDue(2.050), "slow frames do not accumulate catch-up bursts");
+    Check(pacer.IsDue(20), "input after a long idle can render immediately");
+    bool rejected = false;
+    try
+    {
+        FramePacer invalid(0);
+    }
+    catch (const std::invalid_argument&)
+    {
+        rejected = true;
+    }
+    Check(rejected, "invalid frame limits are rejected");
+}
+
 void CacheStress(FontFace& font)
 {
     UiContext ui(font);
@@ -275,6 +305,7 @@ int main()
         Keyframes(font);
         Input(font);
         CallbackClock(font);
+        PresentationDeadlines();
         CacheStress(font);
         std::cout << s_Checks << " rich CSS checks passed.\n";
         return 0;

@@ -17,6 +17,12 @@ struct WindowOptions
     //! Native title, encoded as UTF-8.
     std::string m_Title = "EStudioUI Prototype";
 
+    //! Maximum presentation rate, enforced independently of vertical synchronization.
+    double m_MaxFrameRate = 60;
+
+    //! Allows background presentation when the window does not have input focus.
+    bool m_RenderWhenUnfocused = false;
+
     //! Uses GLFW's null platform and OSMesa for CI rendering.
     bool m_Headless = false;
 };

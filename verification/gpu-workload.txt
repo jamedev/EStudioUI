@@ -1,0 +1,10 @@
+Driver: llvmpipe (LLVM 20.1.2, 256 bits) | 4.5 (Core Profile) Mesa 25.1.7-1ubuntu2~24.04.2
+Actual gallery / 1180x820 / four warmup and 32 measured frames per case.
+GL_TIME_ELAPSED queries are polled asynchronously; completed-frame CPU timings include readback.
+Unpaced profiling measures per-frame cost, not utilization percent. Software GL does not predict hardware load.
+idle-inputs / full: completed-frame median 11.355 ms; GPU query median 10.97 ms; repaint 100%; glyph instances 806; draws 1.
+idle-inputs / retained: completed-frame median 1.23679 ms; GPU query median 0.939855 ms; repaint 0%; glyph instances 0; draws 0.
+table-selection / full: completed-frame median 9.31818 ms; GPU query median 8.76018 ms; repaint 100%; glyph instances 802; draws 1.
+table-selection / retained: completed-frame median 3.18034 ms; GPU query median 2.75843 ms; repaint 8.25465%; glyph instances 80.5; draws 2.125.
+rich-css / full: completed-frame median 8.16565 ms; GPU query median 7.80774 ms; repaint 100%; glyph instances 909; draws 1.
+rich-css / retained: completed-frame median 2.62914 ms; GPU query median 2.32541 ms; repaint 12.3952%; glyph instances 133.094; draws 3.

@@ -294,9 +294,14 @@ void CssMotion::Update(double time)
     for (auto& [address, entry] : self.m_Entries)
     {
         auto& widget = *entry.m_Widget.Get();
+        // Resolve catches logical time up when a hidden subtree becomes visible again.
+        if (!widget.IsVisible())
+            continue;
         for (std::size_t index = 0; index < entry.m_Layers.size(); ++index)
         {
             auto& layer = entry.m_Layers[index];
+            if (index && (!layer.m_Presentation.m_Decoration || !layer.m_Presentation.m_Displayed))
+                continue;
             const bool active =
                 !layer.m_Transitions.empty() ||
                 std::any_of(layer.m_Animations.begin(), layer.m_Animations.end(),

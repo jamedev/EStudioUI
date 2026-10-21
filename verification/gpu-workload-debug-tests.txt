@@ -1,0 +1,55 @@
+UpdateCTestConfiguration  from :/workspace/scratch/e2c95811cd0a/EStudioUI/build/debug/DartConfiguration.tcl
+Test project /workspace/scratch/e2c95811cd0a/EStudioUI/build/debug
+Constructing a list of tests
+Done constructing a list of tests
+Updating test list for fixtures
+Added 0 tests to meet fixture requirements
+Checking test dependency graph...
+Checking test dependency graph end
+test 1
+    Start 1: Core
+
+1: Test command: /workspace/scratch/e2c95811cd0a/EStudioUI/build/debug/EStudioUICoreTests
+1: Working Directory: /workspace/scratch/e2c95811cd0a/EStudioUI/build/debug
+1: Test timeout computed to be: 10000000
+1: Core PASS / 78 checks
+1/5 Test #1: Core .............................   Passed    0.23 sec
+test 2
+    Start 2: WidgetsAndLayout
+
+2: Test command: /workspace/scratch/e2c95811cd0a/EStudioUI/build/debug/EStudioUIWidgetTests
+2: Working Directory: /workspace/scratch/e2c95811cd0a/EStudioUI/build/debug
+2: Test timeout computed to be: 10000000
+2: Widgets and layout PASS / 3674 checks
+2/5 Test #2: WidgetsAndLayout .................   Passed    0.33 sec
+test 3
+    Start 3: Animation
+
+3: Test command: /workspace/scratch/e2c95811cd0a/EStudioUI/build/debug/EStudioUIAnimationTests
+3: Working Directory: /workspace/scratch/e2c95811cd0a/EStudioUI/build/debug
+3: Test timeout computed to be: 10000000
+3: Animation checks passed: 2319
+3/5 Test #3: Animation ........................   Passed    0.21 sec
+test 4
+    Start 4: RichCss
+
+4: Test command: /workspace/scratch/e2c95811cd0a/EStudioUI/build/debug/EStudioUIRichCssTests
+4: Working Directory: /workspace/scratch/e2c95811cd0a/EStudioUI/build/debug
+4: Test timeout computed to be: 10000000
+4: 500-widget CSS clock: 4.58195 ms/tick; 0 style resolutions and 0 layout passes during 240 ticks.
+4: 292 rich CSS checks passed.
+4/5 Test #4: RichCss ..........................   Passed    1.37 sec
+test 5
+    Start 5: GpuIntegration
+
+5: Test command: /workspace/scratch/e2c95811cd0a/EStudioUI/build/debug/EStudioUIDemo "--headless" "--self-test" "--output" "/workspace/scratch/e2c95811cd0a/EStudioUI/build/debug/verification"
+5: Working Directory: /workspace/scratch/e2c95811cd0a/EStudioUI/build/debug
+5: Test timeout computed to be: 60
+5: Cannot read theme, animation-start.css, or rich-buttons.css.
+5: GPU integration PASS / llvmpipe (LLVM 20.1.2, 256 bits) | 4.5 (Core Profile) Mesa 25.1.7-1ubuntu2~24.04.2
+5: Demo: 1 draw call / 806 glyphs / 83784 outline bytes
+5/5 Test #5: GpuIntegration ...................   Passed    4.45 sec
+
+100% tests passed out of 5
+
+Total Test time (real) =   6.60 sec

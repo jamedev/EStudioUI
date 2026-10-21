@@ -6,6 +6,7 @@
 #include <array>
 #include <cmath>
 #include <cstddef>
+#include <cstring>
 #include <fstream>
 #include <limits>
 #include <stdexcept>
@@ -112,7 +113,7 @@ float boxDistance(vec2 point, vec4 rect, float radius)
 {
     radius=clamp(radius,0.0,min(rect.z,rect.w)*0.5);
     vec2 q=abs(point-(rect.xy+rect.zw*0.5))-(rect.zw*0.5-vec2(radius));
-    return length(max(q,0.0))+min(max(q.x,q.y),0.0)-radius;
+    return (q.x>0.0 && q.y>0.0 ? length(q) : max(q.x,q.y))-radius;
 }
 float coverage(float distance)
 {
@@ -124,32 +125,30 @@ vec4 straight(vec4 color) { return vec4(color.a>0.000001?color.rgb/color.a:vec3(
 vec4 gradientColor(int index)
 {
     vec4 header=texelFetch(uEffects,index);
-    vec4 params=texelFetch(uEffects,index+1);
-    vec2 p=(vPosition-vRect.xy)/max(vRect.zw,vec2(0.0001));
     float t;
     if(header.x==1.0)
+        t=0.5+dot(vPosition-vRect.xy-vRect.zw*0.5,header.zw);
+    else
     {
-        vec2 direction=vec2(sin(header.z),-cos(header.z));
-        float extent=abs(direction.x)*vRect.z+abs(direction.y)*vRect.w;
-        t=0.5+dot(vPosition-vRect.xy-vRect.zw*0.5,direction)/max(extent,0.0001);
+        vec4 params=texelFetch(uEffects,index+1);
+        t=length((vPosition-params.xy)*params.zw);
     }
-    else t=length((p-params.xy)/max(params.zw,vec2(0.0001)));
     float previousPosition=texelFetch(uEffects,index+2).x;
-    vec4 previousColor=premultiply(texelFetch(uEffects,index+3));
-    if(t<previousPosition) return straight(previousColor)*vec4(1,1,1,header.w);
+    vec4 previousColor=texelFetch(uEffects,index+3);
+    if(t<previousPosition) return previousColor;
     for(int i=1;i<8;++i)
     {
         if(i>=int(header.y)) break;
         float position=texelFetch(uEffects,index+2+i*2).x;
-        vec4 color=premultiply(texelFetch(uEffects,index+3+i*2));
+        vec4 color=texelFetch(uEffects,index+3+i*2);
         if(t<position)
         {
             float weight=clamp((t-previousPosition)/max(position-previousPosition,0.000001),0.0,1.0);
-            return straight(mix(previousColor,color,weight))*vec4(1,1,1,header.w);
+            return mix(previousColor,color,weight);
         }
         previousPosition=position;previousColor=color;
     }
-    return straight(previousColor)*vec4(1,1,1,header.w);
+    return previousColor;
 }
 void main()
 {
@@ -181,7 +180,7 @@ void main()
         vec4 fill=vColor;
         if(vEffects.z!=0)
         {
-            vec4 image=premultiply(gradientColor(vEffects.z));
+            vec4 image=gradientColor(vEffects.z);
             fill=straight(image+premultiply(fill)*(1.0-image.a));
         }
         if(vData.w==3)
@@ -336,7 +335,418 @@ struct Renderer::Impl
         const Style* m_Before = nullptr;
         bool m_BeforeDrawn = false, m_Rounded = false;
         float m_Radius = 0;
+        std::uintptr_t m_OwnerIdentity = 0;
+        unsigned m_Layer = 0;
     };
+
+    struct PaintKey
+    {
+        std::uintptr_t m_Owner;
+        std::uint64_t m_Sequence;
+        bool operator==(const PaintKey&) const = default;
+    };
+
+    struct PaintKeyHash
+    {
+        std::size_t operator()(const PaintKey& key) const
+        {
+            return std::hash<std::uintptr_t>{}(key.m_Owner) ^
+                   (std::hash<std::uint64_t>{}(key.m_Sequence) * 0x9e3779b9u);
+        }
+    };
+
+    std::vector<PaintKey> m_PaintKeys, m_PreviousKeys;
+    std::unordered_map<std::uintptr_t, std::array<unsigned, 15>> m_OwnerCounters;
+
+    PaintKey NextPaintKey(std::size_t kind)
+    {
+        const auto& state = m_States.back();
+        const auto slot = static_cast<std::size_t>(state.m_Layer) * 5 + kind;
+        auto& sequence = m_OwnerCounters[state.m_OwnerIdentity][slot];
+        return {state.m_OwnerIdentity, (static_cast<std::uint64_t>(sequence++) << 8) | slot};
+    }
+
+    void Record(Instance instance)
+    {
+        m_PaintKeys.push_back(NextPaintKey(static_cast<std::size_t>(instance.m_Data[3])));
+        m_Instances.push_back(instance);
+    }
+
+    struct Image
+    {
+        std::size_t m_Instance;
+        GLuint m_Texture;
+        std::uint64_t m_Revision;
+    };
+
+    struct TextureState
+    {
+        GLuint m_Texture = 0;
+        std::uint64_t m_Revision = 0;
+        bool operator==(const TextureState&) const = default;
+    };
+
+    struct PixelRect
+    {
+        int m_X, m_Y, m_Width, m_Height;
+        bool operator==(const PixelRect&) const = default;
+    };
+
+    struct Batch
+    {
+        PixelRect m_Damage;
+        std::size_t m_Begin, m_End;
+        GLuint m_Texture;
+    };
+
+    bool m_PartialRedraw = true, m_HistoryValid = false;
+    GLuint m_RetainedFramebuffer = 0, m_RetainedTexture = 0;
+    int m_RetainedWidth = 0, m_RetainedHeight = 0;
+    float m_PreviousWidth = 0, m_PreviousHeight = 0;
+    Color m_Clear, m_PreviousClear;
+    std::vector<Instance> m_PreviousInstances, m_Submitted;
+    std::vector<Float4> m_PreviousEffects;
+    std::vector<TextureState> m_TextureStates, m_PreviousTextures;
+    std::vector<Rect> m_Bounds, m_PreviousBounds;
+    std::vector<unsigned char> m_DirtyTiles;
+    std::vector<PixelRect> m_Damage;
+    std::vector<Batch> m_Batches;
+    std::size_t m_RepaintPixels = 0, m_ReplayedGlyphs = 0;
+
+    bool m_TimingEnabled = false;
+    std::array<GLuint, 8> m_Queries{};
+    std::array<bool, 8> m_QueryPending{};
+    std::array<std::uint64_t, 8> m_QuerySerials{};
+    std::uint64_t m_NextQuerySerial = 0, m_LastQuerySerial = 0;
+    int m_ActiveQuery = -1;
+    double m_GpuMilliseconds = -1;
+    std::uint64_t m_TimingSamples = 0;
+
+    void PollTimers()
+    {
+        if (!m_TimingEnabled)
+            return;
+        for (std::size_t i = 0; i < m_Queries.size(); ++i)
+        {
+            if (!m_QueryPending[i])
+                continue;
+            GLint available = 0;
+            glGetQueryObjectiv(m_Queries[i], GL_QUERY_RESULT_AVAILABLE, &available);
+            if (!available)
+                continue;
+            GLuint64 nanoseconds = 0;
+            glGetQueryObjectui64v(m_Queries[i], GL_QUERY_RESULT, &nanoseconds);
+            if (m_QuerySerials[i] > m_LastQuerySerial)
+            {
+                m_GpuMilliseconds = static_cast<double>(nanoseconds) / 1000000;
+                m_LastQuerySerial = m_QuerySerials[i];
+            }
+            ++m_TimingSamples;
+            m_QueryPending[i] = false;
+        }
+    }
+
+    void StartTimer()
+    {
+        if (!m_TimingEnabled)
+            return;
+        for (std::size_t i = 0; i < m_Queries.size(); ++i)
+            if (!m_QueryPending[i])
+            {
+                glBeginQuery(GL_TIME_ELAPSED, m_Queries[i]);
+                m_QuerySerials[i] = ++m_NextQuerySerial;
+                m_ActiveQuery = static_cast<int>(i);
+                return;
+            }
+    }
+
+    void EnsureRetainedTarget()
+    {
+        if (m_RetainedWidth == m_FramebufferWidth && m_RetainedHeight == m_FramebufferHeight)
+            return;
+        if (m_FramebufferWidth > m_MaxTextureSize || m_FramebufferHeight > m_MaxTextureSize)
+            throw std::runtime_error("UI framebuffer exceeds the texture size limit.");
+        glActiveTexture(GL_TEXTURE4);
+        glBindTexture(GL_TEXTURE_2D, m_RetainedTexture);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, m_FramebufferWidth, m_FramebufferHeight, 0, GL_RGBA, GL_UNSIGNED_BYTE,
+                     nullptr);
+        glBindFramebuffer(GL_FRAMEBUFFER, m_RetainedFramebuffer);
+        glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, m_RetainedTexture, 0);
+        if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE)
+            throw std::runtime_error("Retained UI framebuffer is incomplete.");
+        m_RetainedWidth = m_FramebufferWidth;
+        m_RetainedHeight = m_FramebufferHeight;
+        m_HistoryValid = false;
+    }
+
+    static Rect Box(const Float4& value)
+    {
+        return {value[0], value[1], value[2], value[3]};
+    }
+
+    Rect InstanceBounds(const Instance& instance) const
+    {
+        Rect bounds = Box(instance.m_Rect);
+        const float padding = instance.m_Data[3] == 0 || instance.m_Data[3] == 4 ? instance.m_Aux[3] : 0;
+        bounds = {bounds.m_X - padding, bounds.m_Y - padding, bounds.m_Width + 2 * padding,
+                  bounds.m_Height + 2 * padding};
+        const auto index = static_cast<std::size_t>(instance.m_Effects[0]);
+        const auto& x = m_Effects[index];
+        const auto& y = m_Effects[index + 1];
+        bounds = Affine{x[0], y[0], x[1], y[1], x[2], y[2]}.MapBounds(bounds).Intersect(Box(instance.m_Clip));
+        for (int clip = instance.m_Effects[1]; clip;)
+        {
+            const auto& first = m_Effects[static_cast<std::size_t>(clip + 1)];
+            const auto& second = m_Effects[static_cast<std::size_t>(clip + 2)];
+            const Affine inverse{first[2], second[1], first[3], second[2], second[0], second[3]};
+            Affine matrix;
+            if (!inverse.Inverse(matrix))
+                return {};
+            auto clipBounds = matrix.MapBounds(Box(m_Effects[static_cast<std::size_t>(clip)]));
+            // Derivative-based clip coverage extends beyond its mathematical edge.
+            const float px = m_Width / static_cast<float>(m_FramebufferWidth);
+            const float py = m_Height / static_cast<float>(m_FramebufferHeight);
+            clipBounds = {clipBounds.m_X - px, clipBounds.m_Y - py, clipBounds.m_Width + 2 * px,
+                          clipBounds.m_Height + 2 * py};
+            bounds = bounds.Intersect(clipBounds);
+            clip = static_cast<int>(first[1]);
+        }
+        return bounds;
+    }
+
+    bool SamePaint(std::size_t current, std::size_t previous) const
+    {
+        const auto& a = m_Instances[current];
+        const auto& b = m_PreviousInstances[previous];
+        if (std::memcmp(&a, &b, offsetof(Instance, m_Effects)) != 0)
+            return false;
+        if (m_TextureStates[current] != m_PreviousTextures[previous] ||
+            (a.m_Data[3] == 2 && m_TextureStates[current].m_Revision == 0))
+            return false;
+        const auto sameRange = [&](int first, int last, std::size_t count)
+        { return std::memcmp(m_Effects.data() + first, m_PreviousEffects.data() + last, count * sizeof(Float4)) == 0; };
+        if (!sameRange(a.m_Effects[0], b.m_Effects[0], 2))
+            return false;
+        int first = a.m_Effects[1], last = b.m_Effects[1];
+        while (first || last)
+        {
+            if (!first || !last || !sameRange(first, last, 1))
+                return false;
+            const auto& x = m_Effects[static_cast<std::size_t>(first + 1)];
+            const auto& y = m_PreviousEffects[static_cast<std::size_t>(last + 1)];
+            if (x[0] != y[0] || x[2] != y[2] || x[3] != y[3] || !sameRange(first + 2, last + 2, 1))
+                return false;
+            first = static_cast<int>(x[1]);
+            last = static_cast<int>(y[1]);
+        }
+        first = a.m_Effects[2];
+        last = b.m_Effects[2];
+        if ((first == 0) != (last == 0))
+            return false;
+        if (first)
+        {
+            const auto count = static_cast<std::size_t>(m_Effects[static_cast<std::size_t>(first)][1]);
+            if (!sameRange(first, last, 2) || !sameRange(first + 2, last + 2, count * 2))
+                return false;
+        }
+        first = a.m_Effects[3];
+        last = b.m_Effects[3];
+        return (first == 0 && last == 0) || (first && last && sameRange(first, last, 2));
+    }
+
+    void BuildDamage()
+    {
+        constexpr int tile = 64;
+        const int columns = (m_FramebufferWidth + tile - 1) / tile;
+        const int rows = (m_FramebufferHeight + tile - 1) / tile;
+        m_DirtyTiles.assign(static_cast<std::size_t>(columns * rows), 0);
+        m_Damage.clear();
+        m_Bounds.resize(m_Instances.size());
+        m_TextureStates.assign(m_Instances.size(), {});
+        for (const auto& image : m_Images)
+            m_TextureStates[image.m_Instance] = {image.m_Texture, image.m_Revision};
+        for (std::size_t i = 0; i < m_Instances.size(); ++i)
+            m_Bounds[i] = InstanceBounds(m_Instances[i]);
+        const auto full = [&]
+        {
+            m_Damage = {{0, 0, m_FramebufferWidth, m_FramebufferHeight}};
+            m_RepaintPixels =
+                static_cast<std::size_t>(m_FramebufferWidth) * static_cast<std::size_t>(m_FramebufferHeight);
+        };
+        if (!m_PartialRedraw || !m_HistoryValid || m_Clear != m_PreviousClear || m_Width != m_PreviousWidth ||
+            m_Height != m_PreviousHeight)
+        {
+            full();
+            return;
+        }
+        const auto dirty = [&](Rect bounds)
+        {
+            if (bounds.m_Width <= 0 || bounds.m_Height <= 0)
+                return;
+            const float sx = static_cast<float>(m_FramebufferWidth) / m_Width;
+            const float sy = static_cast<float>(m_FramebufferHeight) / m_Height;
+            const int left = static_cast<int>(
+                std::clamp(std::floor(bounds.m_X * sx) - 1, 0.0f, static_cast<float>(m_FramebufferWidth)));
+            const int top = static_cast<int>(
+                std::clamp(std::floor(bounds.m_Y * sy) - 1, 0.0f, static_cast<float>(m_FramebufferHeight)));
+            const int right = static_cast<int>(std::clamp(std::ceil((bounds.m_X + bounds.m_Width) * sx) + 1, 0.0f,
+                                                          static_cast<float>(m_FramebufferWidth)));
+            const int bottom = static_cast<int>(std::clamp(std::ceil((bounds.m_Y + bounds.m_Height) * sy) + 1, 0.0f,
+                                                           static_cast<float>(m_FramebufferHeight)));
+            for (int y = top / tile; y < (bottom + tile - 1) / tile; ++y)
+                for (int x = left / tile; x < (right + tile - 1) / tile; ++x)
+                    m_DirtyTiles[static_cast<std::size_t>(y * columns + x)] = 1;
+        };
+        const auto currentCount = m_Instances.size(), oldCount = m_PreviousInstances.size();
+        std::size_t prefix = 0, suffix = 0;
+        while (prefix < std::min(currentCount, oldCount) && SamePaint(prefix, prefix))
+            ++prefix;
+        while (suffix < std::min(currentCount, oldCount) - prefix &&
+               SamePaint(currentCount - 1 - suffix, oldCount - 1 - suffix))
+            ++suffix;
+        if (currentCount == oldCount && m_PaintKeys == m_PreviousKeys)
+        {
+            for (std::size_t i = prefix; i < currentCount - suffix; ++i)
+                if (!SamePaint(i, i))
+                {
+                    dirty(m_Bounds[i]);
+                    dirty(m_PreviousBounds[i]);
+                }
+        }
+        else
+        {
+            std::unordered_map<PaintKey, std::size_t, PaintKeyHash> previous;
+            previous.reserve(oldCount);
+            for (std::size_t i = 0; i < oldCount; ++i)
+                previous.emplace(m_PreviousKeys[i], i);
+            std::vector<bool> matched(oldCount, false);
+            std::vector<std::size_t> mapping(currentCount, oldCount);
+            for (std::size_t i = 0; i < currentCount; ++i)
+            {
+                const auto found = previous.find(m_PaintKeys[i]);
+                if (found == previous.end())
+                {
+                    dirty(m_Bounds[i]);
+                    continue;
+                }
+                const auto old = found->second;
+                mapping[i] = old;
+                matched[old] = true;
+                if (!SamePaint(i, old))
+                {
+                    dirty(m_Bounds[i]);
+                    dirty(m_PreviousBounds[old]);
+                }
+            }
+            for (std::size_t i = 0; i < oldCount; ++i)
+                if (!matched[i])
+                    dirty(m_PreviousBounds[i]);
+            // Every inversion participant can change overlap order. Insertions
+            // merely shift indices and do not invalidate unrelated owners.
+            std::size_t maximum = 0;
+            for (std::size_t i = 0; i < currentCount; ++i)
+            {
+                const auto old = mapping[i];
+                if (old == oldCount)
+                    continue;
+                if (old < maximum)
+                {
+                    dirty(m_Bounds[i]);
+                    dirty(m_PreviousBounds[old]);
+                }
+                maximum = std::max(maximum, old);
+            }
+            std::size_t minimum = oldCount;
+            for (std::size_t i = currentCount; i-- > 0;)
+            {
+                const auto old = mapping[i];
+                if (old == oldCount)
+                    continue;
+                if (old > minimum)
+                {
+                    dirty(m_Bounds[i]);
+                    dirty(m_PreviousBounds[old]);
+                }
+                minimum = std::min(minimum, old);
+            }
+        }
+        m_RepaintPixels = 0;
+        for (int y = 0; y < rows; ++y)
+        {
+            for (int x = 0; x < columns;)
+            {
+                if (!m_DirtyTiles[static_cast<std::size_t>(y * columns + x)])
+                {
+                    ++x;
+                    continue;
+                }
+                const int start = x;
+                while (x < columns && m_DirtyTiles[static_cast<std::size_t>(y * columns + x)])
+                    ++x;
+                PixelRect rect{start * tile, y * tile, std::min(x * tile, m_FramebufferWidth) - start * tile,
+                               std::min(tile, m_FramebufferHeight - y * tile)};
+                auto previous = std::find_if(m_Damage.begin(), m_Damage.end(),
+                                             [&](const auto& item)
+                                             {
+                                                 return item.m_X == rect.m_X && item.m_Width == rect.m_Width &&
+                                                        item.m_Y + item.m_Height == rect.m_Y;
+                                             });
+                if (previous != m_Damage.end())
+                    previous->m_Height += rect.m_Height;
+                else
+                    m_Damage.push_back(rect);
+                m_RepaintPixels += static_cast<std::size_t>(rect.m_Width * rect.m_Height);
+                const auto pixels =
+                    static_cast<std::size_t>(m_FramebufferWidth) * static_cast<std::size_t>(m_FramebufferHeight);
+                if (m_Damage.size() > 16 || m_RepaintPixels > pixels * 3 / 5)
+                {
+                    full();
+                    return;
+                }
+            }
+        }
+    }
+
+    void BuildBatches()
+    {
+        m_Submitted.clear();
+        m_Batches.clear();
+        m_ReplayedGlyphs = 0;
+        const float sx = m_Width / static_cast<float>(m_FramebufferWidth);
+        const float sy = m_Height / static_cast<float>(m_FramebufferHeight);
+        for (const auto& damage : m_Damage)
+        {
+            const bool full = damage.m_X == 0 && damage.m_Y == 0 && damage.m_Width == m_FramebufferWidth &&
+                              damage.m_Height == m_FramebufferHeight;
+            const Rect region{static_cast<float>(damage.m_X) * sx, static_cast<float>(damage.m_Y) * sy,
+                              static_cast<float>(damage.m_Width) * sx, static_cast<float>(damage.m_Height) * sy};
+            std::size_t begin = m_Submitted.size();
+            GLuint texture = 0;
+            for (std::size_t i = 0; i < m_Instances.size(); ++i)
+            {
+                const auto visible = m_Bounds[i].Intersect(region);
+                if (!full && (visible.m_Width <= 0 || visible.m_Height <= 0))
+                    continue;
+                const auto image = m_TextureStates[i].m_Texture;
+                if (image && image != texture)
+                {
+                    if (m_Submitted.size() > begin)
+                        m_Batches.push_back({damage, begin, m_Submitted.size(), texture});
+                    begin = m_Submitted.size();
+                    texture = image;
+                }
+                m_Submitted.push_back(m_Instances[i]);
+                if (m_Instances[i].m_Data[3] == 1)
+                    ++m_ReplayedGlyphs;
+            }
+            if (m_Submitted.size() > begin)
+                m_Batches.push_back({damage, begin, m_Submitted.size(), texture});
+        }
+    }
 
     GLuint m_EffectBuffer = 0, m_EffectTexture = 0;
     std::vector<Float4> m_Effects;
@@ -380,19 +790,25 @@ struct Renderer::Impl
         return {state.m_Scissor, {state.m_TransformIndex, state.m_ClipIndex, 0, 0}};
     }
 
-    int AddGradient(const Gradient& gradient, float opacity)
+    int AddGradient(const Gradient& gradient, float opacity, Rect bounds)
     {
         if (gradient.m_Kind == Gradient::Kind::None)
             return 0;
         const int index = static_cast<int>(m_Effects.size());
+        const float angle = gradient.m_Angle * 3.14159265358979323846f / 180;
+        const float dx = std::sin(angle), dy = -std::cos(angle);
+        const float extent = std::max(0.0001f, std::abs(dx) * bounds.m_Width + std::abs(dy) * bounds.m_Height);
         m_Effects.push_back({static_cast<float>(gradient.m_Kind), static_cast<float>(gradient.m_Stops.size()),
-                             gradient.m_Angle * 3.14159265358979323846f / 180, opacity});
-        m_Effects.push_back(
-            {gradient.m_Center.m_X, gradient.m_Center.m_Y, gradient.m_Radius.m_X, gradient.m_Radius.m_Y});
+                             dx / extent, dy / extent});
+        m_Effects.push_back({bounds.m_X + gradient.m_Center.m_X * bounds.m_Width,
+                             bounds.m_Y + gradient.m_Center.m_Y * bounds.m_Height,
+                             1 / std::max(0.0001f, gradient.m_Radius.m_X * bounds.m_Width),
+                             1 / std::max(0.0001f, gradient.m_Radius.m_Y * bounds.m_Height)});
         for (const auto& stop : gradient.m_Stops)
         {
             m_Effects.push_back({stop.m_Position, 0, 0, 0});
-            m_Effects.push_back({stop.m_Color.m_R, stop.m_Color.m_G, stop.m_Color.m_B, stop.m_Color.m_A});
+            const float alpha = stop.m_Color.m_A * opacity;
+            m_Effects.push_back({stop.m_Color.m_R * alpha, stop.m_Color.m_G * alpha, stop.m_Color.m_B * alpha, alpha});
         }
         ++m_GradientCount;
         return index;
@@ -419,7 +835,8 @@ struct Renderer::Impl
     int m_FramebufferHeight = 1;
     bool m_FontDirty = true;
     std::vector<Instance> m_Instances;
-    std::vector<std::pair<std::size_t, GLuint>> m_Images;
+    std::vector<Image> m_Images;
+    GLint m_MaxTextureSize = 0, m_MaxBufferSize = 0;
     std::size_t m_ShapeCount = 0;
     std::size_t m_GlyphCount = 0;
     std::vector<Float4> m_Curves{{0, 0, 0, 0}};
@@ -435,6 +852,9 @@ struct Renderer::Impl
     {
         if (m_Program)
             glDeleteProgram(m_Program);
+        glDeleteFramebuffers(1, &m_RetainedFramebuffer);
+        glDeleteTextures(1, &m_RetainedTexture);
+        glDeleteQueries(static_cast<GLsizei>(m_Queries.size()), m_Queries.data());
         glDeleteBuffers(1, &m_EffectBuffer);
         glDeleteTextures(1, &m_EffectTexture);
         glDeleteBuffers(1, &m_InstanceBuffer);
@@ -461,7 +881,7 @@ struct Renderer::Impl
         effects[2] = gradient;
         effects[3] = shadow;
         ++m_ShapeCount;
-        m_Instances.push_back({Values(bounds), params, color, border, Values(scissor), {}, {0, 0, 0, kind}, effects});
+        Record({Values(bounds), params, color, border, Values(scissor), {}, {0, 0, 0, kind}, effects});
     }
 
     const GpuGlyph& Glyph(std::uint32_t id)
@@ -550,8 +970,13 @@ Renderer::Renderer(FontFace& font) : m_Impl(std::make_unique<Impl>(font))
     glUniform1i(glGetUniformLocation(m_Impl->m_Program, "uCurves"), 0);
     glUniform1i(glGetUniformLocation(m_Impl->m_Program, "uBands"), 1);
     glUniform1i(glGetUniformLocation(m_Impl->m_Program, "uEffects"), 3);
+    glUniform1i(glGetUniformLocation(m_Impl->m_Program, "uImage"), 2);
     glGenBuffers(1, &m_Impl->m_EffectBuffer);
     glGenTextures(1, &m_Impl->m_EffectTexture);
+    glGenTextures(1, &m_Impl->m_RetainedTexture);
+    glGenFramebuffers(1, &m_Impl->m_RetainedFramebuffer);
+    glGetIntegerv(GL_MAX_TEXTURE_SIZE, &m_Impl->m_MaxTextureSize);
+    glGetIntegerv(GL_MAX_TEXTURE_BUFFER_SIZE, &m_Impl->m_MaxBufferSize);
     glGenVertexArrays(1, &m_Impl->m_Vao);
     glGenBuffers(1, &m_Impl->m_InstanceBuffer);
     glGenBuffers(1, &m_Impl->m_CurveBuffer);
@@ -565,11 +990,15 @@ Renderer::~Renderer() = default;
 void Renderer::BeginFrame(float width, float height, int framebufferWidth, int framebufferHeight, Color clear)
 {
     auto& self = *m_Impl;
+    self.PollTimers();
+    self.m_Clear = clear;
     self.m_Width = std::max(1.0f, width);
     self.m_Height = std::max(1.0f, height);
     self.m_FramebufferWidth = std::max(1, framebufferWidth);
     self.m_FramebufferHeight = std::max(1, framebufferHeight);
     self.m_Instances.clear();
+    self.m_PaintKeys.clear();
+    self.m_OwnerCounters.clear();
     self.m_Images.clear();
     self.m_Effects = {{1, 0, 0, 0}, {0, 1, 0, 0}};
     self.m_States.clear();
@@ -586,8 +1015,6 @@ void Renderer::BeginFrame(float width, float height, int framebufferWidth, int f
     glDisable(GL_SCISSOR_TEST);
     glEnable(GL_BLEND);
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-    glClearColor(clear.m_R, clear.m_G, clear.m_B, clear.m_A);
-    glClear(GL_COLOR_BUFFER_BIT);
 }
 
 void Renderer::PushState(Affine local)
@@ -628,10 +1055,13 @@ void Renderer::PushClip(Rect bounds, float radius)
     }
 }
 
-void Renderer::SetWidgetPaint(Rect bounds, Rect inheritedClip, const Style* before, bool rounded, float radius)
+void Renderer::SetWidgetPaint(Rect bounds, Rect inheritedClip, const Style* before, bool rounded, float radius,
+                              std::uintptr_t ownerIdentity)
 {
     auto& state = m_Impl->m_States.back();
     state.m_Owner = bounds;
+    state.m_OwnerIdentity = ownerIdentity;
+    state.m_Layer = 0;
     state.m_IgnoredClip = inheritedClip;
     state.m_Before = before;
     state.m_BeforeDrawn = false;
@@ -639,8 +1069,10 @@ void Renderer::SetWidgetPaint(Rect bounds, Rect inheritedClip, const Style* befo
     state.m_Radius = radius;
 }
 
-void Renderer::DrawDecoration(Rect owner, const Style& style, Rect clip, float opacity)
+void Renderer::DrawDecoration(Rect owner, const Style& style, Rect clip, float opacity, unsigned layer)
 {
+    if (layer < 1 || layer > 2)
+        throw std::invalid_argument("Decoration layer must be 1 (before) or 2 (after).");
     const auto& edges = style.m_Anchors;
     const float left = edges.m_Left.Resolve(owner.m_Width, 0);
     const float right = edges.m_Right.Resolve(owner.m_Width, 0);
@@ -663,6 +1095,7 @@ void Renderer::DrawDecoration(Rect owner, const Style& style, Rect clip, float o
     PushState(style.m_Transform.Resolve(bounds));
     // The owner clip was installed before entering the decorative transform.
     m_Impl->m_States.back().m_IgnoredClip = clip;
+    m_Impl->m_States.back().m_Layer = layer;
     DrawBox(bounds, style, clip, opacity * style.m_Opacity);
     PopState();
 }
@@ -718,7 +1151,7 @@ void Renderer::DrawBox(Rect bounds, const Style& style, Rect clip, float opacity
     if (fill.m_A > 0 || style.m_BackgroundImage.m_Kind != Gradient::Kind::None ||
         (style.m_BorderWidth > 0 && border.m_A > 0))
         self.Shape(bounds, fill, border, {style.m_Radius, style.m_BorderWidth, 0, 1}, clip, 0,
-                   self.AddGradient(style.m_BackgroundImage, opacity));
+                   self.AddGradient(style.m_BackgroundImage, opacity, bounds));
     for (auto i = style.m_ShadowLayers.m_Layers.rbegin(); i != style.m_ShadowLayers.m_Layers.rend(); ++i)
         if (i->m_Inset)
             shadowShape(*i);
@@ -741,6 +1174,10 @@ void Renderer::DrawSolid(Rect bounds, Color color, Rect clip)
 {
     if (color.m_A > 0)
         m_Impl->Shape(bounds, color, {}, {0, 0, 0, 1}, clip);
+    else
+        // Preserve logical slots for transparent row/cell backgrounds so a
+        // selection change does not invalidate surrounding grid primitives.
+        m_Impl->NextPaintKey(0);
 }
 
 void Renderer::DrawText(const TextLayout& layout, Point baseline, Color color, Rect clip)
@@ -767,19 +1204,19 @@ void Renderer::DrawText(const TextLayout& layout, Point baseline, Color color, R
         if (!self.Visible(rect, scissor))
             continue;
         ++self.m_GlyphCount;
-        self.m_Instances.push_back({Values(rect),
-                                    {bounds.m_MinX - paddingX / size, bounds.m_MaxY + paddingY / size,
-                                     rect.m_Width / size, -rect.m_Height / size},
-                                    color,
-                                    {},
-                                    Values(scissor),
-                                    glyph.m_Transform,
-                                    {glyph.m_Start, glyph.m_Count, glyph.m_Count, 1},
-                                    effects});
+        self.Record({Values(rect),
+                     {bounds.m_MinX - paddingX / size, bounds.m_MaxY + paddingY / size, rect.m_Width / size,
+                      -rect.m_Height / size},
+                     color,
+                     {},
+                     Values(scissor),
+                     glyph.m_Transform,
+                     {glyph.m_Start, glyph.m_Count, glyph.m_Count, 1},
+                     effects});
     }
 }
 
-void Renderer::DrawTexture(Rect bounds, std::uint32_t texture, Rect clip, float opacity)
+void Renderer::DrawTexture(Rect bounds, std::uint32_t texture, Rect clip, float opacity, std::uint64_t revision)
 {
     if (!texture || bounds.m_Width <= 0 || bounds.m_Height <= 0)
         return;
@@ -787,22 +1224,51 @@ void Renderer::DrawTexture(Rect bounds, std::uint32_t texture, Rect clip, float 
     const auto [scissor, effects] = self.DrawingState(clip);
     if (effects[1] < 0 || !self.Visible(bounds, scissor))
         return;
-    self.m_Images.emplace_back(self.m_Instances.size(), texture);
-    self.m_Instances.push_back(
-        {Values(bounds), {0, 1, 1, -1}, {1, 1, 1, opacity}, {}, Values(scissor), {}, {0, 0, 0, 2}, effects});
+    self.m_Images.push_back({self.m_Instances.size(), texture, revision});
+    self.Record({Values(bounds), {0, 1, 1, -1}, {1, 1, 1, opacity}, {}, Values(scissor), {}, {0, 0, 0, 2}, effects});
+}
+
+void Renderer::SetPartialRedrawEnabled(bool enabled)
+{
+    if (m_Impl->m_PartialRedraw != enabled)
+    {
+        m_Impl->m_PartialRedraw = enabled;
+        m_Impl->m_HistoryValid = false;
+    }
+}
+
+bool Renderer::IsPartialRedrawEnabled() const
+{
+    return m_Impl->m_PartialRedraw;
+}
+
+void Renderer::SetGpuTimingEnabled(bool enabled)
+{
+    auto& self = *m_Impl;
+    if (enabled && !self.m_Queries[0])
+        glGenQueries(static_cast<GLsizei>(self.m_Queries.size()), self.m_Queries.data());
+    self.m_TimingEnabled = enabled;
 }
 
 void Renderer::EndFrame()
 {
     auto& self = *m_Impl;
+    self.EnsureRetainedTarget();
+    self.BuildDamage();
+    self.BuildBatches();
+    const bool submitted = !self.m_Submitted.empty();
+    if (submitted && self.m_FontDirty &&
+        (self.m_Curves.size() > static_cast<std::size_t>(self.m_MaxBufferSize) ||
+         self.m_Bands.size() > static_cast<std::size_t>(self.m_MaxBufferSize)))
+        throw std::runtime_error("Glyph cache exceeds the texture buffer limit.");
+    if (submitted && self.m_Effects.size() > static_cast<std::size_t>(self.m_MaxBufferSize))
+        throw std::runtime_error("Frame effects exceed the texture buffer limit.");
+    if (self.m_Submitted.size() > static_cast<std::size_t>(std::numeric_limits<GLsizei>::max()))
+        throw std::runtime_error("Frame exceeds the GL instance limit.");
+    self.StartTimer();
     glBindVertexArray(self.m_Vao);
-    if (self.m_FontDirty)
+    if (submitted && self.m_FontDirty)
     {
-        GLint maximum = 0;
-        glGetIntegerv(GL_MAX_TEXTURE_BUFFER_SIZE, &maximum);
-        if (self.m_Curves.size() > static_cast<std::size_t>(maximum) ||
-            self.m_Bands.size() > static_cast<std::size_t>(maximum))
-            throw std::runtime_error("Glyph cache exceeds the driver's texture buffer limit.");
         glBindBuffer(GL_TEXTURE_BUFFER, self.m_CurveBuffer);
         glBufferData(GL_TEXTURE_BUFFER, static_cast<GLsizeiptr>(self.m_Curves.size() * sizeof(Float4)),
                      self.m_Curves.data(), GL_DYNAMIC_DRAW);
@@ -815,68 +1281,103 @@ void Renderer::EndFrame()
         glTexBuffer(GL_TEXTURE_BUFFER, GL_RG32UI, self.m_BandBuffer);
         self.m_FontDirty = false;
     }
-    GLint effectLimit = 0;
-    glGetIntegerv(GL_MAX_TEXTURE_BUFFER_SIZE, &effectLimit);
-    if (self.m_Effects.size() > static_cast<std::size_t>(effectLimit))
-        throw std::runtime_error("Frame effects exceed the texture buffer limit.");
-    glBindBuffer(GL_TEXTURE_BUFFER, self.m_EffectBuffer);
-    glBufferData(GL_TEXTURE_BUFFER, static_cast<GLsizeiptr>(self.m_Effects.size() * sizeof(Float4)),
-                 self.m_Effects.data(), GL_STREAM_DRAW);
-    glActiveTexture(GL_TEXTURE3);
-    glBindTexture(GL_TEXTURE_BUFFER, self.m_EffectTexture);
-    glTexBuffer(GL_TEXTURE_BUFFER, GL_RGBA32F, self.m_EffectBuffer);
-    glBindBuffer(GL_ARRAY_BUFFER, self.m_InstanceBuffer);
-    glBufferData(GL_ARRAY_BUFFER, static_cast<GLsizeiptr>(self.m_Instances.size() * sizeof(Impl::Instance)),
-                 self.m_Instances.data(), GL_STREAM_DRAW);
-    glUseProgram(self.m_Program);
-    glUniform2f(self.m_ViewportLocation, self.m_Width, self.m_Height);
-    glActiveTexture(GL_TEXTURE0);
-    glBindTexture(GL_TEXTURE_BUFFER, self.m_CurveTexture);
-    glActiveTexture(GL_TEXTURE1);
-    glBindTexture(GL_TEXTURE_BUFFER, self.m_BandTexture);
-    glUniform1i(glGetUniformLocation(self.m_Program, "uImage"), 2);
-    if (self.m_Instances.size() > static_cast<std::size_t>(std::numeric_limits<GLsizei>::max()))
-        throw std::runtime_error("Frame exceeds the maximum GL instance count.");
-    std::size_t calls = 0;
-    const auto submit = [&](std::size_t begin, std::size_t end)
+    if (submitted)
     {
-        if (end <= begin)
-            return;
-        const auto offset = begin * sizeof(Impl::Instance);
-        for (unsigned i = 0; i < 6; ++i)
-            Impl::FloatAttribute(i, sizeof(Impl::Instance), offset + i * sizeof(Float4));
-        glEnableVertexAttribArray(6);
-        glVertexAttribIPointer(6, 4, GL_INT, sizeof(Impl::Instance),
-                               reinterpret_cast<const void*>(offset + offsetof(Impl::Instance, m_Data)));
-        glVertexAttribDivisor(6, 1);
-        glEnableVertexAttribArray(7);
-        glVertexAttribIPointer(7, 4, GL_INT, sizeof(Impl::Instance),
-                               reinterpret_cast<const void*>(offset + offsetof(Impl::Instance, m_Effects)));
-        glVertexAttribDivisor(7, 1);
-        glDrawArraysInstanced(GL_TRIANGLES, 0, 6, static_cast<GLsizei>(end - begin));
-        ++calls;
-    };
-    std::size_t begin = 0;
-    for (const auto& image : self.m_Images)
-    {
-        submit(begin, image.first);
-        glActiveTexture(GL_TEXTURE2);
-        glBindTexture(GL_TEXTURE_2D, image.second);
-        begin = image.first;
+        glBindBuffer(GL_TEXTURE_BUFFER, self.m_EffectBuffer);
+        glBufferData(GL_TEXTURE_BUFFER, static_cast<GLsizeiptr>(self.m_Effects.size() * sizeof(Float4)),
+                     self.m_Effects.data(), GL_STREAM_DRAW);
+        glActiveTexture(GL_TEXTURE3);
+        glBindTexture(GL_TEXTURE_BUFFER, self.m_EffectTexture);
+        glTexBuffer(GL_TEXTURE_BUFFER, GL_RGBA32F, self.m_EffectBuffer);
+        glBindBuffer(GL_ARRAY_BUFFER, self.m_InstanceBuffer);
+        glBufferData(GL_ARRAY_BUFFER, static_cast<GLsizeiptr>(self.m_Submitted.size() * sizeof(Impl::Instance)),
+                     self.m_Submitted.data(), GL_STREAM_DRAW);
+        glUseProgram(self.m_Program);
+        glUniform2f(self.m_ViewportLocation, self.m_Width, self.m_Height);
+        glActiveTexture(GL_TEXTURE0);
+        glBindTexture(GL_TEXTURE_BUFFER, self.m_CurveTexture);
+        glActiveTexture(GL_TEXTURE1);
+        glBindTexture(GL_TEXTURE_BUFFER, self.m_BandTexture);
     }
-    submit(begin, self.m_Instances.size());
-    self.m_Stats = {calls,
-                    self.m_ShapeCount,
-                    self.m_GlyphCount,
-                    self.m_GlyphCache.size(),
-                    self.m_Curves.size() * sizeof(Float4) + self.m_Bands.size() * sizeof(UInt2),
-                    self.m_Instances.size() * sizeof(Impl::Instance),
-                    self.m_Effects.size() * sizeof(Float4),
-                    self.m_GradientCount,
-                    self.m_ShadowCount};
+    glBindFramebuffer(GL_FRAMEBUFFER, self.m_RetainedFramebuffer);
+    glEnable(GL_SCISSOR_TEST);
+    glClearColor(self.m_Clear.m_R, self.m_Clear.m_G, self.m_Clear.m_B, self.m_Clear.m_A);
+    std::size_t batchIndex = 0, calls = 0;
+    for (const auto& damage : self.m_Damage)
+    {
+        glScissor(damage.m_X, self.m_FramebufferHeight - damage.m_Y - damage.m_Height, damage.m_Width, damage.m_Height);
+        glClear(GL_COLOR_BUFFER_BIT);
+        while (batchIndex < self.m_Batches.size() && self.m_Batches[batchIndex].m_Damage == damage)
+        {
+            const auto& batch = self.m_Batches[batchIndex++];
+            const auto offset = batch.m_Begin * sizeof(Impl::Instance);
+            for (unsigned i = 0; i < 6; ++i)
+                Impl::FloatAttribute(i, sizeof(Impl::Instance), offset + i * sizeof(Float4));
+            for (unsigned i = 6; i < 8; ++i)
+            {
+                glEnableVertexAttribArray(i);
+                const auto member = i == 6 ? offsetof(Impl::Instance, m_Data) : offsetof(Impl::Instance, m_Effects);
+                glVertexAttribIPointer(i, 4, GL_INT, sizeof(Impl::Instance),
+                                       reinterpret_cast<const void*>(offset + member));
+                glVertexAttribDivisor(i, 1);
+            }
+            if (batch.m_Texture)
+            {
+                glActiveTexture(GL_TEXTURE2);
+                glBindTexture(GL_TEXTURE_2D, batch.m_Texture);
+            }
+            glDrawArraysInstanced(GL_TRIANGLES, 0, 6, static_cast<GLsizei>(batch.m_End - batch.m_Begin));
+            ++calls;
+        }
+    }
+    glDisable(GL_SCISSOR_TEST);
+    glBindFramebuffer(GL_READ_FRAMEBUFFER, self.m_RetainedFramebuffer);
+    glBindFramebuffer(GL_DRAW_FRAMEBUFFER, 0);
+    // The native back buffer is not guaranteed to survive buffer swaps. Present
+    // the retained result with a cheap full copy, never relying on swap preservation.
+    glBlitFramebuffer(0, 0, self.m_FramebufferWidth, self.m_FramebufferHeight, 0, 0, self.m_FramebufferWidth,
+                      self.m_FramebufferHeight, GL_COLOR_BUFFER_BIT, GL_NEAREST);
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+    if (self.m_ActiveQuery >= 0)
+    {
+        glEndQuery(GL_TIME_ELAPSED);
+        self.m_QueryPending[static_cast<std::size_t>(self.m_ActiveQuery)] = true;
+        self.m_ActiveQuery = -1;
+    }
+    self.m_Stats = {};
+    auto& stats = self.m_Stats;
+    stats.m_DrawCalls = calls;
+    stats.m_Shapes = self.m_ShapeCount;
+    stats.m_Glyphs = self.m_GlyphCount;
+    stats.m_CachedGlyphs = self.m_GlyphCache.size();
+    stats.m_FontBytes = self.m_Curves.size() * sizeof(Float4) + self.m_Bands.size() * sizeof(UInt2);
+    stats.m_InstanceBytes = self.m_Submitted.size() * sizeof(Impl::Instance);
+    stats.m_EffectBytes = submitted ? self.m_Effects.size() * sizeof(Float4) : 0;
+    stats.m_Gradients = self.m_GradientCount;
+    stats.m_Shadows = self.m_ShadowCount;
+    stats.m_RepaintPixels = self.m_RepaintPixels;
+    stats.m_FramebufferPixels =
+        static_cast<std::size_t>(self.m_FramebufferWidth) * static_cast<std::size_t>(self.m_FramebufferHeight);
+    stats.m_SubmittedInstances = self.m_Submitted.size();
+    stats.m_ReplayedGlyphs = self.m_ReplayedGlyphs;
+    stats.m_DamageRectangles = self.m_Damage.size();
+    stats.m_GpuMilliseconds = self.m_GpuMilliseconds;
+    stats.m_TimingSamples = self.m_TimingSamples;
+    self.m_PreviousKeys.swap(self.m_PaintKeys);
+    self.m_PreviousInstances.swap(self.m_Instances);
+    self.m_PreviousEffects.swap(self.m_Effects);
+    self.m_PreviousBounds.swap(self.m_Bounds);
+    self.m_PreviousTextures.swap(self.m_TextureStates);
+    self.m_PreviousWidth = self.m_Width;
+    self.m_PreviousHeight = self.m_Height;
+    self.m_PreviousClear = self.m_Clear;
+    self.m_HistoryValid = true;
     const auto error = glGetError();
     if (error != GL_NO_ERROR)
+    {
+        self.m_HistoryValid = false;
         throw std::runtime_error("OpenGL error after rendering: " + std::to_string(error));
+    }
 }
 
 Color Renderer::ReadPixel(Point point) const

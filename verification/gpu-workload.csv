@@ -1,0 +1,7 @@
+case,redraw,median_completed_frame_ms,median_gpu_query_ms,mean_repaint_fraction,mean_glyph_instances,mean_draw_calls
+idle-inputs,full,11.355,10.97,1,806,1
+idle-inputs,retained,1.23679,0.939855,0,0,0
+table-selection,full,9.31818,8.76018,1,802,1
+table-selection,retained,3.18034,2.75843,0.0825465,80.5,2.125
+rich-css,full,8.16565,7.80774,1,909,1
+rich-css,retained,2.62914,2.32541,0.123952,133.094,3

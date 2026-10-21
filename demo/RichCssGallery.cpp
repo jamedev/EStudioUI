@@ -154,7 +154,8 @@ void Benchmark(const std::filesystem::path& assets, const std::filesystem::path&
         }
         std::sort(times.begin(), times.end());
         const auto& stats = window.Graphics().GetStats();
-        Check(stats.m_DrawCalls == 1, "rich effects stay in one ordered draw submission");
+        Check(rich ? stats.m_DrawCalls == 1 : stats.m_DrawCalls == 0,
+              "unchanged frames reuse pixels and dense animation stays batched");
         Check(ui.GetStats().m_StyleResolutions == counters.m_StyleResolutions &&
                   ui.GetStats().m_LayoutPasses == counters.m_LayoutPasses,
               "paint-only rich animation does not resolve CSS or arrange layout");
@@ -251,7 +252,8 @@ void RichCssGallery::Verify(const std::filesystem::path& assets, const std::file
         probe.Ui().PointerDown(point);
         probe.Ui().PointerUp(point);
         Check(gallery.m_Clicks == 1, "gallery buttons emit working activation signals");
-        Check(probe.Graphics().GetStats().m_DrawCalls == 1, "rich gallery stays batched");
+        Check(probe.Graphics().GetStats().m_RepaintPixels < probe.Graphics().GetStats().m_FramebufferPixels / 2,
+              "rich gallery animation repaints a bounded region");
     }
     PixelProbes(assets, output, options.m_Headless);
     Benchmark(assets, output, options.m_Headless);

@@ -1,3 +1,4 @@
+#include "GpuWorkload.h"
 #include "WidgetGallery.h"
 
 #include <EStudioUI/Button.h>
@@ -45,6 +46,7 @@ void Benchmark(Window& window, const fs::path& output)
     window.SetSize(1600, 900);
     window.RenderFrame();
     auto& gpu = window.Graphics();
+    gpu.SetPartialRedrawEnabled(false);
     const auto label = window.Ui().GetFont().Shape("Button", 11);
     const Rect clip{0, 0, 1600, 900};
     Style style;
@@ -233,6 +235,11 @@ class Demo
         m_Window.Ui().Root().ClearChildren();
     }
 
+    void Profile(const fs::path& output)
+    {
+        ProfileUiWorkload(m_Window, *m_Tabs, m_Assets, output);
+    }
+
     bool LoadCss(const fs::path& path)
     {
         std::string error;
@@ -349,6 +356,7 @@ class Demo
         gpu.SavePpm(output / "resized.ppm");
         VerifyPrimitives(output);
         m_Gallery->Verify(m_Assets, output);
+        VerifyGpuWorkload(m_Window, m_Assets, output);
         std::ofstream report(output / "gpu-report.txt");
         report << "EStudioUI GPU integration: PASS\nDriver: " << gpu.GetDriverDescription()
                << "\nInitial demo: " << stats.m_DrawCalls << " draw call, " << stats.m_Shapes << " shapes, "
@@ -448,6 +456,7 @@ int main(int argc, char** argv)
         WindowOptions options;
         bool selfTest = false;
         bool benchmark = false;
+        bool profile = false;
         for (int i = 1; i < argc; ++i)
         {
             const std::string argument = argv[i];
@@ -461,6 +470,8 @@ int main(int argc, char** argv)
                 options.m_Headless = true;
             else if (argument == "--self-test")
                 selfTest = true;
+            else if (argument == "--profile-ui")
+                profile = true;
             else if (argument == "--benchmark")
                 benchmark = true;
             else if (argument == "--font")
@@ -471,7 +482,8 @@ int main(int argc, char** argv)
                 output = value();
             else if (argument == "--help")
             {
-                std::cout << "EStudioUIDemo [--css FILE] [--font FILE] [--self-test] [--benchmark] [--headless] "
+                std::cout << "EStudioUIDemo [--css FILE] [--font FILE] [--self-test] [--benchmark] [--profile-ui] "
+                             "[--headless] "
                              "[--output DIR]\n"
                           << "F5 reloads CSS; F6 switches themes. Headless mode requires OSMesa (Linux).\n";
                 return 0;
@@ -484,8 +496,13 @@ int main(int argc, char** argv)
         if (selfTest)
         {
             demo.Verify(output);
-            if (!benchmark)
+            if (!benchmark && !profile)
                 return 0;
+        }
+        if (profile)
+        {
+            demo.Profile(output);
+            return 0;
         }
         if (benchmark)
         {
@@ -493,7 +510,7 @@ int main(int argc, char** argv)
             return 0;
         }
         if (options.m_Headless)
-            throw std::runtime_error("Use --self-test or --benchmark with --headless.");
+            throw std::runtime_error("Use --self-test, --benchmark, or --profile-ui with --headless.");
         return window.Run();
     }
     catch (const std::exception& error)

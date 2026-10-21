@@ -19,9 +19,16 @@ exact subset and [ANIMATIONS.md](ANIMATIONS.md) for the C++ animation API.
 ![Rich CSS buttons rendered by EStudioUI](verification/rich-buttons-rest.png)
 
 Performance checks assert zero style/layout work during 240 paint-only ticks for
-500 widgets, and one ordered draw for 160 rich animated buttons plus text.
+500 widgets. Dense animation remains batched; unchanged frames reuse pixels.
 The framebuffer test writes measured baseline/rich frame times and upload counts
 to `rich-css-performance.txt`; software GL results do not establish hardware FPS.
+
+Version **0.5.1** retains the rendered window and redraws damaged regions, avoiding
+repeated analytic text/effect shading across the whole window. Hidden CSS no
+longer requests frames when interacting with another tab. Presentation is capped
+at 60 Hz independently of input frequency/vsync, and pauses while minimized or
+unfocused. Rich effects and animation timing are preserved. See
+[PERFORMANCE.md](PERFORMANCE.md) for the profiler, counters, and measured results.
 
 ## One-command Windows build
 
@@ -215,10 +222,10 @@ A single ordered instance stream combines rounded boxes, borders, shadows,
 selection, carets, and glyphs. The Slug-derived fragment shader evaluates quadratic
 font outlines directly, without a bitmap/SDF atlas. Shaping and glyph outlines are
 cached, and the event loop sleeps between changes/caret deadlines unless a
-visible surface or a property timeline requests animation. UI shapes/glyphs use one ordered draw when
-no scene textures are present. Embedded textures split batches where needed to
-preserve painter order; scene rendering has its own submissions. The 640-box /
-3,840-glyph stress scene still uses one draw call.
+visible surface or a property timeline requests animation. Damaged rectangles
+use ordered draws; unchanged regions retain their pixels. Embedded textures split
+batches where needed to preserve painter order; scene rendering has its own
+submissions. The fully redrawn 640-box / 3,840-glyph stress scene uses one draw call.
 
 This is a prototype: text editing is single-line and left-to-right, with one font
 and no font fallback, IME pre-edit integration, full bidi, or color emoji. Layout
@@ -250,6 +257,7 @@ embedding. The first backend uses OpenGL 3.3 core; macOS is not verified.
 ```bash
 ./build/linux-release/EStudioUIDemo --headless --self-test --output verification-local
 ./build/linux-release/EStudioUIDemo --headless --benchmark --output benchmark-local
+./build/linux-release/EStudioUIDemo --headless --profile-ui --output benchmark-local/ui
 ```
 
 On Windows, use the corresponding EXE path and omit `--headless`. Benchmark

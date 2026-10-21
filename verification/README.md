@@ -1,5 +1,9 @@
 # Local verification / EStudioUI 0.4.0
 
+For subsequent work, see [RICH_CSS.md](RICH_CSS.md) (0.5.0) and
+[GPU_WORKLOAD.md](GPU_WORKLOAD.md) (0.5.1 retained rendering, hidden animations,
+frame pacing, and actual gallery profiling). The records below describe 0.4.0.
+
 These records and PNGs come from the actual C++ project and renderer. Runtime
 packages were GLFW 3.4#1, FreeType 2.13.3, HarfBuzz 10.2.0#3, and utf8proc 2.10.0,
 without default features. Build-only vcpkg helper/Meson ports were also installed.

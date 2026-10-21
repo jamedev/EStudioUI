@@ -203,6 +203,11 @@ AnimationId UiContext::BeginStyleTransition(std::optional<StyleSheet> initial, S
 
 void UiContext::Restyle(Widget& widget, const Style* parent)
 {
+    if (!widget.m_Visible)
+    {
+        widget.m_Style.m_Displayed = false;
+        return;
+    }
     if (widget.IsEnabled())
         widget.m_Node.m_State &= ~Disabled;
     else
@@ -445,7 +450,8 @@ void UiContext::PaintTree(Widget& widget, Renderer& renderer, double time, float
         return;
     renderer.PushState(widget.m_Style.m_Transform.Resolve(widget.m_Bounds));
     renderer.SetWidgetPaint(widget.m_Bounds, widget.m_Clip, m_CssMotion->Decoration(widget, 1),
-                            widget.m_Style.m_ClipContent, widget.m_Style.m_Radius);
+                            widget.m_Style.m_ClipContent, widget.m_Style.m_Radius,
+                            reinterpret_cast<std::uintptr_t>(&widget));
     widget.Paint(renderer, m_Font, time, opacity);
     renderer.PushState();
     if (widget.m_Style.m_ClipContent)
@@ -460,7 +466,7 @@ void UiContext::PaintTree(Widget& widget, Renderer& renderer, double time, float
         renderer.PushState();
         if (widget.m_Style.m_ClipContent)
             renderer.PushClip(widget.m_Bounds, widget.m_Style.m_Radius);
-        renderer.DrawDecoration(widget.m_Bounds, *after, widget.m_Clip, opacity);
+        renderer.DrawDecoration(widget.m_Bounds, *after, widget.m_Clip, opacity, 2);
         renderer.PopState();
     }
     renderer.PopState();
