@@ -11,6 +11,7 @@
 #include <filesystem>
 #include <fstream>
 #include <iostream>
+#include <iterator>
 #include <stdexcept>
 #include <string>
 
@@ -110,7 +111,7 @@ class Demo
         brand.SetId("brand");
         auto& title = brand.Add<Label>("EStudioUI / widget lab");
         title.SetId("title");
-        auto& subtitle = brand.Add<Label>("GPU controls. Explicit layouts. Independent 3D contexts.");
+        auto& subtitle = brand.Add<Label>("GPU controls. Property animation. Independent 3D contexts.");
         subtitle.AddClass("subtitle");
         auto& themes = header.Add<Widget>();
         themes.SetId("themes");
@@ -174,7 +175,7 @@ class Demo
                                        "  F5: reload CSS    F6: theme");
         footer.SetId("footer");
 
-        m_Gallery = std::make_unique<WidgetGallery>(window, *m_Tabs);
+        m_Gallery = std::make_unique<WidgetGallery>(window, *m_Tabs, m_Assets);
 
         m_Increment->Clicked().Connect(
             [this]
@@ -235,7 +236,16 @@ class Demo
     bool LoadCss(const fs::path& path)
     {
         std::string error;
-        if (!m_Window.Ui().LoadStyleSheet(path, error))
+        std::ifstream theme(path, std::ios::binary);
+        std::ifstream animation(m_Assets / "animation-start.css", std::ios::binary);
+        bool loaded = false;
+        if (theme && animation)
+            loaded = m_Window.Ui().SetStyleSheet(std::string(std::istreambuf_iterator<char>(theme), {}) + "\n" +
+                                                     std::string(std::istreambuf_iterator<char>(animation), {}),
+                                                 error);
+        else
+            error = "Cannot read theme or animation-start.css.";
+        if (!loaded)
         {
             m_Message->AddClass("error");
             m_Message->SetText("CSS reload failed; previous theme retained.\n" + error);

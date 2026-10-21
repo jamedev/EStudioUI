@@ -7,7 +7,7 @@
 
 namespace EStudioUI
 {
-UiContext::UiContext(FontFace& font) : m_Font(font)
+UiContext::UiContext(FontFace& font) : m_Font(font), m_Animations(*this)
 {
     m_Root.Attach(this, nullptr);
 }
@@ -45,12 +45,12 @@ FontFace& UiContext::GetFont() const
 
 void UiContext::SetTime(double time)
 {
-    m_Time = time;
+    m_Animations.Update(time);
 }
 
 double UiContext::GetTime() const
 {
-    return m_Time;
+    return m_Animations.GetTime();
 }
 
 WidgetRef UiContext::Observe(Widget* widget) const
@@ -67,6 +67,7 @@ bool UiContext::SetStyleSheet(std::string_view css, std::string& error)
 {
     if (!m_StyleSheet.Parse(css, error))
         return false;
+    m_Animations.Stop(m_StyleTransition, AnimationStopMode::ReleaseStyle);
     Invalidate();
     return true;
 }
@@ -75,8 +76,119 @@ bool UiContext::LoadStyleSheet(const std::filesystem::path& path, std::string& e
 {
     if (!m_StyleSheet.LoadFile(path, error))
         return false;
+    m_Animations.Stop(m_StyleTransition, AnimationStopMode::ReleaseStyle);
     Invalidate();
     return true;
+}
+
+AnimationSystem& UiContext::Animations()
+{
+    return m_Animations;
+}
+
+AnimationId UiContext::AnimateStyleSheet(std::string_view finalCss, const AnimationOptions& options, std::string& error)
+{
+    options.Validate();
+    StyleSheet final;
+    if (!final.Parse(finalCss, error))
+        return 0;
+    return BeginStyleTransition(std::nullopt, std::move(final), options);
+}
+
+AnimationId UiContext::AnimateStyleSheet(std::string_view initialCss, std::string_view finalCss,
+                                         const AnimationOptions& options, std::string& error)
+{
+    options.Validate();
+    StyleSheet initial;
+    StyleSheet final;
+    if (!initial.Parse(initialCss, error) || !final.Parse(finalCss, error))
+        return 0;
+    return BeginStyleTransition(std::move(initial), std::move(final), options);
+}
+
+//! Endpoint sheets are resolved once, including inheritance and intrinsic sizing.
+//! Only changed properties become tracks. Normal CSS remains active underneath,
+//! and explicit layout contracts are reapplied after presentation overrides.
+AnimationId UiContext::BeginStyleTransition(std::optional<StyleSheet> initial, StyleSheet final,
+                                            const AnimationOptions& options)
+{
+    const auto generation = ++m_StyleTransitionGeneration;
+    if (initial)
+    {
+        m_Animations.Stop(m_StyleTransition, AnimationStopMode::ReleaseStyle);
+        m_StyleSheet = std::move(*initial);
+        Invalidate();
+    }
+    Prepare(m_Width, m_Height);
+
+    struct Snapshot
+    {
+        WidgetRef m_Widget;
+        Style m_Style;
+        Rect m_Bounds;
+    };
+
+    std::vector<Snapshot> snapshots;
+    const auto capture = [&](auto&& self, Widget& widget) -> void
+    {
+        snapshots.push_back({WidgetRef(&widget), widget.m_Style, widget.m_Bounds});
+        for (const auto& child : widget.m_Children)
+            self(self, *child);
+    };
+    capture(capture, m_Root);
+    const auto initialSheet = m_StyleSheet;
+    m_Animations.Stop(m_StyleTransition, AnimationStopMode::ReleaseStyle);
+    m_StyleSheet = std::move(final);
+    Invalidate();
+    Restyle(m_Root, nullptr);
+    Arrange();
+    Animation animation(options);
+    // A sentinel also gives no-change transitions a valid timeline identity.
+    animation.AddCustom(m_Root, "stylesheet", [](Widget&, double) {});
+    for (const auto& snapshot : snapshots)
+    {
+        auto* widget = snapshot.m_Widget.Get();
+        if (!widget || widget->GetContext() != this)
+            continue;
+        auto from = snapshot.m_Style;
+        auto to = widget->m_Style;
+        bool fixedMainAxis = false;
+        for (auto property : {StyleProperty::Width, StyleProperty::Height})
+        {
+            auto& first = property == StyleProperty::Width ? from.m_Width : from.m_Height;
+            auto& last = property == StyleProperty::Width ? to.m_Width : to.m_Height;
+            if (first.m_Unit == last.m_Unit)
+                continue;
+            first = {Length::Unit::Pixels,
+                     property == StyleProperty::Width ? snapshot.m_Bounds.m_Width : snapshot.m_Bounds.m_Height};
+            last = {Length::Unit::Pixels,
+                    property == StyleProperty::Width ? widget->m_Bounds.m_Width : widget->m_Bounds.m_Height};
+            if (widget->m_Parent && widget->m_Parent->m_Style.m_Row == (property == StyleProperty::Width))
+                fixedMainAxis = true;
+        }
+        if (fixedMainAxis)
+            from.m_FlexGrow = to.m_FlexGrow = 0;
+        for (int i = 0; i < static_cast<int>(StyleProperty::Count); ++i)
+        {
+            const auto property = static_cast<StyleProperty>(i);
+            auto first = GetStyleValue(from, property);
+            auto last = GetStyleValue(to, property);
+            if (first != last || (fixedMainAxis && property == StyleProperty::FlexGrow))
+                animation.AddStyleProperty(*widget, property, std::move(first), std::move(last), true);
+        }
+    }
+    if (options.m_Alternate && options.m_Iterations && options.m_Iterations % 2 == 0)
+        animation.m_OnFinish = [this, initialSheet]
+        {
+            m_StyleSheet = initialSheet;
+            Invalidate();
+        };
+    const auto id = m_Animations.Play(std::move(animation));
+    if (generation == m_StyleTransitionGeneration)
+        m_StyleTransition = id;
+    Invalidate();
+    Prepare(m_Width, m_Height);
+    return id;
 }
 
 void UiContext::Restyle(Widget& widget, const Style* parent)
@@ -86,7 +198,11 @@ void UiContext::Restyle(Widget& widget, const Style* parent)
     else
         widget.m_Node.m_State |= Disabled;
     widget.m_Style = m_StyleSheet.Compute(widget.m_Node, parent);
+    for (const auto& [property, value] : widget.m_StyleOverrides)
+        SetStyleValue(widget.m_Style, property, value);
     widget.m_Style.m_Displayed = widget.m_Style.m_Displayed && widget.m_Visible;
+    widget.m_Style.m_MaxWidth = std::max(widget.m_Style.m_MaxWidth, widget.m_Style.m_MinWidth);
+    widget.m_Style.m_MaxHeight = std::max(widget.m_Style.m_MaxHeight, widget.m_Style.m_MinHeight);
     const auto applySize = [](const std::optional<SizeRule>& rule, Length& length, float& minimum, float& maximum)
     {
         if (!rule)
@@ -154,6 +270,8 @@ Point UiContext::Measure(Widget& widget, float parentWidth, float parentHeight)
 
 void UiContext::Layout(Widget& widget, Rect bounds, Rect clip)
 {
+    bounds.m_X += widget.m_Style.m_TranslateX;
+    bounds.m_Y += widget.m_Style.m_TranslateY;
     widget.m_Bounds = bounds;
     widget.m_Clip = clip;
     widget.OnLayout();
@@ -276,21 +394,32 @@ void UiContext::Prepare(float width, float height)
     }
     if (statesChanged)
         Restyle(m_Root, nullptr);
+    Arrange();
+    m_Dirty = false;
+    if (RefreshHover())
+    {
+        Restyle(m_Root, nullptr);
+        Arrange();
+        m_Dirty = false;
+    }
+}
+
+void UiContext::Arrange()
+{
     m_Measurements.clear();
     m_OverflowingContainers.clear();
-    Measure(m_Root, width, height);
-    Layout(m_Root, {0, 0, width, height}, {0, 0, width, height});
+    Measure(m_Root, m_Width, m_Height);
+    Layout(m_Root, {0, 0, m_Width, m_Height}, {0, 0, m_Width, m_Height});
     if (auto* popup = m_Popup.Get(); popup && popup->IsVisible())
     {
         const auto measured = m_Measurements[popup];
-        const float popupWidth = std::min(width, measured.m_X);
-        const float popupHeight = std::min(height, measured.m_Y);
+        const float popupWidth = std::min(m_Width, measured.m_X);
+        const float popupHeight = std::min(m_Height, measured.m_Y);
         Layout(*popup,
-               {std::clamp(m_PopupAnchor.m_X, 0.0f, width - popupWidth),
-                std::clamp(m_PopupAnchor.m_Y, 0.0f, height - popupHeight), popupWidth, popupHeight},
-               {0, 0, width, height});
+               {std::clamp(m_PopupAnchor.m_X, 0.0f, m_Width - popupWidth),
+                std::clamp(m_PopupAnchor.m_Y, 0.0f, m_Height - popupHeight), popupWidth, popupHeight},
+               {0, 0, m_Width, m_Height});
     }
-    m_Dirty = false;
 }
 
 void UiContext::PaintTree(Widget& widget, Renderer& renderer, double time, float opacity)
@@ -306,7 +435,6 @@ void UiContext::PaintTree(Widget& widget, Renderer& renderer, double time, float
 
 void UiContext::Paint(Renderer& renderer, double time)
 {
-    m_Time = time;
     PaintTree(m_Root, renderer, time, 1);
     if (auto* popup = m_Popup.Get())
         PaintTree(*popup, renderer, time, 1);
@@ -324,13 +452,18 @@ Widget* UiContext::HitTest(Widget& widget, Point position) const
     return &widget;
 }
 
-void UiContext::PointerMove(Point position, Modifiers modifiers)
+bool UiContext::RefreshHover()
 {
-    Prepare(m_Width, m_Height);
-    auto* target = HitTest(m_Popup.Get() ? *m_Popup.Get() : m_Root, position);
+    if (!m_PointerPosition)
+        return false;
+    auto* target = HitTest(m_Popup.Get() ? *m_Popup.Get() : m_Root, *m_PointerPosition);
     std::vector<Widget*> path;
     for (auto* node = target; node; node = node->m_Parent)
         path.push_back(node);
+    if (path.size() == m_HoverPath.size() &&
+        std::equal(path.begin(), path.end(), m_HoverPath.begin(),
+                   [](Widget* widget, const WidgetRef& previous) { return widget == previous.Get(); }))
+        return false;
     for (const auto& reference : m_HoverPath)
         if (auto* previous = reference.Get(); previous && std::find(path.begin(), path.end(), previous) == path.end())
             previous->SetState(Hover, false);
@@ -340,6 +473,15 @@ void UiContext::PointerMove(Point position, Modifiers modifiers)
         node->SetState(Hover, true);
         m_HoverPath.emplace_back(node);
     }
+    return true;
+}
+
+void UiContext::PointerMove(Point position, Modifiers modifiers)
+{
+    m_PointerPosition = position;
+    Prepare(m_Width, m_Height);
+    RefreshHover();
+    auto* target = HitTest(m_Popup.Get() ? *m_Popup.Get() : m_Root, position);
     if (auto* capture = m_Capture.Get())
         capture->OnPointerMove({position, modifiers, 1});
     else if (target && target->IsEnabled())
@@ -478,6 +620,7 @@ void UiContext::Deactivate()
         if (auto* widget = reference.Get())
             widget->SetState(Hover, false);
     m_HoverPath.clear();
+    m_PointerPosition.reset();
 }
 
 void UiContext::SetClipboard(std::function<std::string()> get, std::function<void(std::string_view)> set)
@@ -590,6 +733,8 @@ void UiContext::PrepareSurfaces(double time, float scaleX, float scaleY)
 
 bool UiContext::HasAnimations() const
 {
+    if (m_Animations.HasRunning())
+        return true;
     const auto visit = [&](auto&& self, const Widget& widget) -> bool
     {
         if (!widget.IsVisible() || widget.GetBounds().Intersect(widget.GetClip()).m_Width <= 0 ||

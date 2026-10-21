@@ -122,6 +122,11 @@ selected alternatives, including FreeType's FTL.
 - Explicit `Fixed`, `Content`, and weighted `Fill` contracts control sizing. The
   allocator redistributes space after a child reaches its maximum and reports
   overflow when hard limits cannot fit. See [LAYOUTS.md](LAYOUTS.md).
+- `AnimationSystem` drives synchronized properties across widgets, with 22 easing
+  presets, custom cubic Bezier curves, pause/seek/resume, delay, and repetition.
+  `UiContext::AnimateStyleSheet` interpolates complete CSS endpoints automatically.
+  Geometry, colors, shadows, typography, and custom setter tracks share one
+  timeline. No new runtime dependency is required. See [ANIMATIONS.md](ANIMATIONS.md).
 - Tab / Shift+Tab move focus. Ctrl+A/C/X/V/Z/Y and Ctrl+Shift+Z edit text.
 - Dark / Light load external CSS. F5 reloads the current file; F6 switches themes.
   Invalid CSS retains the last valid stylesheet and displays a recoverable error.
@@ -177,6 +182,10 @@ The demo opens on Data & actions with 10,000 table rows and 2,006 list items.
 Only viewport rows are painted. Inputs preserves the original editor/button
 examples; 3D surfaces has two independent orbit/zoom scenes; Layout lab exposes
 fixed and bounded Fill behavior at different native window sizes.
+Animations offers editable CSS endpoints, a typed property group, duration/easing
+controls, pause/resume, and repeat/alternate playback.
+
+![CSS animation midpoint from the C++ renderer](verification/animation-css-middle.png)
 
 ![Two independent 3D contexts](verification/opengl-scenes.png)
 
@@ -190,7 +199,7 @@ A single ordered instance stream combines rounded boxes, borders, shadows,
 selection, carets, and glyphs. The Slug-derived fragment shader evaluates quadratic
 font outlines directly, without a bitmap/SDF atlas. Shaping and glyph outlines are
 cached, and the event loop sleeps between changes/caret deadlines unless a
-visible surface requests animation. UI shapes/glyphs use one ordered draw when
+visible surface or a property timeline requests animation. UI shapes/glyphs use one ordered draw when
 no scene textures are present. Embedded textures split batches where needed to
 preserve painter order; scene rendering has its own submissions. The 640-box /
 3,840-glyph stress scene still uses one draw call.

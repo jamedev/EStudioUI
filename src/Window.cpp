@@ -369,8 +369,14 @@ Signal<Key>& Window::KeyPressed()
 
 void Window::RenderFrame()
 {
+    RenderFrame(glfwGetTime());
+}
+
+void Window::RenderFrame(double time)
+{
     auto& self = *m_Impl;
     glfwMakeContextCurrent(self.m_Window);
+    self.m_Ui->SetTime(time);
     int width = 0;
     int height = 0;
     int framebufferWidth = 0;
@@ -380,7 +386,7 @@ void Window::RenderFrame()
     if (width <= 0 || height <= 0 || framebufferWidth <= 0 || framebufferHeight <= 0)
         return;
     self.m_Ui->Prepare(static_cast<float>(width), static_cast<float>(height));
-    const double now = glfwGetTime();
+    const double now = time;
     self.m_Ui->PrepareSurfaces(now, static_cast<float>(framebufferWidth) / static_cast<float>(width),
                                static_cast<float>(framebufferHeight) / static_cast<float>(height));
     self.m_Renderer->BeginFrame(static_cast<float>(width), static_cast<float>(height), framebufferWidth,
@@ -396,7 +402,6 @@ int Window::Run()
     while (!glfwWindowShouldClose(self.m_Window))
     {
         const double animationDeadline = glfwGetTime() + 1.0 / 60.0;
-        self.m_Ui->SetTime(glfwGetTime());
         if (self.m_Ui->NeedsRepaint() || self.m_Ui->HasAnimations())
         {
             RenderFrame();

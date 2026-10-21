@@ -9,6 +9,8 @@ without exposing third-party types in its public widget headers.
 | `UiContext` | Widget tree, CSS resolution, row/column layout, clipping, focus, capture |
 | `Widget`, `Label`, `Button`, `TextBox` | Owned model, cached shaping, behavior, emitted signals |
 | `SizeRule`, `Layout` | Fixed/content/fill contracts, bounded weighted distribution, overflow |
+| `Animation`, `AnimationSystem`, `EasingCurve` | Synchronized typed tracks, elapsed-time scheduling, easing, cancellation and lifetime safety |
+| `StyleProperty` | Typed computed-style access, valid-range clamping, paint-only invalidation classification |
 | `TabWidget`, `ToolBar`, `ToolButton`, `ContextMenu` | Owned pages, commands/toggles, popup layer |
 | `ScrollWidget`, `ListWidget`, `TreeWidget`, `TableWidget` | Cached viewport text, virtualized rows, selection/editing |
 | `OpenGLWidget` | Separate shared scene context, depth FBO, synchronized texture composition |
@@ -27,6 +29,17 @@ ancestor clips. Painting traverses parents before children in insertion order.
 The event loop waits for GLFW events when nothing changes. A focused editable
 text box wakes at its next half-second caret deadline. Visible continuous scene surfaces request paced animation ticks; idle/hidden
 scenes do not. Draw/swap time is counted in the animation deadline. Rendering is currently whole-window for each dirty frame.
+
+Property timelines share the context's nondecreasing clock and advance before
+layout, external scene preparation, and painting. Running timelines request
+paced frames; paused timelines do not. Each track weakly observes its widget,
+and newer writers replace matching target/channel pairs. Dispatch keeps timeline
+entries stable while callbacks start/cancel animations or delete widgets.
+Stylesheet transitions snapshot computed endpoints and resolve incompatible
+dimension units to measured pixels. Presentation overrides apply before explicit
+code layout contracts. Paint-only overrides update cached presentation without
+repeating style resolution or measurement; inherited/geometry changes use the
+existing invalidation path. See [ANIMATIONS.md](ANIMATIONS.md).
 
 Each label/editor caches shaping until text or CSS font size changes. FreeType
 loads unhinted outlines only once per glyph ID. Curves use em-space coordinates;
@@ -137,6 +150,12 @@ command menus, and callback-driven deletion. GPU checks cover shared context
 colors, state isolation, depth, resize/DPI, static caching, and cleanup.
 The headless clipboard is an in-memory adapter; native OS clipboard and window
 interaction still need validation on each target platform.
+
+Animation tests exercise elapsed timing, curves, repeating/alternate playback,
+pause/seek/resume, replacement, deleted targets, callback mutation/failures,
+stylesheet retargeting, mixed units, focus/hover/hit testing, and paint-only
+cache reuse. GPU probes compare animated color/opacity and geometry with actual
+framebuffer pixels. Captures come from paused timelines sampled with Seek.
 
 A practical next sequence is Windows hardware validation, grid/wrapping/splitters,
 IME/bidirectional text and accessibility, then incremental style/layout and GPU

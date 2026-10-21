@@ -1,4 +1,4 @@
-# CSS supported by EStudioUI 0.3
+# CSS supported by EStudioUI 0.4
 
 Style is external UTF-8 text, with optional BOM and `/* comments */`. Parsing is
 atomic: an unknown property, unsupported value, or malformed rule rejects the
@@ -46,6 +46,7 @@ sizes include padding and borders: the model is **border-box**.
 | `font-size` | Pixel size clamped to 0..512; zero hides text |
 | `text-align` | `left`, `center`, `right` |
 | `opacity` | Nonnegative number, clamped to 0..1 |
+| `translate-x`, `translate-y` | Signed logical-pixel offsets after layout; descendants in flow and input geometry follow |
 | `padding`, `margin` | One to four nonnegative pixel lengths in CSS edge order |
 | `padding-top/right/bottom/left` | One nonnegative pixel length |
 | `width`, `height` | `auto`, `content`, nonnegative pixels, percentage, positive `fr` |
@@ -109,10 +110,20 @@ Code-level size/direction/gap contracts take precedence over CSS for the explici
 set values; other computed properties still follow the cascade. Popup placement
 and table editor bounds are controlled by their owners, outside normal flow.
 
+## Animation
+
+`UiContext::AnimateStyleSheet` interpolates existing widgets between complete
+stylesheets with duration, delay, easing, and optional repeating/alternate
+playback. It parses endpoints once and animates changed computed values, including
+colors, dimensions, insets, shadows, typography, and translation. Non-numeric
+values switch discretely at iteration endpoints. Layout contracts remain in
+force. See [ANIMATIONS.md](ANIMATIONS.md) for the C++ API, typed property groups,
+interruption, mixed-unit endpoint measurement, and performance boundaries.
+
 ## Explicit omissions
 
 No `@` rules, variables, `calc`, sibling/attribute selectors, pseudo-elements,
-`:not`, font family/weight/style, transitions, gradients, image backgrounds,
+`:not`, font family/weight/style, CSS `transition` / `@keyframes` declarations, gradients, image backgrounds,
 percentage padding, CSS grid, negative margins, browser box formatting, or Qt
 `qproperty-*`/subcontrol syntax. Use the font passed to `Window` for this first
 version. Text alignment affects labels/buttons; the editable line scrolls

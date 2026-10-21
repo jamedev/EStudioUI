@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.24)
-project(EStudioUI VERSION 0.3.0 LANGUAGES C CXX)
+project(EStudioUI VERSION 0.4.0 LANGUAGES C CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -35,6 +35,7 @@ add_library(EStudioUI STATIC
     src/Widget.cpp src/UiContext.cpp src/Label.cpp src/Button.cpp src/TextBox.cpp src/Window.cpp
     src/SizeRule.cpp src/Layout.cpp src/ToolButton.cpp src/ToolBar.cpp src/TabWidget.cpp
     src/ContextMenu.cpp src/ScrollWidget.cpp src/ListWidget.cpp src/TreeWidget.cpp src/TableWidget.cpp src/OpenGLWidget.cpp
+    src/EasingCurve.cpp src/StyleProperty.cpp src/Animation.cpp src/AnimationSystem.cpp
 )
 add_library(EStudioUI::EStudioUI ALIAS EStudioUI)
 target_compile_features(EStudioUI PUBLIC cxx_std_20)
@@ -52,7 +53,7 @@ if(ESTUDIOUI_ENABLE_SANITIZERS AND CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
 endif()
 
 if(ESTUDIOUI_BUILD_DEMO)
-    add_executable(EStudioUIDemo demo/main.cpp demo/WidgetGallery.cpp demo/DemoScene.cpp)
+    add_executable(EStudioUIDemo demo/main.cpp demo/WidgetGallery.cpp demo/DemoScene.cpp demo/AnimationGallery.cpp)
     target_link_libraries(EStudioUIDemo PRIVATE EStudioUI::EStudioUI EStudioUIGl glfw)
     if(MSVC)
         target_compile_options(EStudioUIDemo PRIVATE /utf-8)
@@ -102,6 +103,15 @@ if(ESTUDIOUI_BUILD_TESTS)
         target_compile_options(EStudioUIWidgetTests PRIVATE /utf-8)
     endif()
     add_test(NAME WidgetsAndLayout COMMAND EStudioUIWidgetTests)
+
+    add_executable(EStudioUIAnimationTests tests/AnimationTests.cpp)
+    target_link_libraries(EStudioUIAnimationTests PRIVATE EStudioUI::EStudioUI)
+    target_compile_definitions(EStudioUIAnimationTests PRIVATE
+        ESTUDIOUI_FONT_PATH="${CMAKE_CURRENT_SOURCE_DIR}/third_party/fonts/NotoSans.ttf")
+    if(MSVC)
+        target_compile_options(EStudioUIAnimationTests PRIVATE /utf-8)
+    endif()
+    add_test(NAME Animation COMMAND EStudioUIAnimationTests)
 
     if(ESTUDIOUI_GPU_TESTS AND TARGET EStudioUIDemo AND UNIX AND NOT APPLE)
         add_test(NAME GpuIntegration COMMAND EStudioUIDemo --headless --self-test --output "${CMAKE_CURRENT_BINARY_DIR}/verification")

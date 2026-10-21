@@ -34,3 +34,10 @@
   producer AND consumer synchronization around shared textures, resize, and cleanup.
   Restore the containing context after callback errors. Keep scene lifecycle
   mutations outside scene-render callbacks; do not claim worker-thread rendering.
+- Property animations run on the GUI clock before layout and scene preparation.
+  Preserve weak targets, per-property replacement, callback-safe dispatch, and
+  exact endpoints. Keep CSS parsing out of animation ticks. Extend StyleProperty
+  metadata when adding computed properties, and classify paint-only changes carefully.
+- Verify animation changes with deterministic timeline/input tests and actual
+  framebuffer samples. Explicit layout contracts must retain precedence over CSS
+  animation overrides; absolute geometry remains an intentional out-of-flow API.

@@ -60,11 +60,13 @@ void ConnectScene(OpenGLWidget& widget, const std::shared_ptr<DemoScene>& scene)
 }
 } // namespace
 
-WidgetGallery::WidgetGallery(Window& window, TabWidget& tabs) : m_Window(window), m_Tabs(tabs)
+WidgetGallery::WidgetGallery(Window& window, TabWidget& tabs, const std::filesystem::path& assets)
+    : m_Window(window), m_Tabs(tabs)
 {
     BuildCollections(tabs.AddTab("Data & actions"));
     BuildScenes(tabs.AddTab("3D surfaces"));
     BuildLayouts(tabs.AddTab("Layout lab"));
+    m_Animations = std::make_unique<AnimationGallery>(window, tabs.AddTab("Animations"), assets);
 }
 
 void WidgetGallery::BuildCollections(Widget& page)
@@ -403,6 +405,8 @@ void WidgetGallery::Verify(const std::filesystem::path& assets, const std::files
         gpu.SavePpm(output / ("layout-" + std::to_string(width) + ".ppm"));
     }
     VerifyContexts(assets, output);
+    m_Tabs.SetCurrentIndex(4);
+    m_Animations->Verify(output);
     m_Window.RenderFrame();
     std::ofstream report(output / "widgets-report.txt");
     report << "EStudioUI 0.3 widget integration: PASS\n"

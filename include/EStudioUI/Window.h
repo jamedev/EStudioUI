@@ -55,6 +55,9 @@ class Window
     //! Renders one frame without swapping, useful for screenshots and tests.
     void RenderFrame();
 
+    //! Renders using a deterministic nondecreasing GUI clock, useful for animation captures.
+    void RenderFrame(double time);
+
     //! Requests a new frame and wakes the GLFW event loop.
     void RequestRepaint();
 

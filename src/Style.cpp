@@ -204,6 +204,10 @@ void StyleSheet::Apply(Style& style, const Declaration& declaration)
         style.m_FontSize = std::clamp(Number(value), 0.0f, 512.0f);
     else if (name == "opacity")
         style.m_Opacity = std::clamp(Number(value), 0.0f, 1.0f);
+    else if (name == "translate-x")
+        style.m_TranslateX = Number(value, true);
+    else if (name == "translate-y")
+        style.m_TranslateY = Number(value, true);
     else if (name == "padding")
         style.m_Padding = ParseInsets(value);
     else if (name == "margin")

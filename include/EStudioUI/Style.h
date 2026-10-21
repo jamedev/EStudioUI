@@ -57,6 +57,9 @@ struct Length
     //! Numeric value for explicit units.
     float m_Value = 0;
 
+    //! Compares both the unit and numeric value.
+    bool operator==(const Length&) const = default;
+
     //! Resolves a dimension against its parent or intrinsic fallback.
     float Resolve(float parent, float fallback) const;
 };
@@ -75,6 +78,9 @@ struct Insets
 
     //! Left distance.
     float m_Left = 0;
+
+    //! Compares all four edges exactly.
+    bool operator==(const Insets&) const = default;
 };
 
 //! A soft analytic shadow behind a widget's rounded rectangle.
@@ -91,6 +97,9 @@ struct Shadow
 
     //! Shadow color; zero alpha disables the shadow.
     Color m_Color{0, 0, 0, 0};
+
+    //! Compares offset, blur, and color exactly.
+    bool operator==(const Shadow&) const = default;
 };
 
 //! Computed presentation and basic flex layout values.
@@ -194,6 +203,12 @@ struct Style
 
     //! Table grid and scrollbar track color.
     Color m_GridColor{0.4f, 0.5f, 0.7f, 0.2f};
+
+    //! Horizontal translation after layout; flow descendants and hit testing follow.
+    float m_TranslateX = 0;
+
+    //! Vertical translation after layout; flow descendants and hit testing follow.
+    float m_TranslateY = 0;
 };
 
 //! Parses and applies a documented CSS subset with an atomic reload operation.

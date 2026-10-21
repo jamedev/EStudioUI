@@ -159,6 +159,42 @@ Widget* Widget::GetParent() const
     return m_Parent;
 }
 
+void Widget::ClearFloatingBounds()
+{
+    m_FloatingBounds.reset();
+    Invalidate();
+}
+
+void Widget::SetStyleProperty(StyleProperty property, const StyleValue& value)
+{
+    Style validation;
+    EStudioUI::SetStyleValue(validation, property, value);
+    const auto validated = GetStyleValue(validation, property);
+    const auto found = m_StyleOverrides.find(property);
+    if (found != m_StyleOverrides.end() && found->second == validated)
+        return;
+    m_StyleOverrides[property] = validated;
+    if (IsPaintOnlyProperty(property))
+    {
+        EStudioUI::SetStyleValue(m_Style, property, validated);
+        RequestRepaint();
+    }
+    else
+        Invalidate();
+}
+
+void Widget::ClearStyleProperty(StyleProperty property)
+{
+    if (m_StyleOverrides.erase(property))
+        Invalidate();
+}
+
+void Widget::ClearStyleProperties()
+{
+    m_StyleOverrides.clear();
+    Invalidate();
+}
+
 Signal<Point>& Widget::ContextMenuRequested()
 {
     return m_ContextMenuRequested;

@@ -1,7 +1,7 @@
 {
   "$schema": "https://raw.githubusercontent.com/microsoft/vcpkg-tool/main/docs/vcpkg.schema.json",
   "name": "estudioui",
-  "version-semver": "0.3.0",
+  "version-semver": "0.4.0",
   "description": "C++20 GPU widget toolkit with GLFW, analytic outline text, signals, and CSS",
   "homepage": "https://github.com/jamedev/EStudioUI",
   "license": "MIT",

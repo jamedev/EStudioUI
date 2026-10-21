@@ -1,0 +1,28 @@
+/* Complete animation-page endpoint; the common application theme is prepended. */
+#animation-stage {
+    background: #121b2b;
+    border: 1px solid #35415a;
+    border-radius: 12px;
+    padding: 24px;
+    gap: 18px;
+    align-items: start;
+}
+#animation-card {
+    width: 430px;
+    height: 250px;
+    padding: 24px;
+    gap: 12px;
+    background: #0c715c;
+    border: 3px solid #56d7ac;
+    border-radius: 30px;
+    translate-x: 260px;
+    translate-y: 20px;
+    box-shadow: 12px 15px 22px rgba(0, 0, 0, 0.4);
+}
+#animation-card .animation-eyebrow { height: 20px; font-size: 11px; color: #a5ffe0; }
+#animation-card .animation-title { height: 36px; font-size: 28px; color: #ddfff0; }
+#animation-card textbox { height: 44px; font-size: 17px; background: #073e36; border-color: #71e8c4; border-radius: 13px; }
+#animation-card button { width: 245px; height: 48px; font-size: 17px; background: #ffd08a; color: #302414; border-radius: 22px; }
+#animation-badge { width: 220px; height: 50px; padding: 12px; background: #806040; color: #fff0cc; font-size: 14px; border-radius: 14px; translate-x: 320px; }
+.animation-note { height: 48px; font-size: 14px; color: #9faec9; }
+.animation-counter { height: 28px; font-size: 17px; color: #a4e0c8; }
