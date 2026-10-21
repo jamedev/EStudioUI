@@ -1,11 +1,12 @@
 #pragma once
 
 #include "ToolButton.h"
+#include "SplitToolButton.h"
 
 namespace EStudioUI
 {
 //! A horizontal container for commands, separators, and arbitrary child widgets.
-class ToolBar final : public Widget
+class ToolBar : public Widget
 {
   public:
     //! Creates a horizontal command strip with content-driven height.
@@ -13,6 +14,9 @@ class ToolBar final : public Widget
 
     //! Appends a compact command button.
     ToolButton& AddButton(std::string text);
+
+    //! Appends a default command button with a popup action chooser.
+    SplitToolButton& AddSplitButton(std::string text = "Tools");
 
     //! Appends a noninteractive vertical separator.
     Widget& AddSeparator();

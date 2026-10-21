@@ -8,12 +8,46 @@
 
 namespace EStudioUI
 {
+//! Diagnostics for the bounded, camera-independent canvas paint caches.
+struct CanvasCacheStats
+{
+    //! Curve requests served by cached local vertices since construction.
+    std::uint64_t m_CurveHits = 0;
+
+    //! Adaptive curve tessellations since construction.
+    std::uint64_t m_CurveMisses = 0;
+
+    //! Text requests served by a cached shaped run since construction.
+    std::uint64_t m_TextHits = 0;
+
+    //! Text runs shaped since construction; panning and zooming do not change this count.
+    std::uint64_t m_TextMisses = 0;
+
+    //! Tessellations that reached the 65,536-vertex quality budget.
+    std::uint64_t m_LimitedCurves = 0;
+
+    //! Number of cached curve entries, capped at 2,048.
+    std::size_t m_CurveEntries = 0;
+
+    //! Number of cached shaped runs, capped at 2,048.
+    std::size_t m_TextEntries = 0;
+
+    //! Conservatively estimated retained curve and text bytes, capped at 16 MiB.
+    std::size_t m_Bytes = 0;
+
+    //! Group children returned by spatial queries during the most recent paint.
+    std::size_t m_GroupCandidates = 0;
+};
+
 //! A camera-controlled, BVH-culled view of lightweight scene items.
 class CanvasWidget : public Widget
 {
   public:
     //! Creates an empty scene with a unit-scale camera at the world origin.
     CanvasWidget();
+
+    //! Releases bounded tessellation, shaping, and paint-identity caches.
+    ~CanvasWidget() override;
 
     //! Shares a scene model; null creates a new empty model.
     void SetScene(std::shared_ptr<CanvasScene> scene);
@@ -81,6 +115,9 @@ class CanvasWidget : public Widget
     //! Returns BVH nodes visited by the latest viewport query.
     std::size_t GetQueryVisitCount() const;
 
+    //! Returns paint-cache diagnostics without triggering a spatial query or paint.
+    CanvasCacheStats GetCacheStats() const;
+
     //! Reports camera changes after invalidation and hosted-widget placement.
     Signal<>& ViewChanged();
 
@@ -143,8 +180,13 @@ class CanvasWidget : public Widget
     void UpdateVisibleItems() const;
 
     //! Draws a primitive after camera-relative conversion and line clipping.
-    void DrawGeometry(Renderer& renderer, const CanvasGeometry& geometry, const Style& style, Rect clip,
-                      float opacity) const;
+    void DrawGeometry(Renderer& renderer, FontFace& font, const CanvasGeometry& geometry, const Style& style, Rect clip,
+                      float opacity, bool selected, std::uint64_t rootIdentity,
+                      std::vector<std::size_t>& childPath) const;
+
+    //! Clips a double-precision world segment before submitting an analytic GPU stroke.
+    void DrawSegment(Renderer& renderer, CanvasPoint from, CanvasPoint to, const Style& style, Rect clip, float opacity,
+                     CanvasPoint origin = {}) const;
 
     //! Draws a bounded adaptive grid using screen-space strokes.
     void DrawGrid(Renderer& renderer, Rect clip, float opacity) const;
@@ -154,6 +196,12 @@ class CanvasWidget : public Widget
 
     //! Owns or shares the scene data.
     std::shared_ptr<CanvasScene> m_Scene;
+
+    //! Private bounded LRU caches and collision-free retained identities for group leaves.
+    struct PaintCache;
+
+    //! Keeps immutable payloads alive only while their bounded cached entries are retained.
+    std::unique_ptr<PaintCache> m_PaintCache;
 
     //! World-space camera center.
     CanvasPoint m_Center;

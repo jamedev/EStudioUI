@@ -15,7 +15,13 @@ ToolButton& ContextMenu::AddAction(std::string text, bool enabled)
 {
     auto& action = Add<ToolButton>(std::move(text));
     action.SetEnabled(enabled);
-    action.Clicked().Connect([this] { Close(); });
+    const WidgetRef menu(this);
+    action.Clicked().Connect(
+        [menu]
+        {
+            if (auto* live = dynamic_cast<ContextMenu*>(menu.Get()))
+                live->Close();
+        });
     return action;
 }
 

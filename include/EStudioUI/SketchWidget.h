@@ -12,7 +12,11 @@ enum class SketchTool
     Pan,
     Line,
     Rectangle,
-    Circle
+    Circle,
+    Arc,
+    Spline,
+    Path,
+    Text
 };
 
 //! A viewport and pointer/keyboard editor for an undoable sketch document.
@@ -39,6 +43,30 @@ class SketchWidget : public CanvasWidget
 
     //! Returns whether endpoint and grid snapping are enabled.
     bool IsSnapping() const;
+
+    //! Sets the UTF-8 text placed by the annotation tool.
+    void SetAnnotationText(std::string text);
+
+    //! Returns the annotation tool's current text.
+    const std::string& GetAnnotationText() const;
+
+    //! Sets annotation font size in world units.
+    void SetAnnotationFontSize(double size);
+
+    //! Returns annotation font size in world units.
+    double GetAnnotationFontSize() const;
+
+    //! Selects whether the path tool closes its final segment.
+    void SetPathClosed(bool closed);
+
+    //! Returns whether newly completed paths are closed.
+    bool IsPathClosed() const;
+
+    //! Commits a pending path with at least two points; other tools return false.
+    bool FinishTool();
+
+    //! Returns the number of accepted clicks in a multistep creation tool.
+    std::size_t GetPendingPointCount() const;
 
     //! Undoes one command after canceling any pointer preview.
     bool Undo();
@@ -83,6 +111,7 @@ class SketchWidget : public CanvasWidget
     {
         None,
         Create,
+        Points,
         Move,
         Marquee
     };
@@ -98,6 +127,21 @@ class SketchWidget : public CanvasWidget
 
     //! Updates temporary shapes or the marquee for the current gesture.
     void UpdatePreview(const PointerEvent& event);
+
+    //! Returns whether the current tool collects clicks instead of a drag.
+    bool IsPointTool() const;
+
+    //! Accepts a click and commits a complete arc, spline, path, or annotation.
+    void AcceptToolPoint(const PointerEvent& event);
+
+    //! Draws the in-progress control polygon and analytic shape preview.
+    void UpdatePointPreview(CanvasPoint point, bool reverseArc);
+
+    //! Constructs an arc from its center, start, and endpoint direction.
+    CanvasGeometry ArcFromPoints(CanvasPoint center, CanvasPoint start, CanvasPoint end, bool reverse) const;
+
+    //! Commits one new shape while leaving selection and history to the document.
+    bool CommitShape(const CanvasGeometry& geometry);
 
     //! Invalidates canvas caches before notifying observers, which may delete the widget.
     void NotifyChanged();
@@ -128,6 +172,21 @@ class SketchWidget : public CanvasWidget
 
     //! Records whether pointer movement passed the drag threshold.
     bool m_Moved = false;
+
+    //! Preserves native double-click count until pointer release.
+    int m_PressClicks = 1;
+
+    //! Retains accepted points between clicks for curve and path tools.
+    std::vector<CanvasPoint> m_ToolPoints;
+
+    //! Text used when placing a new annotation.
+    std::string m_AnnotationText = "Annotation";
+
+    //! World-space font size used by the annotation tool.
+    double m_AnnotationFontSize = 18;
+
+    //! Closes newly finished paths when enabled.
+    bool m_PathClosed = false;
 
     //! Uses one compiled normal/selected CSS style for all ordinary geometry.
     std::uint32_t m_ShapeStyle = 0;

@@ -78,8 +78,18 @@ struct SketchDocument::Impl
 
         std::size_t Bytes() const
         {
-            return sizeof(Command) + m_Changes.capacity() * (sizeof(Change) + sizeof(Record) + 2 * sizeof(void*)) +
-                   (m_BeforeSelection.capacity() + m_AfterSelection.capacity()) * sizeof(std::shared_ptr<Record>);
+            std::size_t bytes = sizeof(Command) +
+                                m_Changes.capacity() * (sizeof(Change) + sizeof(Record) + 2 * sizeof(void*)) +
+                                (m_BeforeSelection.capacity() + m_AfterSelection.capacity()) *
+                                    (sizeof(std::shared_ptr<Record>) + sizeof(Record) + 2 * sizeof(void*));
+            for (const auto& change : m_Changes)
+            {
+                if (change.m_Before)
+                    bytes += GeometryBytes(change.m_Before->m_Geometry);
+                if (change.m_After)
+                    bytes += GeometryBytes(change.m_After->m_Geometry);
+            }
+            return bytes;
         }
     };
 
@@ -196,6 +206,59 @@ struct SketchDocument::Impl
         PruneRecords();
         return false;
     }
+
+    bool Execute(Command command)
+    {
+        if (command.m_Changes.empty() || !FitsHistory(command))
+            return false;
+        auto aggregate = m_Scene.GetBounds();
+        std::size_t newItems = 0;
+        for (const auto& change : command.m_Changes)
+        {
+            if (!change.m_After)
+                continue;
+            const auto bounds = change.m_After->m_Geometry.Bounds();
+            const double left = std::min(aggregate.m_X, bounds.m_X);
+            const double top = std::min(aggregate.m_Y, bounds.m_Y);
+            const double right = std::max(aggregate.m_X + aggregate.m_Width, bounds.m_X + bounds.m_Width);
+            const double bottom = std::max(aggregate.m_Y + aggregate.m_Height, bounds.m_Y + bounds.m_Height);
+            if (!std::isfinite(right - left) || !std::isfinite(bottom - top))
+                throw std::invalid_argument("Sketch edit exceeds finite scene bounds");
+            aggregate = {left, top, right - left, bottom - top};
+            if (!m_Scene.Get(change.m_Record->m_Current))
+                ++newItems;
+        }
+        m_Scene.Reserve(m_Scene.Size() + newItems);
+        m_Records.reserve(m_Records.size() + newItems);
+        const bool selectionChanged = command.m_BeforeSelection != command.m_AfterSelection;
+        if (selectionChanged)
+            ClearSelection();
+        for (const auto& change : command.m_Changes)
+            Apply(change, true);
+        if (selectionChanged)
+            RestoreSelection(command.m_AfterSelection);
+        Commit(std::move(command));
+        return true;
+    }
+
+    template <typename Transform> bool EditSelected(Transform transform)
+    {
+        Command command;
+        command.m_BeforeSelection = SelectionRecords();
+        command.m_AfterSelection = command.m_BeforeSelection;
+        command.m_Changes.reserve(command.m_BeforeSelection.size());
+        for (const auto& record : command.m_BeforeSelection)
+        {
+            const auto before = Snapshot(*m_Scene.Get(record->m_Current));
+            auto after = before;
+            if (transform(after.m_Geometry) && after.m_Geometry != before.m_Geometry)
+            {
+                after.m_Geometry.Bounds();
+                command.m_Changes.push_back({record, before, after});
+            }
+        }
+        return Execute(std::move(command));
+    }
 };
 
 SketchDocument::SketchDocument() : m_Impl(std::make_unique<Impl>())
@@ -238,23 +301,81 @@ void SketchDocument::Save(std::ostream& output) const
         ordered.push_back(&item);
     std::stable_sort(ordered.begin(), ordered.end(),
                      [](const auto* first, const auto* second) { return first->m_Order < second->m_Order; });
-    output << "ESTUDIOUI_SKETCH 1\n" << std::to_string(ordered.size()) << '\n';
-    std::ostringstream row;
-    row.imbue(std::locale::classic());
-    row << std::setprecision(std::numeric_limits<double>::max_digits10);
-    for (const auto* item : ordered)
+    std::size_t remainingElements = 1000000;
+    std::size_t remainingText = 16 * 1024 * 1024;
+    const auto checkLimits = [&](const auto& self, const CanvasGeometry& geometry, unsigned depth) -> void
     {
-        row.str({});
-        const auto& geometry = item->m_Geometry;
-        const auto kind = geometry.m_Kind == CanvasPrimitive::Line        ? "line"
-                          : geometry.m_Kind == CanvasPrimitive::Rectangle ? "rectangle"
-                                                                          : "circle";
-        row << kind << ' ' << geometry.m_A.m_X << ' ' << geometry.m_A.m_Y << ' ' << geometry.m_B.m_X << ' '
-            << geometry.m_B.m_Y << ' ' << geometry.m_Radius << ' ' << item->m_Style << '\n';
-        output << row.str();
+        if (depth > 32 || remainingElements == 0)
+            throw std::invalid_argument("Sketch document exceeds geometry nesting or element limits");
+        --remainingElements;
+        if (!geometry.m_Data)
+            return;
+        const auto& data = *geometry.m_Data;
+        if (data.m_Points.size() > remainingElements || data.m_Text.size() > remainingText)
+            throw std::invalid_argument("Sketch document exceeds point or text limits");
+        remainingElements -= data.m_Points.size();
+        remainingText -= data.m_Text.size();
+        for (const auto& child : data.m_Children)
+            self(self, child, depth + 1);
+    };
+    for (const auto* item : ordered)
+        checkLimits(checkLimits, item->m_Geometry, 0);
+    output << "ESTUDIOUI_SKETCH 2\n" << std::to_string(ordered.size()) << '\n';
+    const auto writeGeometry = [&](const auto& self, const CanvasGeometry& geometry, std::uint32_t style) -> void
+    {
+        static constexpr const char* names[] = {"line",   "rectangle", "circle", "arc",
+                                                "spline", "path",      "text",   "group"};
+        std::ostringstream row;
+        row.imbue(std::locale::classic());
+        row << std::setprecision(std::numeric_limits<double>::max_digits10);
+        row << names[static_cast<unsigned>(geometry.m_Kind)] << ' ' << geometry.m_A.m_X << ' ' << geometry.m_A.m_Y
+            << ' ' << geometry.m_B.m_X << ' ' << geometry.m_B.m_Y << ' ' << geometry.m_Radius << ' ' << style;
+        const auto* data = geometry.m_Data.get();
+        switch (geometry.m_Kind)
+        {
+        case CanvasPrimitive::Arc:
+            row << ' ' << data->m_StartAngle << ' ' << data->m_SweepAngle;
+            break;
+        case CanvasPrimitive::Spline:
+            row << ' ' << data->m_Points.size();
+            break;
+        case CanvasPrimitive::Path:
+            row << ' ' << data->m_Points.size() << ' ' << (data->m_Closed ? 1 : 0);
+            break;
+        case CanvasPrimitive::Text:
+            row << ' ' << data->m_FontSize << ' ' << data->m_Text.size();
+            break;
+        case CanvasPrimitive::Group:
+            row << ' ' << data->m_Children.size() << ' ' << (data->m_ChildStyles.empty() ? 0 : 1);
+            break;
+        default:
+            break;
+        }
+        output << row.str() << '\n';
+        if (geometry.m_Kind == CanvasPrimitive::Spline || geometry.m_Kind == CanvasPrimitive::Path)
+        {
+            for (const auto point : data->m_Points)
+            {
+                row.str({});
+                row << point.m_X << ' ' << point.m_Y << '\n';
+                output << row.str();
+            }
+        }
+        else if (geometry.m_Kind == CanvasPrimitive::Text)
+        {
+            output.write(data->m_Text.data(), static_cast<std::streamsize>(data->m_Text.size()));
+            output.put('\n');
+        }
+        else if (geometry.m_Kind == CanvasPrimitive::Group)
+        {
+            for (std::size_t i = 0; i < data->m_Children.size(); ++i)
+                self(self, data->m_Children[i], data->m_ChildStyles.empty() ? 0 : data->m_ChildStyles[i]);
+        }
         if (!output)
             throw std::runtime_error("Cannot write sketch document");
-    }
+    };
+    for (const auto* item : ordered)
+        writeGeometry(writeGeometry, item->m_Geometry, item->m_Style);
     if (!output)
         throw std::runtime_error("Cannot write sketch document");
 }
@@ -290,6 +411,13 @@ void SketchDocument::Load(std::istream& input)
         row >> std::ws;
         return row.eof();
     };
+    const auto readUnsigned = [&](std::istringstream& row, std::uint64_t maximum)
+    {
+        std::string token;
+        if (!(row >> token))
+            throw std::invalid_argument("Missing sketch document unsigned integer");
+        return parseUnsigned(token, maximum);
+    };
     std::string line;
     std::string magic;
     std::string version;
@@ -297,40 +425,144 @@ void SketchDocument::Load(std::istream& input)
         throw std::invalid_argument("Missing sketch document header");
     std::istringstream header(line);
     header.imbue(std::locale::classic());
-    if (!(header >> magic >> version) || magic != "ESTUDIOUI_SKETCH" || version != "1" || !exhausted(header))
+    if (!(header >> magic >> version) || magic != "ESTUDIOUI_SKETCH" || (version != "1" && version != "2") ||
+        !exhausted(header))
         throw std::invalid_argument("Unsupported sketch document header");
     if (!readLine(line))
         throw std::invalid_argument("Missing sketch document item count");
     std::istringstream countRow(line);
-    std::string countToken;
-    if (!(countRow >> countToken) || !exhausted(countRow))
+    countRow.imbue(std::locale::classic());
+    const auto count = readUnsigned(countRow, 1000000);
+    if (!exhausted(countRow))
         throw std::invalid_argument("Invalid sketch document item count");
-    const auto count = parseUnsigned(countToken, 1000000);
     auto replacement = std::make_unique<Impl>();
     replacement->m_Scene.Reserve(static_cast<std::size_t>(count));
-    for (std::uint64_t index = 0; index < count; ++index)
+    std::uint64_t remainingElements = 1000000;
+    std::uint64_t remainingText = 16 * 1024 * 1024;
+    const auto readGeometry = [&](const auto& self, unsigned depth) -> std::pair<CanvasGeometry, std::uint32_t>
     {
+        if (depth > 32 || remainingElements == 0)
+            throw std::invalid_argument("Sketch document exceeds geometry nesting or element limits");
+        --remainingElements;
         if (!readLine(line))
             throw std::invalid_argument("Truncated sketch document");
         std::istringstream row(line);
         row.imbue(std::locale::classic());
         std::string kind;
-        std::string styleToken;
         CanvasGeometry geometry;
         if (!(row >> kind >> geometry.m_A.m_X >> geometry.m_A.m_Y >> geometry.m_B.m_X >> geometry.m_B.m_Y >>
-              geometry.m_Radius >> styleToken) ||
-            !exhausted(row))
+              geometry.m_Radius))
             throw std::invalid_argument("Invalid sketch document geometry row");
+        const auto style = static_cast<std::uint32_t>(readUnsigned(row, std::numeric_limits<std::uint32_t>::max()));
         if (kind == "line")
             geometry.m_Kind = CanvasPrimitive::Line;
         else if (kind == "rectangle")
             geometry.m_Kind = CanvasPrimitive::Rectangle;
         else if (kind == "circle")
             geometry.m_Kind = CanvasPrimitive::Circle;
+        else if (version == "2" && kind == "arc")
+            geometry.m_Kind = CanvasPrimitive::Arc;
+        else if (version == "2" && kind == "spline")
+            geometry.m_Kind = CanvasPrimitive::Spline;
+        else if (version == "2" && kind == "path")
+            geometry.m_Kind = CanvasPrimitive::Path;
+        else if (version == "2" && kind == "text")
+            geometry.m_Kind = CanvasPrimitive::Text;
+        else if (version == "2" && kind == "group")
+            geometry.m_Kind = CanvasPrimitive::Group;
         else
             throw std::invalid_argument("Unsupported sketch document primitive");
-        const auto style =
-            static_cast<std::uint32_t>(parseUnsigned(styleToken, std::numeric_limits<std::uint32_t>::max()));
+        std::shared_ptr<CanvasGeometryData> data;
+        if (geometry.m_Kind >= CanvasPrimitive::Arc)
+            data = std::make_shared<CanvasGeometryData>();
+        std::uint64_t payloadCount = 0;
+        bool childStyles = false;
+        switch (geometry.m_Kind)
+        {
+        case CanvasPrimitive::Arc:
+            if (!(row >> data->m_StartAngle >> data->m_SweepAngle))
+                throw std::invalid_argument("Invalid sketch document arc");
+            break;
+        case CanvasPrimitive::Spline:
+        case CanvasPrimitive::Path:
+            payloadCount = readUnsigned(row, std::min<std::uint64_t>(65536, remainingElements));
+            remainingElements -= payloadCount;
+            if (geometry.m_Kind == CanvasPrimitive::Path)
+                data->m_Closed = readUnsigned(row, 1) != 0;
+            break;
+        case CanvasPrimitive::Text:
+            if (!(row >> data->m_FontSize))
+                throw std::invalid_argument("Invalid sketch document text size");
+            payloadCount = readUnsigned(row, std::min<std::uint64_t>(65536, remainingText));
+            remainingText -= payloadCount;
+            break;
+        case CanvasPrimitive::Group:
+            payloadCount = readUnsigned(row, remainingElements);
+            childStyles = readUnsigned(row, 1) != 0;
+            break;
+        default:
+            break;
+        }
+        if (!exhausted(row))
+            throw std::invalid_argument("Unexpected sketch document geometry fields");
+        if (geometry.m_Kind == CanvasPrimitive::Spline || geometry.m_Kind == CanvasPrimitive::Path)
+        {
+            data->m_Points.reserve(static_cast<std::size_t>(payloadCount));
+            for (std::uint64_t i = 0; i < payloadCount; ++i)
+            {
+                if (!readLine(line))
+                    throw std::invalid_argument("Truncated sketch document curve");
+                std::istringstream pointRow(line);
+                pointRow.imbue(std::locale::classic());
+                CanvasPoint point;
+                if (!(pointRow >> point.m_X >> point.m_Y) || !exhausted(pointRow))
+                    throw std::invalid_argument("Invalid sketch document curve point");
+                data->m_Points.push_back(point);
+            }
+        }
+        else if (geometry.m_Kind == CanvasPrimitive::Text)
+        {
+            data->m_Text.resize(static_cast<std::size_t>(payloadCount));
+            if (!input.read(data->m_Text.data(), static_cast<std::streamsize>(payloadCount)))
+                throw std::invalid_argument("Truncated sketch document text");
+            char delimiter = 0;
+            if (!input.get(delimiter))
+                throw std::invalid_argument("Missing sketch document text delimiter");
+            if (delimiter == '\r' && !input.get(delimiter))
+                throw std::invalid_argument("Missing sketch document text delimiter");
+            if (delimiter != '\n')
+                throw std::invalid_argument("Invalid sketch document text delimiter");
+        }
+        else if (geometry.m_Kind == CanvasPrimitive::Group)
+        {
+            // A declared child count is untrusted until its rows have been consumed.
+            // Bounded initial growth prevents nested truncated groups reserving the
+            // entire file budget independently at every nesting level.
+            const auto initialCapacity = static_cast<std::size_t>(std::min<std::uint64_t>(payloadCount, 1024));
+            data->m_Children.reserve(initialCapacity);
+            if (childStyles)
+                data->m_ChildStyles.reserve(initialCapacity);
+            for (std::uint64_t i = 0; i < payloadCount; ++i)
+            {
+                auto [child, styleIndex] = self(self, depth + 1);
+                data->m_Children.push_back(std::move(child));
+                if (childStyles)
+                    data->m_ChildStyles.push_back(styleIndex);
+                else if (styleIndex != 0)
+                    throw std::invalid_argument("Inherited group child style must be zero");
+            }
+        }
+        if (geometry.m_Kind == CanvasPrimitive::Group)
+            geometry.m_Data =
+                MakeCanvasGroup(geometry.m_A, std::move(data->m_Children), std::move(data->m_ChildStyles)).m_Data;
+        else
+            geometry.m_Data = std::move(data);
+        geometry.Bounds();
+        return {std::move(geometry), style};
+    };
+    for (std::uint64_t index = 0; index < count; ++index)
+    {
+        auto [geometry, style] = readGeometry(readGeometry, 0);
         replacement->m_Scene.Add(geometry, style);
     }
     while (readLine(line))
@@ -343,34 +575,66 @@ void SketchDocument::Load(std::istream& input)
 
 CanvasItemId SketchDocument::AddShape(const CanvasGeometry& geometry, std::uint32_t style)
 {
+    geometry.Bounds();
     Impl::Command command;
     command.m_BeforeSelection = m_Impl->SelectionRecords();
-    command.m_Changes.reserve(1);
-    command.m_AfterSelection.reserve(1);
+    const auto record = std::make_shared<Impl::Record>();
+    command.m_Changes.push_back({record, {}, Impl::State{geometry, style, 0}});
+    command.m_AfterSelection = {record};
     if (!m_Impl->FitsHistory(command))
         return {};
-    const auto id = m_Impl->m_Scene.Add(geometry, style);
-    const auto record = m_Impl->Track(id);
-    command.m_Changes.push_back({record, {}, Impl::Snapshot(*m_Impl->m_Scene.Get(id))});
-    Select(id);
-    command.m_AfterSelection = {record};
+    record->m_Current = m_Impl->m_Scene.Add(geometry, style);
+    m_Impl->m_Records[KeyOf(record->m_Current)] = record;
+    command.m_Changes.front().m_After = Impl::Snapshot(*m_Impl->m_Scene.Get(record->m_Current));
+    Select(record->m_Current);
     m_Impl->Commit(std::move(command));
-    return id;
+    return record->m_Current;
+}
+
+bool SketchDocument::UpdateShape(CanvasItemId item, const CanvasGeometry& geometry)
+{
+    const auto* current = m_Impl->m_Scene.Get(item);
+    if (!current)
+        return false;
+    geometry.Bounds();
+    if (current->m_Geometry == geometry)
+        return false;
+    Impl::Command command;
+    command.m_BeforeSelection = m_Impl->SelectionRecords();
+    command.m_AfterSelection = command.m_BeforeSelection;
+    const auto before = Impl::Snapshot(*current);
+    auto after = before;
+    after.m_Geometry = geometry;
+    command.m_Changes.push_back({m_Impl->Track(item), before, after});
+    return m_Impl->Execute(std::move(command));
 }
 
 CanvasItemId SketchDocument::Pick(CanvasPoint point, double tolerance) const
 {
     ValidatePoint(point);
     ValidateTolerance(tolerance);
+    const CanvasBounds query{point.m_X - tolerance, point.m_Y - tolerance, tolerance * 2, tolerance * 2};
     std::vector<CanvasItemId> candidates;
-    m_Impl->m_Scene.Query({point.m_X - tolerance, point.m_Y - tolerance, tolerance * 2, tolerance * 2}, candidates);
+    m_Impl->m_Scene.Query(query, candidates);
+    const auto boundedDistance = [&](const auto& self, const CanvasGeometry& geometry) -> double
+    {
+        if (geometry.m_Kind != CanvasPrimitive::Group)
+            return DistanceToItem(geometry, point);
+        std::vector<std::size_t> children;
+        QueryCanvasGroup(geometry, query, children);
+        double distance = std::numeric_limits<double>::infinity();
+        for (const auto index : children)
+            distance =
+                std::min(distance, self(self, TranslateGeometry(geometry.m_Data->m_Children[index], geometry.m_A)));
+        return distance;
+    };
     CanvasItemId result;
     double bestDistance = tolerance;
     std::uint64_t bestOrder = 0;
     for (auto id : candidates)
     {
         const auto& item = *m_Impl->m_Scene.Get(id);
-        const auto distance = DistanceToItem(item.m_Geometry, point);
+        const auto distance = boundedDistance(boundedDistance, item.m_Geometry);
         if (distance <= bestDistance && (distance < bestDistance || !result || item.m_Order > bestOrder))
         {
             bestDistance = distance;
@@ -441,44 +705,202 @@ std::vector<CanvasItemId> SketchDocument::GetSelection() const
     return result;
 }
 
+std::optional<CanvasBounds> SketchDocument::GetSelectionBounds() const
+{
+    std::optional<CanvasBounds> result;
+    for (auto id : m_Impl->m_Selection)
+    {
+        const auto* item = m_Impl->m_Scene.Get(id);
+        if (!item)
+            continue;
+        const auto bounds = item->m_Geometry.Bounds();
+        if (!result)
+            result = bounds;
+        else
+        {
+            const auto left = std::min(result->m_X, bounds.m_X);
+            const auto top = std::min(result->m_Y, bounds.m_Y);
+            const auto right = std::max(result->m_X + result->m_Width, bounds.m_X + bounds.m_Width);
+            const auto bottom = std::max(result->m_Y + result->m_Height, bounds.m_Y + bounds.m_Height);
+            result = CanvasBounds{left, top, right - left, bottom - top};
+        }
+    }
+    return result;
+}
+
 bool SketchDocument::MoveSelection(CanvasPoint delta)
 {
     ValidatePoint(delta);
     if (delta.m_X == 0 && delta.m_Y == 0)
         return false;
+    return m_Impl->EditSelected(
+        [delta](CanvasGeometry& geometry)
+        {
+            geometry = TranslateGeometry(geometry, delta);
+            return true;
+        });
+}
+
+bool SketchDocument::DuplicateSelection(CanvasPoint delta)
+{
+    ValidatePoint(delta);
     Impl::Command command;
     command.m_BeforeSelection = m_Impl->SelectionRecords();
-    command.m_AfterSelection = command.m_BeforeSelection;
-    command.m_Changes.reserve(command.m_BeforeSelection.size());
-    auto intermediateBounds = m_Impl->m_Scene.GetBounds();
-    for (const auto& record : command.m_BeforeSelection)
+    auto ordered = command.m_BeforeSelection;
+    std::sort(
+        ordered.begin(), ordered.end(), [this](const auto& first, const auto& second)
+        { return m_Impl->m_Scene.Get(first->m_Current)->m_Order < m_Impl->m_Scene.Get(second->m_Current)->m_Order; });
+    std::uint64_t order = 0;
+    for (const auto& item : m_Impl->m_Scene.GetItems())
+        order = std::max(order, item.m_Order);
+    if (!ordered.empty() && ordered.size() >= std::numeric_limits<std::uint64_t>::max() - order)
+        throw std::invalid_argument("Sketch painter order is exhausted");
+    command.m_Changes.reserve(ordered.size());
+    command.m_AfterSelection.reserve(ordered.size());
+    for (const auto& original : ordered)
+    {
+        auto after = Impl::Snapshot(*m_Impl->m_Scene.Get(original->m_Current));
+        after.m_Geometry = TranslateGeometry(after.m_Geometry, delta);
+        after.m_Order = ++order;
+        const auto record = std::make_shared<Impl::Record>();
+        command.m_Changes.push_back({record, {}, after});
+        command.m_AfterSelection.push_back(record);
+    }
+    return m_Impl->Execute(std::move(command));
+}
+
+CanvasItemId SketchDocument::GroupSelection()
+{
+    Impl::Command command;
+    command.m_BeforeSelection = m_Impl->SelectionRecords();
+    if (command.m_BeforeSelection.size() < 2)
+        return {};
+    auto ordered = command.m_BeforeSelection;
+    std::sort(
+        ordered.begin(), ordered.end(), [this](const auto& first, const auto& second)
+        { return m_Impl->m_Scene.Get(first->m_Current)->m_Order < m_Impl->m_Scene.Get(second->m_Current)->m_Order; });
+    const auto bounds = *GetSelectionBounds();
+    const CanvasPoint origin{bounds.m_X, bounds.m_Y};
+    std::vector<CanvasGeometry> children;
+    std::vector<std::uint32_t> styles;
+    children.reserve(ordered.size());
+    styles.reserve(ordered.size());
+    command.m_Changes.reserve(ordered.size() + 1);
+    for (const auto& record : ordered)
     {
         const auto before = Impl::Snapshot(*m_Impl->m_Scene.Get(record->m_Current));
-        auto after = before;
-        after.m_Geometry = TranslateGeometry(before.m_Geometry, delta);
-        const auto bounds = after.m_Geometry.Bounds();
-        if (!IsFinite(after.m_Geometry.m_A) || !IsFinite(after.m_Geometry.m_B) || !std::isfinite(bounds.m_X) ||
-            !std::isfinite(bounds.m_Y) || !std::isfinite(bounds.m_Width) || !std::isfinite(bounds.m_Height) ||
-            !std::isfinite(bounds.m_X + bounds.m_Width) || !std::isfinite(bounds.m_Y + bounds.m_Height))
-            throw std::invalid_argument("Sketch translation exceeds finite geometry");
-        const auto left = std::min(intermediateBounds.m_X, bounds.m_X);
-        const auto top = std::min(intermediateBounds.m_Y, bounds.m_Y);
-        const auto right = std::max(intermediateBounds.m_X + intermediateBounds.m_Width, bounds.m_X + bounds.m_Width);
-        const auto bottom =
-            std::max(intermediateBounds.m_Y + intermediateBounds.m_Height, bounds.m_Y + bounds.m_Height);
-        if (!std::isfinite(right - left) || !std::isfinite(bottom - top))
-            throw std::invalid_argument("Sketch translation exceeds finite scene bounds");
-        intermediateBounds = {left, top, right - left, bottom - top};
-        command.m_Changes.push_back({record, before, after});
+        children.push_back(TranslateGeometry(before.m_Geometry, {-origin.m_X, -origin.m_Y}));
+        styles.push_back(before.m_Style);
+        command.m_Changes.push_back({record, before, {}});
     }
-    if (command.m_Changes.empty())
+    const auto group = std::make_shared<Impl::Record>();
+    const auto order = m_Impl->m_Scene.Get(ordered.back()->m_Current)->m_Order;
+    command.m_Changes.push_back(
+        {group, {}, Impl::State{MakeCanvasGroup(origin, std::move(children), std::move(styles)), 0, order}});
+    command.m_AfterSelection = {group};
+    return m_Impl->Execute(std::move(command)) ? group->m_Current : CanvasItemId{};
+}
+
+bool SketchDocument::UngroupSelection()
+{
+    Impl::Command command;
+    command.m_BeforeSelection = m_Impl->SelectionRecords();
+    std::unordered_set<std::uint64_t> groups;
+    std::unordered_set<std::uint64_t> selected;
+    for (const auto& record : command.m_BeforeSelection)
+    {
+        const auto* item = m_Impl->m_Scene.Get(record->m_Current);
+        selected.insert(KeyOf(item->m_Id));
+        if (item->m_Geometry.m_Kind == CanvasPrimitive::Group)
+            groups.insert(KeyOf(item->m_Id));
+    }
+    if (groups.empty())
         return false;
-    if (!m_Impl->FitsHistory(command))
-        return false;
-    for (const auto& change : command.m_Changes)
-        m_Impl->Apply(change, true);
-    m_Impl->Commit(std::move(command));
-    return true;
+    std::vector<const CanvasItem*> ordered;
+    ordered.reserve(m_Impl->m_Scene.Size());
+    for (const auto& item : m_Impl->m_Scene.GetItems())
+        ordered.push_back(&item);
+    std::stable_sort(ordered.begin(), ordered.end(),
+                     [](const auto* first, const auto* second) { return first->m_Order < second->m_Order; });
+    std::uint64_t order = 0;
+    for (const auto* item : ordered)
+    {
+        const auto key = KeyOf(item->m_Id);
+        const auto record = m_Impl->Track(item->m_Id);
+        if (groups.contains(key))
+        {
+            command.m_Changes.push_back({record, Impl::Snapshot(*item), {}});
+            const auto& data = *item->m_Geometry.m_Data;
+            for (std::size_t i = 0; i < data.m_Children.size(); ++i)
+            {
+                const auto child = std::make_shared<Impl::Record>();
+                const auto style = data.m_ChildStyles.empty() ? item->m_Style : data.m_ChildStyles[i];
+                const auto geometry = TranslateGeometry(data.m_Children[i], item->m_Geometry.m_A);
+                command.m_Changes.push_back({child, {}, Impl::State{geometry, style, ++order}});
+                command.m_AfterSelection.push_back(child);
+            }
+        }
+        else
+        {
+            const auto before = Impl::Snapshot(*item);
+            auto after = before;
+            after.m_Order = ++order;
+            if (before.m_Order != after.m_Order)
+                command.m_Changes.push_back({record, before, after});
+            if (selected.contains(key))
+                command.m_AfterSelection.push_back(record);
+        }
+    }
+    return m_Impl->Execute(std::move(command));
+}
+
+bool SketchDocument::SetHorizontal(bool horizontal)
+{
+    return m_Impl->EditSelected(
+        [horizontal](CanvasGeometry& geometry)
+        {
+            if (geometry.m_Kind != CanvasPrimitive::Line)
+                return false;
+            if (horizontal)
+                geometry.m_B.m_Y = geometry.m_A.m_Y;
+            else
+                geometry.m_B.m_X = geometry.m_A.m_X;
+            return true;
+        });
+}
+
+bool SketchDocument::SetLineLength(double length)
+{
+    if (!std::isfinite(length) || length <= 0)
+        throw std::invalid_argument("Sketch line length must be finite and positive");
+    return m_Impl->EditSelected(
+        [length](CanvasGeometry& geometry)
+        {
+            if (geometry.m_Kind != CanvasPrimitive::Line)
+                return false;
+            const auto dx = geometry.m_B.m_X - geometry.m_A.m_X;
+            const auto dy = geometry.m_B.m_Y - geometry.m_A.m_Y;
+            const auto scale = std::max(std::abs(dx), std::abs(dy));
+            const auto normalizedLength = scale == 0 ? 1 : std::hypot(dx / scale, dy / scale);
+            const auto x = scale == 0 ? 1 : (dx / scale) / normalizedLength;
+            const auto y = scale == 0 ? 0 : (dy / scale) / normalizedLength;
+            geometry.m_B = {geometry.m_A.m_X + x * length, geometry.m_A.m_Y + y * length};
+            return true;
+        });
+}
+
+bool SketchDocument::SetCircleRadius(double radius)
+{
+    if (!std::isfinite(radius) || radius <= 0)
+        throw std::invalid_argument("Sketch circle radius must be finite and positive");
+    return m_Impl->EditSelected(
+        [radius](CanvasGeometry& geometry)
+        {
+            if (geometry.m_Kind != CanvasPrimitive::Circle && geometry.m_Kind != CanvasPrimitive::Arc)
+                return false;
+            geometry.m_Radius = radius;
+            return true;
+        });
 }
 
 bool SketchDocument::DeleteSelection()
@@ -559,28 +981,15 @@ CanvasPoint SketchDocument::Snap(CanvasPoint point, double worldTolerance, doubl
             found = true;
         }
     };
+    std::vector<CanvasPoint> snapPoints;
     for (auto id : candidates)
     {
-        const auto& geometry = m_Impl->m_Scene.Get(id)->m_Geometry;
-        consider(geometry.m_A);
-        if (geometry.m_Kind == CanvasPrimitive::Circle)
-        {
-            consider({geometry.m_A.m_X + geometry.m_Radius, geometry.m_A.m_Y});
-            consider({geometry.m_A.m_X - geometry.m_Radius, geometry.m_A.m_Y});
-            consider({geometry.m_A.m_X, geometry.m_A.m_Y + geometry.m_Radius});
-            consider({geometry.m_A.m_X, geometry.m_A.m_Y - geometry.m_Radius});
-        }
-        else
-        {
-            consider(geometry.m_B);
-            consider(
-                {geometry.m_A.m_X * 0.5 + geometry.m_B.m_X * 0.5, geometry.m_A.m_Y * 0.5 + geometry.m_B.m_Y * 0.5});
-            if (geometry.m_Kind == CanvasPrimitive::Rectangle)
-            {
-                consider({geometry.m_A.m_X, geometry.m_B.m_Y});
-                consider({geometry.m_B.m_X, geometry.m_A.m_Y});
-            }
-        }
+        GeometrySnapPoints(
+            m_Impl->m_Scene.Get(id)->m_Geometry,
+            {point.m_X - worldTolerance, point.m_Y - worldTolerance, worldTolerance * 2, worldTolerance * 2},
+            snapPoints);
+        for (const auto candidate : snapPoints)
+            consider(candidate);
     }
     if (!found && gridEnabled)
     {

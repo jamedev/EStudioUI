@@ -4,6 +4,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <stdexcept>
 
 namespace EStudioUI
 {
@@ -20,6 +21,17 @@ bool TextBox::IsFocusable() const
 const std::string& TextBox::GetText() const
 {
     return m_Buffer.GetText();
+}
+
+void TextBox::SetValidator(std::shared_ptr<const InputValidator> validator)
+{
+    m_Validator = std::move(validator);
+    RequestRepaint();
+}
+
+ValidationState TextBox::GetValidationState() const
+{
+    return m_Validator ? m_Validator->Validate(m_Buffer.GetText()) : ValidationState::Acceptable;
 }
 
 bool TextBox::IsReadOnly() const
@@ -50,7 +62,16 @@ Signal<>& TextBox::FocusLost()
 void TextBox::SetText(std::string_view text)
 {
     const auto previous = m_Buffer.GetText();
-    m_Buffer.SetText(text);
+    if (m_Validator)
+    {
+        auto candidate = m_Buffer;
+        candidate.SetText(text);
+        if (m_Validator->Validate(candidate.GetText()) == ValidationState::Invalid)
+            throw std::invalid_argument("Text does not satisfy the editor's input validator.");
+        m_Buffer = std::move(candidate);
+    }
+    else
+        m_Buffer.SetText(text);
     AfterEdit(previous != m_Buffer.GetText());
 }
 
@@ -70,7 +91,16 @@ void TextBox::SetReadOnly(bool readOnly)
 void TextBox::SetMaxBytes(std::size_t count)
 {
     const auto previous = m_Buffer.GetText();
-    m_Buffer.SetMaxBytes(count);
+    if (m_Validator)
+    {
+        auto candidate = m_Buffer;
+        candidate.SetMaxBytes(count);
+        if (m_Validator->Validate(candidate.GetText()) == ValidationState::Invalid)
+            throw std::invalid_argument("The byte limit would violate the editor's input validator.");
+        m_Buffer = std::move(candidate);
+    }
+    else
+        m_Buffer.SetMaxBytes(count);
     AfterEdit(previous != m_Buffer.GetText());
 }
 
@@ -185,7 +215,18 @@ void TextBox::OnFocus(bool focused)
 
 void TextBox::OnText(std::string_view text)
 {
-    if (!m_ReadOnly)
+    if (m_ReadOnly)
+        return;
+    if (m_Validator)
+    {
+        auto candidate = m_Buffer;
+        const bool changed = candidate.ReplaceSelection(text);
+        if (m_Validator->Validate(candidate.GetText()) == ValidationState::Invalid)
+            return;
+        m_Buffer = std::move(candidate);
+        AfterEdit(changed);
+    }
+    else
         AfterEdit(m_Buffer.ReplaceSelection(text));
 }
 
@@ -193,6 +234,7 @@ void TextBox::OnKey(Key key, bool down, bool, Modifiers modifiers)
 {
     if (!down)
         return;
+    const auto previous = m_Validator ? std::optional<TextBuffer>(m_Buffer) : std::nullopt;
     bool changed = false;
     if (modifiers.m_Control)
     {
@@ -230,9 +272,17 @@ void TextBox::OnKey(Key key, bool down, bool, Modifiers modifiers)
         m_Buffer.SetSelection(m_Buffer.GetCaret(), m_Buffer.GetCaret());
     else if (key == Key::Enter)
     {
-        const auto text = m_Buffer.GetText();
-        m_Submitted.Emit(text);
+        if (GetValidationState() == ValidationState::Acceptable)
+        {
+            const auto text = m_Buffer.GetText();
+            m_Submitted.Emit(text);
+        }
         return;
+    }
+    if (changed && previous && GetValidationState() == ValidationState::Invalid)
+    {
+        m_Buffer = *previous;
+        changed = false;
     }
     AfterEdit(changed);
 }

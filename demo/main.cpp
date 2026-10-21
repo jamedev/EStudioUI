@@ -2,6 +2,9 @@
 #include "WidgetGallery.h"
 #include "CanvasPrimitiveProbe.h"
 #include "CanvasProbe.h"
+#include "CanvasCurvesProbe.h"
+#include "PainterProbe.h"
+#include "InputControlsProbe.h"
 
 #include <EStudioUI/Button.h>
 #include <EStudioUI/TextBox.h>
@@ -361,6 +364,9 @@ class Demo
         VerifyGpuWorkload(m_Window, m_Assets, output);
         VerifyCanvasPrimitives(m_Assets, output, m_Window.IsHeadless());
         VerifyCanvas(m_Assets, output, m_Window.IsHeadless());
+        VerifyCanvasCurves(m_Assets, output, m_Window.IsHeadless());
+        VerifyPainter(m_Assets, output, m_Window.IsHeadless());
+        VerifyInputControls(m_Assets, output, m_Window.IsHeadless());
         m_Window.RenderFrame();
         std::ofstream report(output / "gpu-report.txt");
         report << "EStudioUI GPU integration: PASS\nDriver: " << gpu.GetDriverDescription()

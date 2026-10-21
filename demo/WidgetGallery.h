@@ -4,6 +4,7 @@
 #include "AnimationGallery.h"
 #include "RichCssGallery.h"
 #include "SketchGallery.h"
+#include "CustomWidgetGallery.h"
 
 #include <EStudioUI/ContextMenu.h>
 #include <EStudioUI/ListWidget.h>
@@ -112,5 +113,8 @@ class WidgetGallery
 
     //! Owns the infinite-canvas CAD sketching page.
     std::unique_ptr<SketchGallery> m_Sketch;
+
+    //! Owns the inheritance and composition examples.
+    std::unique_ptr<CustomWidgetGallery> m_CustomWidgets;
 };
 } // namespace EStudioUI

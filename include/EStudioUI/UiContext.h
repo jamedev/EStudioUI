@@ -92,6 +92,9 @@ class UiContext
     //! Shows one owned overlay, clamps it to the window, and saves keyboard focus.
     void ShowPopup(Widget& popup, Point anchor);
 
+    //! Owns a root popup until its logical owner is removed; expired popups are pruned before layout.
+    Widget& AddOwnedPopup(std::unique_ptr<Widget> popup, Widget& owner);
+
     //! Dismisses the active overlay and restores the previous live focus target.
     void ClosePopup();
 
@@ -153,6 +156,22 @@ class UiContext
     WidgetRef Observe(Widget* widget) const;
 
   private:
+    //! Removes popups whose composite-widget owners have been destroyed.
+    void PruneOwnedPopups();
+
+    //! Keeps popup ownership independent of composite-widget layout and clipping.
+    struct OwnedPopup
+    {
+        //! Observes the composite widget that requested the popup.
+        WidgetRef m_Owner;
+
+        //! Observes the popup owned directly by the root.
+        WidgetRef m_Popup;
+    };
+
+    //! Tracks popup lifetimes without extending their logical owners' lifetimes.
+    std::vector<OwnedPopup> m_OwnedPopups;
+
     //! Recursively resolves inherited and state-dependent CSS.
     void Restyle(Widget& widget, const Style* parent);
 

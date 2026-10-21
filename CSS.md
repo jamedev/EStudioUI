@@ -265,3 +265,23 @@ logical pixels. Dense-item transforms, layout declarations, pseudo-elements,
 and automatic transitions/keyframes are not applied. Hosted ordinary widgets
 retain the existing CSS behavior. See [CANVAS.md](CANVAS.md) for examples and the
 screen-space stroke versus world-space geometry contract.
+
+
+## Precision controls and custom painting (0.7)
+
+`numericinput`, `slider`, and `splittoolbutton` are ordinary selector identities.
+Numeric inputs compose `.numeric-editor`, `.numeric-increment`, and
+`.numeric-decrement` children; split controls compose `.split-primary` and
+`.split-arrow` tool buttons. They support the ordinary disabled/focus/hover states.
+Slider `grid-color` paints the groove, `selection-background-color` paints the
+active track and focused handle border, `color` paints the handle, and
+`border-color` paints its idle outline. No new parsing syntax is required.
+
+Dense arcs, splines, and paths use the same shared item CSS palette as lines;
+annotation text uses `color` and opacity while its font size is stored in world
+geometry. Groups can retain a style index per child and propagate selection.
+These remain dense model values, not full selector-tree widget instances.
+`PaintWidget` paints its ordinary CSS box before calling the application's
+content paint override. `Painter::SetBrush(const Style&)` can reuse typed computed
+fills/gradients/shadows; applications choose which style values affect their own
+painted shapes. See [CUSTOM_WIDGETS.md](CUSTOM_WIDGETS.md).

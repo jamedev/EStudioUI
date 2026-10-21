@@ -1,0 +1,5 @@
+Input controls GPU: PASS
+Driver: llvmpipe (LLVM 20.1.2, 256 bits) | 4.5 (Core Profile) Mesa 25.1.7-1ubuntu2~24.04.2
+2 complete retained/full RGBA comparisons, dark and light themes.
+Numeric commit/rollback, strict validators, keyboard/wheel, captured slider drag, CSS track/handle pixels,
+split action selection/repetition, explicit sizing across theme reload, zero-work idle frames.

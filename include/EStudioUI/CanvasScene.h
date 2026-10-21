@@ -3,6 +3,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <memory>
+#include <string>
 #include <vector>
 
 namespace EStudioUI
@@ -50,8 +51,16 @@ enum class CanvasPrimitive
 {
     Line,
     Rectangle,
-    Circle
+    Circle,
+    Arc,
+    Spline,
+    Path,
+    Text,
+    Group
 };
+
+struct CanvasGeometryData;
+struct CanvasGroupIndex;
 
 //! Analytic geometry; circles use A as their center and Radius as their radius.
 struct CanvasGeometry
@@ -68,12 +77,83 @@ struct CanvasGeometry
     //! Nonnegative circle radius; ignored for lines and rectangles.
     double m_Radius = 0;
 
-    //! Returns normalized finite bounds, rejecting invalid or overflowing geometry.
+    //! Shared immutable data; retaining and mutating an alias after submission is unsupported.
+    std::shared_ptr<const CanvasGeometryData> m_Data = nullptr;
+
+    //! Returns finite bounds including indexed edit handles (arc centers and spline controls).
     CanvasBounds Bounds() const;
 
     //! Compares geometry exactly.
-    bool operator==(const CanvasGeometry&) const = default;
+    bool operator==(const CanvasGeometry& other) const;
 };
+
+//! Optional payload; use factories and never mutate published data through a retained alias.
+struct CanvasGeometryData
+{
+    //! Path vertices or cubic controls, relative to the owning geometry's A coordinate.
+    std::vector<CanvasPoint> m_Points;
+
+    //! UTF-8 annotation content without embedded line breaks.
+    std::string m_Text;
+
+    //! Group geometry in coordinates relative to the owning group's A coordinate.
+    std::vector<CanvasGeometry> m_Children;
+
+    //! Optional child palette indices; an empty vector inherits the group style.
+    std::vector<std::uint32_t> m_ChildStyles;
+
+    //! Factory-built immutable child BVH; excluded from logical equality and persistence.
+    std::shared_ptr<const CanvasGroupIndex> m_GroupIndex;
+
+    //! Arc start angle in radians, clockwise in the y-down world.
+    double m_StartAngle = 0;
+
+    //! Signed arc sweep in radians, with magnitude no greater than one full turn.
+    double m_SweepAngle = 0;
+
+    //! Text size in world units, rendered inside the explicit annotation rectangle.
+    double m_FontSize = 18;
+
+    //! Whether a polyline joins its final vertex back to its first.
+    bool m_Closed = false;
+
+    //! Compares immutable payload contents, including nested geometry.
+    bool operator==(const CanvasGeometryData& other) const;
+};
+
+//! Creates a circular arc with a signed sweep of at most one full turn.
+CanvasGeometry MakeCanvasArc(CanvasPoint center, double radius, double startAngle, double sweepAngle);
+
+//! Creates a connected cubic Bezier chain from 3n+1 local control points.
+CanvasGeometry MakeCanvasSpline(CanvasPoint origin, std::vector<CanvasPoint> controls);
+
+//! Creates an open or closed stroked polyline from at least two local vertices.
+CanvasGeometry MakeCanvasPath(CanvasPoint origin, std::vector<CanvasPoint> points, bool closed = false);
+
+//! Creates UTF-8 text clipped to an explicit world rectangle.
+CanvasGeometry MakeCanvasText(CanvasBounds bounds, std::string text, double fontSize = 18);
+
+//! Creates an ordered group and immutable child BVH, with local geometry and optional child styles.
+CanvasGeometry MakeCanvasGroup(CanvasPoint origin, std::vector<CanvasGeometry> children,
+                               std::vector<std::uint32_t> styles = {});
+
+//! Flattens line/rectangle/circle/arc/spline/path to world vertices; false reports a bounded quality shortfall.
+bool FlattenGeometry(const CanvasGeometry& geometry, double tolerance, std::vector<CanvasPoint>& output,
+                     std::size_t maxPoints = 65536);
+
+//! Replaces output with geometric endpoints, centers, corners, and curve edit handles.
+void GeometrySnapPoints(const CanvasGeometry& geometry, std::vector<CanvasPoint>& output);
+
+//! Replaces output with snap points inside worldBounds, using nested group BVHs.
+void GeometrySnapPoints(const CanvasGeometry& geometry, const CanvasBounds& worldBounds,
+                        std::vector<CanvasPoint>& output);
+
+//! Replaces output with intersecting direct group-child indices in original painter order.
+void QueryCanvasGroup(const CanvasGeometry& geometry, const CanvasBounds& worldBounds,
+                      std::vector<std::size_t>& output);
+
+//! Estimates retained shared payload bytes, conservatively counting repeated nested references.
+std::size_t GeometryBytes(const CanvasGeometry& geometry);
 
 //! A stable scene-local identity; recycled slots receive a new generation.
 struct CanvasItemId
@@ -110,8 +190,8 @@ struct CanvasItem
     std::uint64_t m_Order = 0;
 };
 
-//! Returns distance to the segment, rectangle boundary, or circle circumference.
-double DistanceToItem(const CanvasGeometry& geometry, CanvasPoint point);
+//! Returns outline/text-box/nearest-child distance; splines use bounded adaptive tessellation.
+double DistanceToItem(const CanvasGeometry& geometry, CanvasPoint point, double curveTolerance = 0.01);
 
 //! Translates geometry in world units, rejecting invalid or overflowing results.
 CanvasGeometry TranslateGeometry(const CanvasGeometry& geometry, CanvasPoint delta);
@@ -158,6 +238,9 @@ class CanvasScene
 
     //! Returns the number of live items.
     std::size_t Size() const;
+
+    //! Reports retained scene storage bytes, excluding geometry payloads shared with clients.
+    std::size_t GetStorageBytes() const;
 
     //! Removes all items and invalidates every previously issued identity.
     void Clear();

@@ -2,12 +2,13 @@
 
 #include "FontFace.h"
 #include "TextBuffer.h"
+#include "InputValidator.h"
 #include "Widget.h"
 
 namespace EStudioUI
 {
 //! A single-line UTF-8 editor with grapheme selection and cached GPU text.
-class TextBox final : public Widget
+class TextBox : public Widget
 {
   public:
     //! Creates an editable text box.
@@ -16,11 +17,17 @@ class TextBox final : public Widget
     //! Returns whether the control participates in keyboard navigation.
     bool IsFocusable() const override;
 
-    //! Replaces the text, resetting editing history.
+    //! Replaces text and history; an attached validator rejects invalid candidates with invalid_argument.
     void SetText(std::string_view text);
 
     //! Returns valid UTF-8 text.
     const std::string& GetText() const;
+
+    //! Attaches an immutable policy without changing existing text; null disables validation.
+    void SetValidator(std::shared_ptr<const InputValidator> validator);
+
+    //! Returns the current policy classification, or Acceptable when no policy is attached.
+    ValidationState GetValidationState() const;
 
     //! Sets text shown when the editor is empty.
     void SetPlaceholder(std::string text);
@@ -31,7 +38,7 @@ class TextBox final : public Widget
     //! Returns whether editing is disabled independently of focus.
     bool IsReadOnly() const;
 
-    //! Limits input bytes without splitting graphemes.
+    //! Limits bytes without splitting graphemes; invalid truncation throws without changing text or history.
     void SetMaxBytes(std::size_t count);
 
     //! Selects the entire line.
@@ -43,7 +50,7 @@ class TextBox final : public Widget
     //! Returns the signal for programmatic or user text changes.
     Signal<const std::string&>& TextChanged();
 
-    //! Returns the signal emitted on Enter.
+    //! Returns the signal emitted on Enter only while validation is Acceptable.
     Signal<const std::string&>& Submitted();
 
     //! Reports focus loss after editor state is reset, useful for committing cells.
@@ -98,6 +105,9 @@ class TextBox final : public Widget
 
     //! Stores editing state independently of rendering.
     TextBuffer m_Buffer;
+
+    //! Validates complete candidate edits before their text or undo history becomes observable.
+    std::shared_ptr<const InputValidator> m_Validator;
 
     //! Stores empty-editor hint text.
     std::string m_Placeholder;

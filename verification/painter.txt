@@ -1,0 +1,4 @@
+Scoped GPU painter: PASS
+8 complete retained/full RGBA comparisons at 1x and 2x logical scale.
+Checked custom CSS background/border/padding/rounded clipping, local origin, transforms, nested clips,
+Save/Restore and exception isolation, shape opacity, cached paths/text, idle retained reuse.

@@ -1,7 +1,9 @@
 #include <EStudioUI/SketchWidget.h>
+#include <EStudioUI/UiContext.h>
 
 #include <algorithm>
 #include <cmath>
+#include <numbers>
 #include <stdexcept>
 
 namespace EStudioUI
@@ -66,6 +68,61 @@ bool SketchWidget::IsSnapping() const
     return m_Snapping;
 }
 
+void SketchWidget::SetAnnotationText(std::string text)
+{
+    MakeCanvasText({0, 0, 100, 100}, text, m_AnnotationFontSize);
+    m_AnnotationText = std::move(text);
+}
+
+const std::string& SketchWidget::GetAnnotationText() const
+{
+    return m_AnnotationText;
+}
+
+void SketchWidget::SetAnnotationFontSize(double size)
+{
+    if (!std::isfinite(size) || size <= 0 || size > 1000000)
+        throw std::invalid_argument("Annotation font size must be finite and between zero and one million.");
+    m_AnnotationFontSize = size;
+}
+
+double SketchWidget::GetAnnotationFontSize() const
+{
+    return m_AnnotationFontSize;
+}
+
+void SketchWidget::SetPathClosed(bool closed)
+{
+    m_PathClosed = closed;
+}
+
+bool SketchWidget::IsPathClosed() const
+{
+    return m_PathClosed;
+}
+
+std::size_t SketchWidget::GetPendingPointCount() const
+{
+    return m_ToolPoints.size();
+}
+
+bool SketchWidget::FinishTool()
+{
+    if (m_Tool != SketchTool::Path || m_ToolPoints.size() < (m_PathClosed ? 3U : 2U))
+        return false;
+    const auto origin = m_ToolPoints.front();
+    auto points = m_ToolPoints;
+    for (auto& point : points)
+    {
+        point.m_X -= origin.m_X;
+        point.m_Y -= origin.m_Y;
+    }
+    const bool changed = CommitShape(MakeCanvasPath(origin, std::move(points), m_PathClosed));
+    CancelGesture();
+    NotifyChanged();
+    return changed;
+}
+
 bool SketchWidget::Undo()
 {
     CancelGesture();
@@ -104,6 +161,7 @@ void SketchWidget::CancelGesture()
 {
     m_Gesture = Gesture::None;
     m_Moved = false;
+    m_ToolPoints.clear();
     SetPreview({});
     SetSelectionRectangle(std::nullopt);
 }
@@ -117,7 +175,7 @@ void SketchWidget::NotifyChanged()
 CanvasPoint SketchWidget::GesturePoint(const PointerEvent& event) const
 {
     auto point = ToWorld(event.m_Position);
-    if (m_Gesture == Gesture::Create && m_Snapping)
+    if ((m_Gesture == Gesture::Create || m_Gesture == Gesture::Points) && m_Snapping)
         point = m_Document->Snap(point, 8 / GetZoom(), 10, true);
     if (m_Gesture == Gesture::Create && m_Tool == SketchTool::Line && event.m_Modifiers.m_Shift)
     {
@@ -153,7 +211,9 @@ void SketchWidget::UpdatePreview(const PointerEvent& event)
     const auto dy = event.m_Position.m_Y - m_StartScreen.m_Y;
     m_Moved = m_Moved || dx * dx + dy * dy >= 9;
     m_Current = GesturePoint(event);
-    if (m_Gesture == Gesture::Create)
+    if (m_Gesture == Gesture::Points)
+        UpdatePointPreview(m_Current, event.m_Modifiers.m_Shift);
+    else if (m_Gesture == Gesture::Create)
         SetPreview({PreviewShape()}, m_PreviewStyle);
     else if (m_Gesture == Gesture::Marquee)
         SetSelectionRectangle(Between(m_Start, m_Current));
@@ -170,12 +230,133 @@ void SketchWidget::UpdatePreview(const PointerEvent& event)
     }
 }
 
+bool SketchWidget::IsPointTool() const
+{
+    return m_Tool == SketchTool::Arc || m_Tool == SketchTool::Spline || m_Tool == SketchTool::Path ||
+           m_Tool == SketchTool::Text;
+}
+
+CanvasGeometry SketchWidget::ArcFromPoints(CanvasPoint center, CanvasPoint start, CanvasPoint end, bool reverse) const
+{
+    const double startAngle = std::atan2(start.m_Y - center.m_Y, start.m_X - center.m_X);
+    const double endAngle = std::atan2(end.m_Y - center.m_Y, end.m_X - center.m_X);
+    constexpr double turn = 2 * std::numbers::pi;
+    double sweep = std::fmod(endAngle - startAngle + turn, turn);
+    if (reverse)
+        sweep -= turn;
+    if (std::abs(sweep) < 1e-8)
+        sweep = reverse ? -turn : turn;
+    return MakeCanvasArc(center, std::hypot(start.m_X - center.m_X, start.m_Y - center.m_Y), startAngle, sweep);
+}
+
+bool SketchWidget::CommitShape(const CanvasGeometry& geometry)
+{
+    return static_cast<bool>(m_Document->AddShape(geometry, m_ShapeStyle));
+}
+
+void SketchWidget::UpdatePointPreview(CanvasPoint point, bool reverseArc)
+{
+    std::vector<CanvasGeometry> preview;
+    if (m_Tool == SketchTool::Text)
+        return;
+    if (m_Tool == SketchTool::Arc)
+    {
+        if (m_ToolPoints.size() == 1)
+        {
+            const auto center = m_ToolPoints.front();
+            const double radius = std::hypot(point.m_X - center.m_X, point.m_Y - center.m_Y);
+            preview.push_back({CanvasPrimitive::Circle, center, {}, radius});
+            preview.push_back({CanvasPrimitive::Line, center, point});
+        }
+        else if (m_ToolPoints.size() == 2)
+        {
+            preview.push_back(ArcFromPoints(m_ToolPoints[0], m_ToolPoints[1], point, reverseArc));
+            preview.push_back({CanvasPrimitive::Line, m_ToolPoints[0], m_ToolPoints[1]});
+        }
+    }
+    else if (!m_ToolPoints.empty())
+    {
+        auto points = m_ToolPoints;
+        points.push_back(point);
+        preview.push_back(MakeCanvasPath({}, points, false));
+        if (m_Tool == SketchTool::Spline && points.size() == 4)
+            preview.push_back(MakeCanvasSpline({}, std::move(points)));
+        else if (m_Tool == SketchTool::Path && m_PathClosed && points.size() >= 3)
+            preview.push_back({CanvasPrimitive::Line, point, points.front()});
+    }
+    SetPreview(std::move(preview), m_PreviewStyle);
+}
+
+void SketchWidget::AcceptToolPoint(const PointerEvent& event)
+{
+    const auto point = GesturePoint(event);
+    if (m_Tool == SketchTool::Text)
+    {
+        if (!m_AnnotationText.empty())
+        {
+            double width =
+                std::max(m_AnnotationFontSize, static_cast<double>(m_AnnotationText.size()) * m_AnnotationFontSize);
+            double height = m_AnnotationFontSize * 1.5;
+            if (const auto* context = GetContext())
+            {
+                const auto layout =
+                    context->GetFont().Shape(m_AnnotationText, static_cast<float>(m_AnnotationFontSize));
+                width = std::max(m_AnnotationFontSize, static_cast<double>(layout.m_Width) + 4);
+                height = std::max(height, static_cast<double>(layout.m_Ascender - layout.m_Descender) + 4);
+            }
+            CommitShape(MakeCanvasText({point.m_X, point.m_Y, width, height}, m_AnnotationText, m_AnnotationFontSize));
+        }
+        CancelGesture();
+        NotifyChanged();
+        return;
+    }
+    if (m_Tool == SketchTool::Arc && m_ToolPoints.size() == 1 &&
+        std::hypot(point.m_X - m_ToolPoints[0].m_X, point.m_Y - m_ToolPoints[0].m_Y) * GetZoom() < 1)
+        return;
+    if (m_Tool == SketchTool::Path && m_ToolPoints.size() >= 4096)
+        return;
+    if (m_ToolPoints.empty() || m_ToolPoints.back() != point || m_Tool == SketchTool::Spline)
+        m_ToolPoints.push_back(point);
+    if (m_Tool == SketchTool::Arc && m_ToolPoints.size() == 3)
+    {
+        CommitShape(ArcFromPoints(m_ToolPoints[0], m_ToolPoints[1], m_ToolPoints[2], event.m_Modifiers.m_Shift));
+        CancelGesture();
+    }
+    else if (m_Tool == SketchTool::Spline && m_ToolPoints.size() == 4)
+    {
+        const auto origin = m_ToolPoints.front();
+        auto points = m_ToolPoints;
+        for (auto& controlPoint : points)
+        {
+            controlPoint.m_X -= origin.m_X;
+            controlPoint.m_Y -= origin.m_Y;
+        }
+        CommitShape(MakeCanvasSpline(origin, std::move(points)));
+        CancelGesture();
+    }
+    else if (m_Tool == SketchTool::Path && m_PressClicks >= 2 && m_ToolPoints.size() >= (m_PathClosed ? 3U : 2U))
+    {
+        FinishTool();
+        return;
+    }
+    else
+        UpdatePointPreview(point, event.m_Modifiers.m_Shift);
+    NotifyChanged();
+}
+
 void SketchWidget::OnPointerDown(const PointerEvent& event)
 {
     const WidgetRef lifetime(this);
     CanvasWidget::OnPointerDown(event);
     if (!lifetime.Get() || IsPanning())
         return;
+    if (IsPointTool())
+    {
+        m_Gesture = Gesture::Points;
+        m_PressClicks = event.m_Clicks;
+        m_StartScreen = event.m_Position;
+        return;
+    }
     CancelGesture();
     m_StartScreen = event.m_Position;
     m_Start = ToWorld(event.m_Position);
@@ -224,6 +405,11 @@ void SketchWidget::OnPointerUp(const PointerEvent& event)
     CanvasWidget::OnPointerUp(event);
     if (!lifetime.Get() || wasPanning || m_Gesture == Gesture::None)
         return;
+    if (m_Gesture == Gesture::Points)
+    {
+        AcceptToolPoint(event);
+        return;
+    }
     UpdatePreview(event);
     if (m_Moved)
     {
@@ -234,7 +420,7 @@ void SketchWidget::OnPointerUp(const PointerEvent& event)
             const bool hasArea = geometry.m_Kind != CanvasPrimitive::Rectangle ||
                                  (bounds.m_Width * GetZoom() >= 1 && bounds.m_Height * GetZoom() >= 1);
             if (hasArea && (bounds.m_Width + bounds.m_Height) * GetZoom() >= 1)
-                m_Document->Select(m_Document->AddShape(geometry, m_ShapeStyle));
+                CommitShape(geometry);
         }
         else if (m_Gesture == Gesture::Move)
             m_Document->MoveSelection({m_Current.m_X - m_Start.m_X, m_Current.m_Y - m_Start.m_Y});
@@ -257,6 +443,8 @@ void SketchWidget::OnKey(Key key, bool down, bool repeat, Modifiers modifiers)
         CancelGesture();
         NotifyChanged();
     }
+    else if (key == Key::Enter && m_Tool == SketchTool::Path)
+        FinishTool();
     else if (key == Key::Delete || key == Key::Backspace)
         DeleteSelection();
     else if (modifiers.m_Control && key == Key::Z)
@@ -280,6 +468,14 @@ void SketchWidget::OnKey(Key key, bool down, bool repeat, Modifiers modifiers)
             SetTool(SketchTool::Select);
         else if (key == Key::P)
             SetTool(SketchTool::Pan);
+        else if (key == Key::A)
+            SetTool(SketchTool::Arc);
+        else if (key == Key::B)
+            SetTool(SketchTool::Spline);
+        else if (key == Key::W)
+            SetTool(SketchTool::Path);
+        else if (key == Key::T)
+            SetTool(SketchTool::Text);
     }
 }
 

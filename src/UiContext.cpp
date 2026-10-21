@@ -370,6 +370,7 @@ void UiContext::Layout(Widget& widget, Rect bounds, Rect clip)
 
 void UiContext::Prepare(float width, float height)
 {
+    PruneOwnedPopups();
     width = std::max(1.0f, width);
     height = std::max(1.0f, height);
     if (width != m_Width || height != m_Height)
@@ -386,6 +387,17 @@ void UiContext::Prepare(float width, float height)
     if (!m_Dirty)
         return;
     Restyle(m_Root, nullptr);
+    const auto ownedPopup = std::find_if(m_OwnedPopups.begin(), m_OwnedPopups.end(), [this](const OwnedPopup& entry)
+                                         { return entry.m_Popup.Get() == m_Popup.Get(); });
+    if (m_Popup.Get() && ownedPopup != m_OwnedPopups.end())
+    {
+        const auto* owner = ownedPopup->m_Owner.Get();
+        if (!owner || !owner->IsVisible() || !owner->IsEnabled())
+        {
+            ClosePopup();
+            Restyle(m_Root, nullptr);
+        }
+    }
     if (auto* popup = m_Popup.Get(); popup && (!popup->IsVisible() || !popup->IsEnabled()))
     {
         ClosePopup();
@@ -776,7 +788,47 @@ void UiContext::ShowPopup(Widget& popup, Point anchor)
     popup.SetVisible(true);
     Invalidate();
     Prepare(m_Width, m_Height);
-    SetFocus(&popup);
+    if (auto* live = popupRef.Get(); live && m_Popup.Get() == live)
+        SetFocus(live);
+}
+
+Widget& UiContext::AddOwnedPopup(std::unique_ptr<Widget> popup, Widget& owner)
+{
+    if (!popup || owner.GetContext() != this)
+        throw std::invalid_argument("An owned popup requires a live owner attached to this context.");
+    popup->SetVisible(false);
+    popup->m_Overlay = true;
+    auto& result = m_Root.AddChild(std::move(popup));
+    m_OwnedPopups.push_back({WidgetRef(&owner), WidgetRef(&result)});
+    return result;
+}
+
+void UiContext::PruneOwnedPopups()
+{
+    std::vector<WidgetRef> expired;
+    bool close = false;
+    std::erase_if(m_OwnedPopups,
+                  [&](const OwnedPopup& entry)
+                  {
+                      auto* owner = entry.m_Owner.Get();
+                      if (!owner || owner->GetContext() != this)
+                      {
+                          expired.push_back(entry.m_Popup);
+                          return true;
+                      }
+                      if ((!owner->IsVisible() || !owner->IsEnabled()) && entry.m_Popup.Get() == m_Popup.Get())
+                          close = true;
+                      return !entry.m_Popup.Get();
+                  });
+    if (close)
+        ClosePopup();
+    for (const auto& reference : expired)
+    {
+        if (reference.Get() && m_Popup.Get() == reference.Get())
+            ClosePopup();
+        if (auto* popup = reference.Get())
+            m_Root.RemoveChild(*popup);
+    }
 }
 
 void UiContext::ClosePopup()

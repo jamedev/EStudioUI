@@ -1,4 +1,4 @@
-# Infinite canvas and sketcher / EStudioUI 0.6
+# Infinite canvas and sketcher / EStudioUI 0.7
 
 `CanvasScene` stores lightweight geometry in contiguous memory, with stable
 scene-local generational IDs and a balanced dynamic AABB BVH. `CanvasWidget`
@@ -18,6 +18,15 @@ Run the existing Windows dependency/build/test/launch command:
   select fully enclosed shapes. Shift adds/toggles selection.
 - Line (L), Rectangle (R), Circle (C): drag to create. Circle drag sets center and
   radius. Shift constrains a new line horizontally or vertically.
+- Arc (A): click center, start, and end; the signed sweep is also numerically editable.
+- Spline (B): click four cubic Bézier control points. Path (W): click vertices,
+  then Enter or double-click to finish; the inspector can close the path.
+- Text (T): click to insert the configured annotation. Its explicit bounds and
+  font size in world units can be edited in the inspector.
+- The precision inspector creates geometry from numbers and applies edits to a
+  selected item. Spline/path vertices are editable through an index and X/Y fields.
+  Set size changes line length or circle/arc radius; Horizontal/Vertical directly
+  align line endpoints. Group, Ungroup, and Duplicate are undoable commands.
 - Pan (P), Alt+drag, or Space+drag: move the view. Wheel zooms around the pointer.
 - Snapping uses nearby endpoints, midpoints, circle centers/cardinal points,
   then a ten-unit grid. Disable the Snap toggle for free placement.
@@ -32,7 +41,7 @@ oldest commands when needed. A group move/delete that cannot fit as one command
 returns false before modifying geometry or history. The 200,000-item group
 move/delete/undo path is covered by automated tests.
 
-This first sketcher edits geometric primitives. It does not yet solve dimensional,
+This sketcher edits geometric primitives and groups. It does not yet solve dimensional,
 coincident, tangent, or other parametric constraints, nor import/export DXF/STEP.
 The spatial index is independent of any future constraint solver.
 
@@ -83,7 +92,7 @@ holds a selector identity and precomputed normal/selected styles. CSS is parsed
 and selectors are resolved on registration/reload, never per item during painting
 or per animation tick. Unknown palette indices fall back to entry zero.
 
-Lines use `color`, `border-width`, and opacity; widths stay in logical screen pixels
+Lines, arcs, splines, and paths use `color`, `border-width`, and opacity; widths stay in logical screen pixels
 while geometry zooms. Rectangles/circles use background, border, radius (rectangles),
 gradients, shadows, and opacity. The normal/selected palette contributes a
 conservative stroke/shadow margin to viewport queries. Dense items do not run
@@ -130,3 +139,70 @@ Automated checks cover BVH queries against brute force after random edits,
 generational identity reuse, undo/redo, persistence, large-coordinate transforms,
 widget hosting, input gestures, 200k viewport submission, and real framebuffer
 comparison between retained and full redraw. No new runtime dependency is added.
+
+## Curves, annotations, and groups
+
+```cpp
+using namespace EStudioUI;
+auto arc = MakeCanvasArc({0, 0}, 50, 0, 1.5707963267948966);
+auto spline = MakeCanvasSpline({100, 0}, {{0, 0}, {20, -40}, {60, 40}, {80, 0}});
+auto path = MakeCanvasPath({0, 100}, {{0, 0}, {50, 0}, {30, 40}}, true);
+auto text = MakeCanvasText({10, 10, 160, 30}, "Plate A", 18);
+auto group = MakeCanvasGroup({200, 100}, {arc, spline, path, text});
+auto id = document.AddShape(group);
+// Document edits are undoable; direct CanvasScene edits intentionally bypass history.
+document.UpdateShape(id, TranslateGeometry(group, {10, 0}));
+```
+
+Angles are radians, clockwise in the y-down world; sweeps can be negative and
+cannot exceed one full turn. Indexed bounds conservatively include arc centers and spline control handles so
+snapping can discover them. Spline controls are local to the supplied origin
+and contain 3n+1 points for a connected cubic chain. Paths are stroked polylines,
+with an optional closing segment. Text is single-line UTF-8 and clipped to its
+explicit world rectangle; its world-size glyphs zoom with the canvas.
+
+A group owns local child geometry and optionally a matching vector of child
+palette indices. Without explicit child indices, children inherit the group's
+style. Selection styling propagates through the group. Groups have no paint layer; a
+leaf applies its complete style exactly once, so grouping does not multiply
+opacity. `MakeCanvasGroup` builds
+an immutable child BVH, so viewport queries and picking can descend only into
+nearby children. Editing a child creates a replacement group; translating a
+group reuses its payload/index. Group bounds and normal translations are O(1).
+
+Complex geometry is an immutable shared value. Use the `MakeCanvas*` factories;
+never mutate a payload through a retained non-const alias after publication.
+The model avoids a deep copy on every insertion. Raw payloads are validated and
+uncached groups fall back to recursive queries. The factories validate nesting,
+coordinates, text, and payload size before publication. Maximum group depth is
+32; curve payloads are limited to 65,536 points and annotations to 65,536 bytes.
+
+Adaptive curve flattening targets 0.35 logical pixels of error using zoom
+buckets. The cache uses local coordinates, preserving reuse across panning and
+movement. Curve/text caches retain at most 4,096 entries and an estimated 16 MiB
+combined; `GetCacheStats()` reports hits, misses, retained bytes, and quality
+budget exhaustion. Extremely complex curves have a bounded tessellation budget;
+its exhaustion can reduce geometric accuracy rather than allocate indefinitely.
+Strokes are batched analytic round-capped segments; translucent joins can overlap.
+General filled paths, dash patterns, and CAD-grade offset/stroke joins are not
+implemented. Annotations use cached shaped text and analytic GPU glyphs.
+
+## Document reuse and persistence
+
+`SketchDocument` is independent of OpenGL and windowing. `UpdateShape`,
+`DuplicateSelection`, `GroupSelection`, `UngroupSelection`, `SetHorizontal`,
+`SetLineLength`, and `SetCircleRadius` create bounded undoable commands. The
+geometry setters are direct edits, not persistent dimensional constraints.
+`SketchWidget` owns interaction previews and emits `Changed()` after its edits;
+when editing its document directly, call `SceneChanged()` and update application
+inspectors as appropriate. Selected group children are edited as a group or after
+ungrouping.
+
+Save writes `.esketch` version 2 with recursive geometry and child palette IDs;
+Load accepts both version 1 and version 2. Loading is transactional, with finite
+coordinate validation and aggregate caps of one million geometry nodes/control
+points and 16 MiB of annotation text. Stylesheet text, camera state, hosted widgets,
+selection, and command history are application state and are not serialized.
+Style IDs refer to the application's registered palette. Undo storage counts
+complex payloads and group indices conservatively against the existing 128 MiB
+budget.

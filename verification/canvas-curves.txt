@@ -1,0 +1,7 @@
+Canvas curves and annotations GPU: PASS
+Driver: llvmpipe (LLVM 20.1.2, 256 bits) | 4.5 (Core Profile) Mesa 25.1.7-1ubuntu2~24.04.2
+12 retained/full RGBA comparisons covering selection, group movement/culling, pan and zoom.
+Arc gaps, cubic midpoint, open paths, clipped shaped text, nested child CSS, idle caches.
+Grouping, nesting, and ungrouping preserve translucent leaf RGBA after clearing selection.
+200000 grouped arcs / visible child candidates 336 / recorded shapes 1872
+Curve entries 10 / text entries 1 / retained cache bytes 10983

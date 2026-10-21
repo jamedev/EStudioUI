@@ -4,7 +4,10 @@
 
 #include <algorithm>
 #include <cmath>
+#include <list>
+#include <map>
 #include <stdexcept>
+#include <unordered_map>
 
 namespace EStudioUI
 {
@@ -91,7 +94,179 @@ Color Alpha(Color color, float opacity)
 }
 } // namespace
 
-CanvasWidget::CanvasWidget() : Widget("canvas"), m_Scene(std::make_shared<CanvasScene>())
+struct CanvasWidget::PaintCache
+{
+    static constexpr std::size_t s_MaxEntries = 2048;
+    static constexpr std::size_t s_MaxBytes = 8 * 1024 * 1024;
+    static constexpr std::size_t s_MaxIdentities = 65536;
+
+    struct CurveKey
+    {
+        const CanvasGeometryData* m_Data = nullptr;
+        CanvasPrimitive m_Kind = CanvasPrimitive::Arc;
+        double m_Radius = 0;
+        int m_ZoomBucket = 0;
+
+        bool operator==(const CurveKey&) const = default;
+    };
+
+    struct CurveHash
+    {
+        std::size_t operator()(const CurveKey& key) const
+        {
+            return std::hash<const void*>{}(key.m_Data) ^ (std::hash<double>{}(key.m_Radius) << 1) ^
+                   (std::hash<int>{}(key.m_ZoomBucket) << 2) ^ static_cast<std::size_t>(key.m_Kind);
+        }
+    };
+
+    struct TextKey
+    {
+        const CanvasGeometryData* m_Data = nullptr;
+        const FontFace* m_Font = nullptr;
+
+        bool operator==(const TextKey&) const = default;
+    };
+
+    struct TextHash
+    {
+        std::size_t operator()(const TextKey& key) const
+        {
+            return std::hash<const void*>{}(key.m_Data) ^ (std::hash<const void*>{}(key.m_Font) << 1);
+        }
+    };
+
+    struct CurveEntry
+    {
+        std::shared_ptr<const CanvasGeometryData> m_Data;
+        std::vector<CanvasPoint> m_Points;
+        std::size_t m_Bytes = 0;
+        std::list<CurveKey>::iterator m_Recency;
+    };
+
+    struct TextEntry
+    {
+        std::shared_ptr<const CanvasGeometryData> m_Data;
+        TextLayout m_Layout;
+        std::size_t m_Bytes = 0;
+        std::list<TextKey>::iterator m_Recency;
+    };
+
+    // Equality compares the complete original child path; hashes never become paint IDs.
+    // The monotonically allocated value is not reused after an LRU eviction.
+    using IdentityKey = std::pair<std::uint64_t, std::vector<std::size_t>>;
+
+    struct IdentityEntry
+    {
+        std::uint64_t m_Value = 0;
+        std::list<IdentityKey>::iterator m_Recency;
+    };
+
+    CanvasCacheStats m_Stats;
+    std::size_t m_CurveBytes = 0;
+    std::size_t m_TextBytes = 0;
+    std::unordered_map<CurveKey, CurveEntry, CurveHash> m_Curves;
+    std::list<CurveKey> m_CurveRecency;
+    std::unordered_map<TextKey, TextEntry, TextHash> m_Text;
+    std::list<TextKey> m_TextRecency;
+    std::map<IdentityKey, IdentityEntry> m_Identities;
+    std::list<IdentityKey> m_IdentityRecency;
+    std::uint64_t m_NextIdentity = 1;
+    std::vector<CanvasPoint> m_CurveScratch;
+    TextLayout m_TextScratch;
+
+    const std::vector<CanvasPoint>& Curve(const CanvasGeometry& geometry, double zoom)
+    {
+        // Round upwards so the cached error is never larger than 0.35 logical pixels.
+        // A quarter-octave bucket avoids tessellating every wheel/animation frame.
+        const int bucket = static_cast<int>(std::ceil(std::log2(zoom) * 4));
+        const CurveKey key{geometry.m_Data.get(), geometry.m_Kind, geometry.m_Radius,
+                           geometry.m_Kind == CanvasPrimitive::Path ? 0 : bucket};
+        if (auto found = m_Curves.find(key); found != m_Curves.end())
+        {
+            ++m_Stats.m_CurveHits;
+            m_CurveRecency.splice(m_CurveRecency.begin(), m_CurveRecency, found->second.m_Recency);
+            return found->second.m_Points;
+        }
+        ++m_Stats.m_CurveMisses;
+        auto local = geometry;
+        local.m_A = {};
+        local.m_B = {};
+        if (!FlattenGeometry(local, 0.35 / std::exp2(static_cast<double>(bucket) / 4), m_CurveScratch))
+            ++m_Stats.m_LimitedCurves;
+        const auto bytes = GeometryBytes(local) + m_CurveScratch.capacity() * sizeof(CanvasPoint) + sizeof(CurveEntry) +
+                           sizeof(CurveKey) * 2 + 128;
+        if (bytes > s_MaxBytes)
+            return m_CurveScratch;
+        while (!m_Curves.empty() && (m_Curves.size() >= s_MaxEntries || m_CurveBytes + bytes > s_MaxBytes))
+        {
+            const auto oldest = m_CurveRecency.back();
+            m_CurveBytes -= m_Curves.at(oldest).m_Bytes;
+            m_Curves.erase(oldest);
+            m_CurveRecency.pop_back();
+        }
+        m_CurveRecency.push_front(key);
+        auto [entry, inserted] = m_Curves.emplace(
+            key, CurveEntry{geometry.m_Data, std::move(m_CurveScratch), bytes, m_CurveRecency.begin()});
+        (void)inserted;
+        m_CurveBytes += bytes;
+        return entry->second.m_Points;
+    }
+
+    const TextLayout& Text(const CanvasGeometry& geometry, FontFace& font)
+    {
+        const TextKey key{geometry.m_Data.get(), &font};
+        if (auto found = m_Text.find(key); found != m_Text.end())
+        {
+            ++m_Stats.m_TextHits;
+            m_TextRecency.splice(m_TextRecency.begin(), m_TextRecency, found->second.m_Recency);
+            return found->second.m_Layout;
+        }
+        ++m_Stats.m_TextMisses;
+        // Shape at a fixed size, then scale the resolution-independent glyph outlines on the GPU.
+        m_TextScratch = font.Shape(geometry.m_Data->m_Text, 16);
+        const auto bytes = GeometryBytes(geometry) + m_TextScratch.m_Glyphs.capacity() * sizeof(PositionedGlyph) +
+                           m_TextScratch.m_Offsets.capacity() * sizeof(std::size_t) +
+                           m_TextScratch.m_Carets.capacity() * sizeof(float) + sizeof(TextEntry) + sizeof(TextKey) * 2 +
+                           128;
+        if (bytes > s_MaxBytes)
+            return m_TextScratch;
+        while (!m_Text.empty() && (m_Text.size() >= s_MaxEntries || m_TextBytes + bytes > s_MaxBytes))
+        {
+            const auto oldest = m_TextRecency.back();
+            m_TextBytes -= m_Text.at(oldest).m_Bytes;
+            m_Text.erase(oldest);
+            m_TextRecency.pop_back();
+        }
+        m_TextRecency.push_front(key);
+        auto [entry, inserted] =
+            m_Text.emplace(key, TextEntry{geometry.m_Data, std::move(m_TextScratch), bytes, m_TextRecency.begin()});
+        (void)inserted;
+        m_TextBytes += bytes;
+        return entry->second.m_Layout;
+    }
+
+    std::uint64_t Identity(std::uint64_t root, const std::vector<std::size_t>& path)
+    {
+        IdentityKey key{root, path};
+        if (const auto found = m_Identities.find(key); found != m_Identities.end())
+        {
+            m_IdentityRecency.splice(m_IdentityRecency.begin(), m_IdentityRecency, found->second.m_Recency);
+            return found->second.m_Value;
+        }
+        if (m_Identities.size() >= s_MaxIdentities)
+        {
+            m_Identities.erase(m_IdentityRecency.back());
+            m_IdentityRecency.pop_back();
+        }
+        m_IdentityRecency.push_front(key);
+        const auto identity = m_NextIdentity++;
+        m_Identities.emplace(std::move(key), IdentityEntry{identity, m_IdentityRecency.begin()});
+        return identity;
+    }
+};
+
+CanvasWidget::CanvasWidget()
+    : Widget("canvas"), m_Scene(std::make_shared<CanvasScene>()), m_PaintCache(std::make_unique<PaintCache>())
 {
     SetWidth(SizeRule::Fill());
     SetHeight(SizeRule::Fill());
@@ -100,6 +275,8 @@ CanvasWidget::CanvasWidget() : Widget("canvas"), m_Scene(std::make_shared<Canvas
     m_ItemStyleSheet.Parse(DefaultItemCss, error);
     RegisterItemStyle("canvas-item");
 }
+
+CanvasWidget::~CanvasWidget() = default;
 
 void CanvasWidget::SetScene(std::shared_ptr<CanvasScene> scene)
 {
@@ -366,6 +543,15 @@ std::size_t CanvasWidget::GetQueryVisitCount() const
     return m_QueryVisits;
 }
 
+CanvasCacheStats CanvasWidget::GetCacheStats() const
+{
+    auto stats = m_PaintCache->m_Stats;
+    stats.m_CurveEntries = m_PaintCache->m_Curves.size();
+    stats.m_TextEntries = m_PaintCache->m_Text.size();
+    stats.m_Bytes = m_PaintCache->m_CurveBytes + m_PaintCache->m_TextBytes;
+    return stats;
+}
+
 Signal<>& CanvasWidget::ViewChanged()
 {
     return m_ViewChanged;
@@ -376,27 +562,75 @@ bool CanvasWidget::IsFocusable() const
     return true;
 }
 
-void CanvasWidget::DrawGeometry(Renderer& renderer, const CanvasGeometry& geometry, const Style& style, Rect clip,
-                                float opacity) const
+void CanvasWidget::DrawSegment(Renderer& renderer, CanvasPoint from, CanvasPoint to, const Style& style, Rect clip,
+                               float opacity, CanvasPoint origin) const
 {
+    const auto content = GetContentBounds();
+    // Subtract the camera before adding local curve coordinates, preserving small
+    // features when both the curve origin and the camera are far from world zero.
+    const CanvasPoint relativeOrigin{origin.m_X - m_Center.m_X, origin.m_Y - m_Center.m_Y};
+    from = {relativeOrigin.m_X + from.m_X, relativeOrigin.m_Y + from.m_Y};
+    to = {relativeOrigin.m_X + to.m_X, relativeOrigin.m_Y + to.m_Y};
+    const double centerX = content.m_X + content.m_Width * 0.5;
+    const double centerY = content.m_Y + content.m_Height * 0.5;
+    const double reach = style.m_BorderWidth * 0.5 + 2;
+    if (ClipLine(from, to,
+                 {(clip.m_X - reach - centerX) / m_Zoom, (clip.m_Y - reach - centerY) / m_Zoom,
+                  (clip.m_Width + 2 * reach) / m_Zoom, (clip.m_Height + 2 * reach) / m_Zoom}))
+        renderer.DrawLine(
+            {static_cast<float>(from.m_X * m_Zoom + centerX), static_cast<float>(from.m_Y * m_Zoom + centerY)},
+            {static_cast<float>(to.m_X * m_Zoom + centerX), static_cast<float>(to.m_Y * m_Zoom + centerY)},
+            Alpha(style.m_Color, opacity), style.m_BorderWidth, clip);
+}
+
+void CanvasWidget::DrawGeometry(Renderer& renderer, FontFace& font, const CanvasGeometry& geometry, const Style& style,
+                                Rect clip, float opacity, bool selected, std::uint64_t rootIdentity,
+                                std::vector<std::size_t>& childPath) const
+{
+    if (geometry.m_Kind == CanvasPrimitive::Group)
+    {
+        if (!geometry.m_Data)
+            return;
+        std::vector<std::size_t> visibleChildren;
+        QueryCanvasGroup(geometry, m_CachedQuery, visibleChildren);
+        m_PaintCache->m_Stats.m_GroupCandidates += visibleChildren.size();
+        for (const auto index : visibleChildren)
+        {
+            const auto& data = *geometry.m_Data;
+            const auto child = TranslateGeometry(data.m_Children[index], geometry.m_A);
+            const Style* childStyle = &style;
+            if (!data.m_ChildStyles.empty())
+            {
+                const auto palette = data.m_ChildStyles[index];
+                childStyle = &m_Palette[palette < m_Palette.size() ? palette : 0].m_Styles[selected ? 1 : 0];
+            }
+            childPath.push_back(index);
+            DrawGeometry(renderer, font, child, *childStyle, clip, opacity, selected, rootIdentity, childPath);
+            childPath.pop_back();
+        }
+        return;
+    }
+    // Groups have no paint layer: their style is only a fallback for children.
+    // Apply a complete leaf style once, regardless of the number of enclosing groups.
     if (!style.m_Displayed || style.m_Opacity <= 0)
         return;
+    if (!childPath.empty())
+        renderer.SetPaintIdentity(reinterpret_cast<std::uintptr_t>(m_PaintCache.get()),
+                                  m_PaintCache->Identity(rootIdentity, childPath));
     opacity *= style.m_Opacity;
     if (geometry.m_Kind == CanvasPrimitive::Line)
     {
-        const auto content = GetContentBounds();
-        CanvasPoint from{geometry.m_A.m_X - m_Center.m_X, geometry.m_A.m_Y - m_Center.m_Y};
-        CanvasPoint to{geometry.m_B.m_X - m_Center.m_X, geometry.m_B.m_Y - m_Center.m_Y};
-        const double centerX = content.m_X + content.m_Width * 0.5;
-        const double centerY = content.m_Y + content.m_Height * 0.5;
-        const double reach = style.m_BorderWidth * 0.5 + 2;
-        if (ClipLine(from, to,
-                     {(clip.m_X - reach - centerX) / m_Zoom, (clip.m_Y - reach - centerY) / m_Zoom,
-                      (clip.m_Width + 2 * reach) / m_Zoom, (clip.m_Height + 2 * reach) / m_Zoom}))
-            renderer.DrawLine(
-                {static_cast<float>(from.m_X * m_Zoom + centerX), static_cast<float>(from.m_Y * m_Zoom + centerY)},
-                {static_cast<float>(to.m_X * m_Zoom + centerX), static_cast<float>(to.m_Y * m_Zoom + centerY)},
-                Alpha(style.m_Color, opacity), style.m_BorderWidth, clip);
+        DrawSegment(renderer, geometry.m_A, geometry.m_B, style, clip, opacity);
+        return;
+    }
+    if (geometry.m_Kind == CanvasPrimitive::Arc || geometry.m_Kind == CanvasPrimitive::Spline ||
+        geometry.m_Kind == CanvasPrimitive::Path)
+    {
+        if (!geometry.m_Data)
+            return;
+        const auto& points = m_PaintCache->Curve(geometry, m_Zoom);
+        for (std::size_t index = 1; index < points.size(); ++index)
+            DrawSegment(renderer, points[index - 1], points[index], style, clip, opacity, geometry.m_A);
         return;
     }
     if (geometry.m_Kind == CanvasPrimitive::Circle)
@@ -412,10 +646,31 @@ void CanvasWidget::DrawGeometry(Renderer& renderer, const CanvasGeometry& geomet
     const auto position = ToScreen({bounds.m_X, bounds.m_Y});
     const double width = bounds.m_Width * m_Zoom;
     const double height = bounds.m_Height * m_Zoom;
-    if (std::isfinite(position.m_X) && std::isfinite(position.m_Y) && std::isfinite(width) && std::isfinite(height) &&
-        width <= std::numeric_limits<float>::max() * 0.25 && height <= std::numeric_limits<float>::max() * 0.25)
-        renderer.DrawBox({position.m_X, position.m_Y, static_cast<float>(width), static_cast<float>(height)}, style,
-                         clip, opacity);
+    if (!std::isfinite(position.m_X) || !std::isfinite(position.m_Y) || !std::isfinite(width) ||
+        !std::isfinite(height) || width > std::numeric_limits<float>::max() * 0.25 ||
+        height > std::numeric_limits<float>::max() * 0.25)
+        return;
+    const Rect screenBounds{position.m_X, position.m_Y, static_cast<float>(width), static_cast<float>(height)};
+    if (geometry.m_Kind == CanvasPrimitive::Text)
+    {
+        if (!geometry.m_Data || geometry.m_Data->m_Text.empty() || width <= 0 || height <= 0)
+            return;
+        const double scale = geometry.m_Data->m_FontSize * m_Zoom / 16;
+        if (!std::isfinite(scale) || scale <= 0 || scale > std::numeric_limits<float>::max() * 0.25 ||
+            width / scale > std::numeric_limits<float>::max() * 0.25 ||
+            height / scale > std::numeric_limits<float>::max() * 0.25)
+            return;
+        const auto& layout = m_PaintCache->Text(geometry, font);
+        renderer.PushState();
+        renderer.PushClip(screenBounds.Intersect(clip));
+        renderer.PushState({static_cast<float>(scale), 0, 0, static_cast<float>(scale), position.m_X, position.m_Y});
+        renderer.DrawText(layout, {0, layout.m_Ascender}, Alpha(style.m_Color, opacity),
+                          {0, 0, static_cast<float>(width / scale), static_cast<float>(height / scale)});
+        renderer.PopState();
+        renderer.PopState();
+        return;
+    }
+    renderer.DrawBox(screenBounds, style, clip, opacity);
 }
 
 void CanvasWidget::DrawGrid(Renderer& renderer, Rect clip, float opacity) const
@@ -469,6 +724,8 @@ void CanvasWidget::Paint(Renderer& renderer, FontFace& font, double time, float 
     if (m_GridVisible)
         DrawGrid(renderer, clip, opacity);
     UpdateVisibleItems();
+    m_PaintCache->m_Stats.m_GroupCandidates = 0;
+    std::vector<std::size_t> childPath;
     renderer.PushState();
     for (const auto id : m_VisibleItems)
     {
@@ -478,13 +735,22 @@ void CanvasWidget::Paint(Renderer& renderer, FontFace& font, double time, float 
         renderer.SetPaintIdentity(reinterpret_cast<std::uintptr_t>(this),
                                   (static_cast<std::uint64_t>(id.m_Generation) << 32) | id.m_Index);
         const auto& palette = m_Palette[item->m_Style < m_Palette.size() ? item->m_Style : 0];
-        DrawGeometry(renderer, item->m_Geometry, palette.m_Styles[item->m_Selected ? 1 : 0], clip, opacity);
+        DrawGeometry(renderer, font, item->m_Geometry, palette.m_Styles[item->m_Selected ? 1 : 0], clip, opacity,
+                     item->m_Selected, (static_cast<std::uint64_t>(id.m_Generation) << 32) | id.m_Index, childPath);
     }
     renderer.PopState();
     const auto& previewStyle = m_Palette[m_PreviewStyle < m_Palette.size() ? m_PreviewStyle : 0].m_Styles[1];
-    for (const auto& geometry : m_Preview)
-        if (geometry.Bounds().Intersects(m_CachedQuery))
-            DrawGeometry(renderer, geometry, previewStyle, clip, opacity * 0.7f);
+    renderer.PushState();
+    for (std::size_t index = 0; index < m_Preview.size(); ++index)
+    {
+        const auto& geometry = m_Preview[index];
+        if (!geometry.Bounds().Intersects(m_CachedQuery))
+            continue;
+        // Preview roots occupy the generation-zero namespace, disjoint from all live scene IDs.
+        renderer.SetPaintIdentity(reinterpret_cast<std::uintptr_t>(&m_Preview), index);
+        DrawGeometry(renderer, font, geometry, previewStyle, clip, opacity * 0.7f, true, index, childPath);
+    }
+    renderer.PopState();
     if (m_SelectionRectangle)
     {
         Style style;

@@ -5,7 +5,7 @@
 namespace EStudioUI
 {
 //! A compact command button with optional persistent checked state.
-class ToolButton final : public Button
+class ToolButton : public Button
 {
   public:
     //! Creates a UTF-8 text/icon command button.

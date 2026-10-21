@@ -14,6 +14,11 @@ ToolButton& ToolBar::AddButton(std::string text)
     return Add<ToolButton>(std::move(text));
 }
 
+SplitToolButton& ToolBar::AddSplitButton(std::string text)
+{
+    return Add<SplitToolButton>(std::move(text));
+}
+
 Widget& ToolBar::AddSeparator()
 {
     auto& separator = Add<Widget>("separator");
@@ -28,8 +33,16 @@ bool ToolBar::OnKeyPreview(Key key, bool down, bool, Modifiers modifiers)
         return false;
     std::vector<Widget*> buttons;
     for (auto& child : GetChildren())
-        if (dynamic_cast<ToolButton*>(child.get()) && child->IsEnabled() && child->IsVisible())
+    {
+        if (!child->IsEnabled() || !child->IsVisible())
+            continue;
+        if (dynamic_cast<ToolButton*>(child.get()))
             buttons.push_back(child.get());
+        else if (dynamic_cast<SplitToolButton*>(child.get()))
+            for (const auto& part : child->GetChildren())
+                if (dynamic_cast<ToolButton*>(part.get()) && part->IsEnabled() && part->IsVisible())
+                    buttons.push_back(part.get());
+    }
     const auto current = std::find(buttons.begin(), buttons.end(), GetContext()->GetFocus());
     if (current == buttons.end() || buttons.empty())
         return false;

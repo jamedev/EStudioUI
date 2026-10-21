@@ -259,3 +259,30 @@ in-progress gestures as transient previews and commits one command at release.
 Sparse hosted widget trees remain ordinary owned children with normal input and
 CSS; they are an overlay, not the representation of dense geometric objects.
 See [CANVAS.md](CANVAS.md) for API contracts, format, and scaling boundaries.
+
+
+## Reusable geometry, inputs, and custom drawing (0.7)
+
+`CanvasGeometry` keeps simple primitives inline and complex payloads behind
+immutable shared values. Curve controls and nested group children use local
+coordinates. Group factories build private BVHs; nested queries preserve child
+painter order without traversing every child. Adaptive curve and shaped-text
+caches use bounded memory, stable immutable payload identities, and local
+coordinates. Cache counters expose reuse and tessellation quality limits.
+See [CANVAS.md](CANVAS.md) for model and persistence contracts.
+
+`InputValidator` classifies complete candidate strings before editor mutation.
+Invalid edits cannot damage selection or undo history; intermediate text remains
+editable. `NumericInput` composes a text box and two commands, committing finite
+values on Enter/focus loss. `Slider` maps captured pointer input and keyboard
+commands into bounded scalar values. `SplitToolButton` composes commands with a
+context-owned root popup. Popup ownership observes the logical control and prunes
+expired owners during preparation, avoiding sibling deletion inside destructors.
+
+`PaintWidget` provides a content-local `PaintContent(Painter&)` override.
+`Painter` is a scoped facade over the existing ordered GPU command stream. Its
+state stack restores transforms and clips even during exception unwinding.
+`PainterPath` caches bounded adaptive flattening for stroked lines/arcs/Béziers.
+Custom widgets use normal ownership, styles, focus, invalidation, retained damage,
+and input dispatch; there is no separate GL context or renderer per control.
+See [CUSTOM_WIDGETS.md](CUSTOM_WIDGETS.md) and [INPUT_CONTROLS.md](INPUT_CONTROLS.md).

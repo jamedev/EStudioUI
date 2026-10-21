@@ -12,11 +12,6 @@ namespace
 {
 constexpr auto s_None = std::numeric_limits<std::uint32_t>::max();
 
-bool Finite(CanvasPoint point)
-{
-    return std::isfinite(point.m_X) && std::isfinite(point.m_Y);
-}
-
 void Validate(const CanvasBounds& bounds)
 {
     if (!std::isfinite(bounds.m_X) || !std::isfinite(bounds.m_Y) || !std::isfinite(bounds.m_Width) ||
@@ -38,23 +33,6 @@ long double Perimeter(const CanvasBounds& bounds)
     return static_cast<long double>(bounds.m_Width) + static_cast<long double>(bounds.m_Height);
 }
 
-double SegmentDistance(CanvasPoint a, CanvasPoint b, CanvasPoint point)
-{
-    const auto dx = b.m_X - a.m_X;
-    const auto dy = b.m_Y - a.m_Y;
-    const auto scale = std::max(std::abs(dx), std::abs(dy));
-    if (scale == 0)
-        return std::hypot(point.m_X - a.m_X, point.m_Y - a.m_Y);
-    const auto ux = dx / scale;
-    const auto uy = dy / scale;
-    const auto px = (point.m_X - a.m_X) / scale;
-    const auto py = (point.m_Y - a.m_Y) / scale;
-    const auto projection = std::clamp((px * ux + py * uy) / (ux * ux + uy * uy), 0.0, 1.0);
-    if (std::isnan(projection))
-        return std::hypot(point.m_X - a.m_X, point.m_Y - a.m_Y);
-    return std::hypot(point.m_X - (a.m_X + dx * projection), point.m_Y - (a.m_Y + dy * projection));
-}
-
 template <typename T> void EnsureCapacity(std::vector<T>& storage, std::size_t required)
 {
     if (storage.capacity() < required)
@@ -73,58 +51,9 @@ bool CanvasBounds::Intersects(const CanvasBounds& other) const
            m_Y + m_Height >= other.m_Y;
 }
 
-CanvasBounds CanvasGeometry::Bounds() const
-{
-    if (!Finite(m_A) || !Finite(m_B) || !std::isfinite(m_Radius) || m_Radius < 0)
-        throw std::invalid_argument("Canvas geometry must have finite coordinates and a nonnegative radius");
-    CanvasBounds bounds;
-    if (m_Kind == CanvasPrimitive::Circle)
-        bounds = {m_A.m_X - m_Radius, m_A.m_Y - m_Radius, 2 * m_Radius, 2 * m_Radius};
-    else if (m_Kind == CanvasPrimitive::Line || m_Kind == CanvasPrimitive::Rectangle)
-        bounds = {std::min(m_A.m_X, m_B.m_X), std::min(m_A.m_Y, m_B.m_Y), std::abs(m_B.m_X - m_A.m_X),
-                  std::abs(m_B.m_Y - m_A.m_Y)};
-    else
-        throw std::invalid_argument("Unknown canvas primitive");
-    Validate(bounds);
-    return bounds;
-}
-
 CanvasItemId::operator bool() const
 {
     return m_Generation != 0;
-}
-
-double DistanceToItem(const CanvasGeometry& geometry, CanvasPoint point)
-{
-    const auto bounds = geometry.Bounds();
-    if (!Finite(point))
-        throw std::invalid_argument("Canvas hit-test point must be finite");
-    if (geometry.m_Kind == CanvasPrimitive::Circle)
-        return std::abs(std::hypot(point.m_X - geometry.m_A.m_X, point.m_Y - geometry.m_A.m_Y) - geometry.m_Radius);
-    if (geometry.m_Kind == CanvasPrimitive::Line)
-        return SegmentDistance(geometry.m_A, geometry.m_B, point);
-    const auto right = bounds.m_X + bounds.m_Width;
-    const auto bottom = bounds.m_Y + bounds.m_Height;
-    if (bounds.Contains(point))
-        return std::min({point.m_X - bounds.m_X, right - point.m_X, point.m_Y - bounds.m_Y, bottom - point.m_Y});
-    return std::hypot(std::max({bounds.m_X - point.m_X, 0.0, point.m_X - right}),
-                      std::max({bounds.m_Y - point.m_Y, 0.0, point.m_Y - bottom}));
-}
-
-CanvasGeometry TranslateGeometry(const CanvasGeometry& geometry, CanvasPoint delta)
-{
-    if (!Finite(delta))
-        throw std::invalid_argument("Canvas displacement must be finite");
-    auto result = geometry;
-    result.m_A.m_X += delta.m_X;
-    result.m_A.m_Y += delta.m_Y;
-    if (geometry.m_Kind != CanvasPrimitive::Circle)
-    {
-        result.m_B.m_X += delta.m_X;
-        result.m_B.m_Y += delta.m_Y;
-    }
-    result.Bounds();
-    return result;
 }
 
 struct CanvasScene::Impl
@@ -575,6 +504,12 @@ std::uint64_t CanvasScene::GetRevision() const
 std::size_t CanvasScene::GetLastQueryVisits() const
 {
     return m_Impl->m_QueryVisits;
+}
+
+std::size_t CanvasScene::GetStorageBytes() const
+{
+    return sizeof(CanvasScene) + sizeof(Impl) + m_Impl->m_Items.capacity() * sizeof(CanvasItem) +
+           m_Impl->m_Slots.capacity() * sizeof(Impl::Slot) + m_Impl->m_Nodes.capacity() * sizeof(Impl::Node);
 }
 
 CanvasBounds CanvasScene::GetBounds() const

@@ -92,7 +92,7 @@ textbox:disabled { opacity: 0.5; }
 #gallery { height: 1fr; }
 tabwidget { gap: 10px; }
 tabbar { gap: 4px; }
-tabbar toolbutton { height: 40px; padding: 8px 18px; border-radius: 8px; }
+tabbar toolbutton { height: 40px; padding: 8px 13px; border-radius: 8px; }
 tabbar .selected { background: #5066d9; color: #ffffff; border-color: #5066d9; }
 tabpage { gap: 12px; }
 toolbar { padding: 6px; gap: 6px; background: #ffffff; border: 1px solid #c5cddd; border-radius: 8px; }
@@ -150,3 +150,20 @@ canvas {
   grid-color: rgba(54, 81, 107, 0.15);
   color: #537796;
 }
+
+/* Scalar inputs and composed tool choosers reuse ordinary widget styles. */
+numericinput { gap: 3px; }
+numericinput textbox { height: 34px; padding: 5px 7px; font-size: 13px; border-radius: 5px; }
+numericinput toolbutton { height: 34px; padding: 4px; }
+splittoolbutton { gap: 0; }
+splittoolbutton .split-primary { border-radius: 5px; }
+splittoolbutton .split-arrow { padding: 4px; border-radius: 5px; }
+slider { height: 28px; padding: 3px; color: #ffffff; border-color: #9aacc3; grid-color: #bdcbe0; selection-background-color: #23896f; }
+slider:disabled { opacity: 0.4; }
+demo-dial { background: #e7eef8; border: 1px solid #9aacc3; border-radius: 18px; padding: 12px; selection-background-color: #23896f; color: #ffffff; }
+demo-dial:focus { border-color: #23896f; }
+labeled-number { gap: 8px; }
+#sketch-inspector { padding: 8px; }
+#sketch-inspector textbox, #sketch-inspector toolbutton { height: 28px; padding: 3px 5px; font-size: 12px; }
+#sketch-inspector label { font-size: 12px; }
+#sketch-files textbox, .sketch-note textbox { height: 30px; padding: 5px 8px; }

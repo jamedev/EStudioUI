@@ -1,0 +1,200 @@
+Start testing: Oct 21 14:56 PDT
+----------------------------------------------------------
+1/12 Testing: Core
+1/12 Test: Core
+Command: "/workspace/scratch/e2c95811cd0a/EStudioUI/build/release/EStudioUICoreTests"
+Directory: /workspace/scratch/e2c95811cd0a/EStudioUI/build/release
+"Core" start time: Oct 21 14:56 PDT
+Output:
+----------------------------------------------------------
+Core PASS / 78 checks
+<end of output>
+Test time =   0.01 sec
+----------------------------------------------------------
+Test Passed.
+"Core" end time: Oct 21 14:56 PDT
+"Core" time elapsed: 00:00:00
+----------------------------------------------------------
+
+2/12 Testing: WidgetsAndLayout
+2/12 Test: WidgetsAndLayout
+Command: "/workspace/scratch/e2c95811cd0a/EStudioUI/build/release/EStudioUIWidgetTests"
+Directory: /workspace/scratch/e2c95811cd0a/EStudioUI/build/release
+"WidgetsAndLayout" start time: Oct 21 14:56 PDT
+Output:
+----------------------------------------------------------
+Widgets and layout PASS / 3674 checks
+<end of output>
+Test time =   0.02 sec
+----------------------------------------------------------
+Test Passed.
+"WidgetsAndLayout" end time: Oct 21 14:56 PDT
+"WidgetsAndLayout" time elapsed: 00:00:00
+----------------------------------------------------------
+
+3/12 Testing: Animation
+3/12 Test: Animation
+Command: "/workspace/scratch/e2c95811cd0a/EStudioUI/build/release/EStudioUIAnimationTests"
+Directory: /workspace/scratch/e2c95811cd0a/EStudioUI/build/release
+"Animation" start time: Oct 21 14:56 PDT
+Output:
+----------------------------------------------------------
+Animation checks passed: 2319
+<end of output>
+Test time =   0.01 sec
+----------------------------------------------------------
+Test Passed.
+"Animation" end time: Oct 21 14:56 PDT
+"Animation" time elapsed: 00:00:00
+----------------------------------------------------------
+
+4/12 Testing: RichCss
+4/12 Test: RichCss
+Command: "/workspace/scratch/e2c95811cd0a/EStudioUI/build/release/EStudioUIRichCssTests"
+Directory: /workspace/scratch/e2c95811cd0a/EStudioUI/build/release
+"RichCss" start time: Oct 21 14:56 PDT
+Output:
+----------------------------------------------------------
+500-widget CSS clock: 0.162705 ms/tick; 0 style resolutions and 0 layout passes during 240 ticks.
+292 rich CSS checks passed.
+<end of output>
+Test time =   0.05 sec
+----------------------------------------------------------
+Test Passed.
+"RichCss" end time: Oct 21 14:56 PDT
+"RichCss" time elapsed: 00:00:00
+----------------------------------------------------------
+
+5/12 Testing: CanvasScene
+5/12 Test: CanvasScene
+Command: "/workspace/scratch/e2c95811cd0a/EStudioUI/build/release/EStudioUICanvasSceneTests"
+Directory: /workspace/scratch/e2c95811cd0a/EStudioUI/build/release
+"CanvasScene" start time: Oct 21 14:56 PDT
+Output:
+----------------------------------------------------------
+200000-item BVH: build_ms=78.246 query_mean_us=5.02462 mean_visits=320 max_visits=409
+Canvas scene: 11900 checks passed
+<end of output>
+Test time =   0.17 sec
+----------------------------------------------------------
+Test Passed.
+"CanvasScene" end time: Oct 21 14:56 PDT
+"CanvasScene" time elapsed: 00:00:00
+----------------------------------------------------------
+
+6/12 Testing: CanvasGeometry
+6/12 Test: CanvasGeometry
+Command: "/workspace/scratch/e2c95811cd0a/EStudioUI/build/release/EStudioUICanvasGeometryTests"
+Directory: /workspace/scratch/e2c95811cd0a/EStudioUI/build/release
+"CanvasGeometry" start time: Oct 21 14:56 PDT
+Output:
+----------------------------------------------------------
+200k group build 0.083743 s; 1000 bounded queries/hits/translations 0.0005274 s
+Canvas geometry: 4149 checks passed
+<end of output>
+Test time =   0.10 sec
+----------------------------------------------------------
+Test Passed.
+"CanvasGeometry" end time: Oct 21 14:56 PDT
+"CanvasGeometry" time elapsed: 00:00:00
+----------------------------------------------------------
+
+7/12 Testing: SketchDocument
+7/12 Test: SketchDocument
+Command: "/workspace/scratch/e2c95811cd0a/EStudioUI/build/release/EStudioUISketchDocumentTests"
+Directory: /workspace/scratch/e2c95811cd0a/EStudioUI/build/release
+"SketchDocument" start time: Oct 21 14:56 PDT
+Output:
+----------------------------------------------------------
+Sketch document checks passed: 423
+<end of output>
+Test time =   0.85 sec
+----------------------------------------------------------
+Test Passed.
+"SketchDocument" end time: Oct 21 14:56 PDT
+"SketchDocument" time elapsed: 00:00:00
+----------------------------------------------------------
+
+8/12 Testing: CanvasWidget
+8/12 Test: CanvasWidget
+Command: "/workspace/scratch/e2c95811cd0a/EStudioUI/build/release/EStudioUICanvasWidgetTests"
+Directory: /workspace/scratch/e2c95811cd0a/EStudioUI/build/release
+"CanvasWidget" start time: Oct 21 14:56 PDT
+Output:
+----------------------------------------------------------
+Canvas widget PASS / 27 checks
+<end of output>
+Test time =   0.01 sec
+----------------------------------------------------------
+Test Passed.
+"CanvasWidget" end time: Oct 21 14:56 PDT
+"CanvasWidget" time elapsed: 00:00:00
+----------------------------------------------------------
+
+9/12 Testing: InputControls
+9/12 Test: InputControls
+Command: "/workspace/scratch/e2c95811cd0a/EStudioUI/build/release/EStudioUIInputControlsTests"
+Directory: /workspace/scratch/e2c95811cd0a/EStudioUI/build/release
+"InputControls" start time: Oct 21 14:56 PDT
+Output:
+----------------------------------------------------------
+Input controls PASS / 76 checks
+<end of output>
+Test time =   0.01 sec
+----------------------------------------------------------
+Test Passed.
+"InputControls" end time: Oct 21 14:56 PDT
+"InputControls" time elapsed: 00:00:00
+----------------------------------------------------------
+
+10/12 Testing: SplitToolButton
+10/12 Test: SplitToolButton
+Command: "/workspace/scratch/e2c95811cd0a/EStudioUI/build/release/EStudioUISplitToolButtonTests"
+Directory: /workspace/scratch/e2c95811cd0a/EStudioUI/build/release
+"SplitToolButton" start time: Oct 21 14:56 PDT
+Output:
+----------------------------------------------------------
+Split tool button PASS / 41 checks
+<end of output>
+Test time =   0.01 sec
+----------------------------------------------------------
+Test Passed.
+"SplitToolButton" end time: Oct 21 14:56 PDT
+"SplitToolButton" time elapsed: 00:00:00
+----------------------------------------------------------
+
+11/12 Testing: Painter
+11/12 Test: Painter
+Command: "/workspace/scratch/e2c95811cd0a/EStudioUI/build/release/EStudioUIPainterTests"
+Directory: /workspace/scratch/e2c95811cd0a/EStudioUI/build/release
+"Painter" start time: Oct 21 14:56 PDT
+Output:
+----------------------------------------------------------
+Painter paths PASS / 27 checks
+<end of output>
+Test time =   0.01 sec
+----------------------------------------------------------
+Test Passed.
+"Painter" end time: Oct 21 14:56 PDT
+"Painter" time elapsed: 00:00:00
+----------------------------------------------------------
+
+12/12 Testing: GpuIntegration
+12/12 Test: GpuIntegration
+Command: "/workspace/scratch/e2c95811cd0a/EStudioUI/build/release/EStudioUIDemo" "--headless" "--self-test" "--output" "/workspace/scratch/e2c95811cd0a/EStudioUI/build/release/verification"
+Directory: /workspace/scratch/e2c95811cd0a/EStudioUI/build/release
+"GpuIntegration" start time: Oct 21 14:56 PDT
+Output:
+----------------------------------------------------------
+Cannot read theme, animation-start.css, or rich-buttons.css.
+GPU integration PASS / llvmpipe (LLVM 20.1.2, 256 bits) | 4.5 (Core Profile) Mesa 25.1.7-1ubuntu2~24.04.2
+Demo: 1 draw call / 827 glyphs / 83784 outline bytes
+<end of output>
+Test time =   3.03 sec
+----------------------------------------------------------
+Test Passed.
+"GpuIntegration" end time: Oct 21 14:56 PDT
+"GpuIntegration" time elapsed: 00:00:03
+----------------------------------------------------------
+
+End testing: Oct 21 14:56 PDT

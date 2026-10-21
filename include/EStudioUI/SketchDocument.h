@@ -5,6 +5,7 @@
 #include <cstddef>
 #include <iosfwd>
 #include <memory>
+#include <optional>
 #include <vector>
 
 namespace EStudioUI
@@ -46,6 +47,9 @@ class SketchDocument
     //! Adds and selects a primitive; an empty ID means its selection history exceeds the memory budget.
     CanvasItemId AddShape(const CanvasGeometry& geometry, std::uint32_t style = 0);
 
+    //! Replaces one live geometry as an undoable edit without changing selection.
+    bool UpdateShape(CanvasItemId item, const CanvasGeometry& geometry);
+
     //! Returns the nearest outline within world tolerance, preferring the top item on exact ties.
     CanvasItemId Pick(CanvasPoint point, double tolerance) const;
 
@@ -61,8 +65,29 @@ class SketchDocument
     //! Returns live selected identities; removed scene identities never escape this method.
     std::vector<CanvasItemId> GetSelection() const;
 
+    //! Returns combined selected bounds, or no value when nothing live is selected.
+    std::optional<CanvasBounds> GetSelectionBounds() const;
+
     //! Translates the selection in one command; returns false on no change or an exceeded history budget.
     bool MoveSelection(CanvasPoint delta);
+
+    //! Copies selected items by a world displacement and selects the copies as one command.
+    bool DuplicateSelection(CanvasPoint delta);
+
+    //! Replaces at least two selected items with one styled group and returns its identity.
+    CanvasItemId GroupSelection();
+
+    //! Expands selected groups in painter order while retaining ungrouped selections.
+    bool UngroupSelection();
+
+    //! Aligns selected line endpoints horizontally or vertically as a geometric edit.
+    bool SetHorizontal(bool horizontal = true);
+
+    //! Sets selected line lengths about their first endpoints without adding persistent constraints.
+    bool SetLineLength(double length);
+
+    //! Sets the radius of selected circles and arcs as one undoable geometric edit.
+    bool SetCircleRadius(double radius);
 
     //! Deletes the selection in one command; returns false on empty selection or an exceeded history budget.
     bool DeleteSelection();

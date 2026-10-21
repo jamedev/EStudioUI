@@ -1,0 +1,3 @@
+PASS: native line/arc/spline/path/text creation, double-click finish, Escape cancellation, BVH pick, undo/redo, deletion, validated control-point edit, exact circle creation, group/ungroup/duplicate, camera/slider synchronization, versioned sketch reload.
+Actual C++ OpenGL framebuffers: canvas-sketcher.ppm, canvas-sketcher-curves.ppm, canvas-sketcher-text.ppm.
+Scale workload available from the 200,000 items toolbar action.
