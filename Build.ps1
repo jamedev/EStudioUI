@@ -248,7 +248,9 @@ try
             throw "The vcpkg path is not an empty directory or a vcpkg Git checkout: $vcpkgDirectory"
         }
         New-Item -ItemType Directory -Path (Split-Path -Parent $vcpkgDirectory) -Force | Out-Null
-        Invoke-Checked 'Clone vcpkg' $git @('clone', '--filter=blob:none', '--no-checkout', $bootstrap.repository, $vcpkgDirectory)
+        # Registry versioning needs historical port blobs. Download them here;
+        # vcpkg's clean Windows child environment may not inherit proxy settings.
+        Invoke-Checked 'Clone vcpkg' $git @('clone', '--no-checkout', $bootstrap.repository, $vcpkgDirectory)
         Invoke-Checked 'Select pinned vcpkg tools' $git @('-C', $vcpkgDirectory, 'checkout', '--detach', $toolRevision)
     }
     # Fetching a missing historical object does not change an existing checkout's HEAD.
