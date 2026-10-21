@@ -9,7 +9,8 @@
 .PARAMETER Configuration
     Debug or Release. Both dependency configurations are available in the triplet.
 .PARAMETER VcpkgRoot
-    Optional existing vcpkg Git checkout, or an empty path where it can be cloned.
+    Preferred existing vcpkg Git checkout, or an empty path for a new clone.
+    Checkouts older than the tested tool revision use a private copy instead.
 .PARAMETER BuildDirectory
     Optional output directory, relative to the repository or an absolute path.
 .PARAMETER Jobs
@@ -140,6 +141,18 @@ function Test-VcpkgCheckout
         (Test-Path -LiteralPath (Join-Path $Path '.git'))
 }
 
+function Test-VcpkgToolRevision
+{
+    param([string]$Path, [string]$Revision)
+    $null = & $git -C $Path rev-parse --verify --quiet "${Revision}^{commit}"
+    if ($LASTEXITCODE -ne 0)
+    {
+        return $false
+    }
+    $null = & $git -C $Path merge-base --is-ancestor $Revision HEAD
+    return $LASTEXITCODE -eq 0
+}
+
 function Find-VcpkgRoot
 {
     if ($VcpkgRoot)
@@ -204,7 +217,24 @@ try
     }
     $manifest = Get-Content -LiteralPath (Join-Path $projectRoot 'vcpkg.json') -Raw | ConvertFrom-Json
     $baseline = $manifest.'builtin-baseline'
+    $bootstrap = Get-Content -LiteralPath (Join-Path $projectRoot 'vcpkg-bootstrap.json') -Raw | ConvertFrom-Json
+    $toolRevision = $bootstrap.commit
+    if ($toolRevision -notmatch '^[0-9a-f]{40}$')
+    {
+        throw 'vcpkg-bootstrap.json must specify a full Git commit hash.'
+    }
     $vcpkgDirectory = Find-VcpkgRoot
+    if ((Test-VcpkgCheckout $vcpkgDirectory) -and -not (Test-VcpkgToolRevision $vcpkgDirectory $toolRevision))
+    {
+        $preferredDirectory = $vcpkgDirectory
+        $vcpkgDirectory = Join-Path $projectRoot ('.tools/vcpkg-' + $toolRevision.Substring(0, 12))
+        Write-Host "The preferred vcpkg checkout predates the tested tooling: $preferredDirectory"
+        Write-Host "Using an isolated tooling snapshot: $vcpkgDirectory"
+        if ((Test-VcpkgCheckout $vcpkgDirectory) -and -not (Test-VcpkgToolRevision $vcpkgDirectory $toolRevision))
+        {
+            throw "The private vcpkg cache has an unexpected revision: $vcpkgDirectory"
+        }
+    }
     $buildRoot = Get-ProjectPath $BuildDirectory
     $installedRoot = Join-Path $buildRoot 'vcpkg_installed'
     New-Item -ItemType Directory -Path $buildRoot -Force | Out-Null
@@ -218,7 +248,8 @@ try
             throw "The vcpkg path is not an empty directory or a vcpkg Git checkout: $vcpkgDirectory"
         }
         New-Item -ItemType Directory -Path (Split-Path -Parent $vcpkgDirectory) -Force | Out-Null
-        Invoke-Checked 'Clone vcpkg' $git @('clone', '--branch', '2025.04.09', '--single-branch', 'https://github.com/microsoft/vcpkg.git', $vcpkgDirectory)
+        Invoke-Checked 'Clone vcpkg' $git @('clone', '--filter=blob:none', '--no-checkout', $bootstrap.repository, $vcpkgDirectory)
+        Invoke-Checked 'Select pinned vcpkg tools' $git @('-C', $vcpkgDirectory, 'checkout', '--detach', $toolRevision)
     }
     # Fetching a missing historical object does not change an existing checkout's HEAD.
     $knownBaseline = & $git -C $vcpkgDirectory rev-parse --verify --quiet "${baseline}^{commit}"

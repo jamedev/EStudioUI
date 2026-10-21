@@ -34,7 +34,8 @@ If you want to select your existing central vcpkg checkout explicitly:
 
 1. Locate VS 2022 x64 C++ tools, CMake, CTest, and Git.
 2. Reuse vcpkg from `-VcpkgRoot`, `VCPKG_ROOT`, PATH, or an ancestor's `vcpkg`
-   directory; otherwise clone/bootstrap a private checkout under `.tools/vcpkg`.
+   directory when its tooling is recent enough; otherwise clone/bootstrap a
+   private checkout under `.tools/`.
 3. Install the four runtime packages from `vcpkg.json` using the custom
    **`x64-windows-estudioui`** triplet.
 4. Configure and build the library, demo, and core test executable with MSVC.
@@ -69,9 +70,11 @@ adjacent `assets` and `licenses` directories when copying it elsewhere.
 
 The install tree is local to EStudioUI even when the vcpkg checkout is shared.
 Other projects' installed packages and the shared checkout's HEAD are preserved.
-An existing checkout must have a versions database covering the pinned baseline;
-a missing historical baseline object is fetched without checking out another
-branch. First-time setup downloads tools/sources; later runs reuse vcpkg caches
+`vcpkg-bootstrap.json` pins a tested tooling snapshot separately from the older
+library registry baseline. A preferred checkout that predates this tooling
+snapshot uses a private `.tools/vcpkg-<revision>` copy; this avoids stale tool
+URLs while preserving shared checkouts. Missing historical registry objects are
+fetched without checking out another branch in a shared checkout. First-time setup downloads tools/sources; later runs reuse vcpkg caches
 and the incremental application build. Existing nonempty directories are never
 replaced with a fresh vcpkg checkout.
 
@@ -87,6 +90,8 @@ replaced with a fresh vcpkg checkout.
 | HarfBuzz | 10.2.0#3 | Core |
 | utf8proc | 2.10.0 | Core |
 
+Tooling is bootstrapped from `a2f9862da6d88040a8537fb9b8cb24deaa9a196b`;
+this keeps Windows build-tool downloads current without changing library versions.
 All default features are explicitly disabled. There is no optional GLib, ICU,
 Cairo, PNG, Brotli, bzip2, or external zlib dependency. The small generated GLAD
 loader, Noto Sans font, and original Slug reference shaders remain in the

@@ -35,6 +35,7 @@ add_library(EStudioUI STATIC
     src/Widget.cpp src/UiContext.cpp src/Label.cpp src/Button.cpp src/TextBox.cpp src/Window.cpp
 )
 add_library(EStudioUI::EStudioUI ALIAS EStudioUI)
+target_compile_features(EStudioUI PUBLIC cxx_std_20)
 target_include_directories(EStudioUI PUBLIC include)
 target_link_libraries(EStudioUI PRIVATE EStudioUIGl glfw Freetype::Freetype harfbuzz::harfbuzz ${ESTUDIOUI_UTF8PROC_TARGET})
 if(MSVC)

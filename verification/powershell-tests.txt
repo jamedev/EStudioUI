@@ -1,4 +1,4 @@
-PowerShell mocked orchestration: PASS / 24 checks
+PowerShell mocked orchestration: PASS / 27 checks
 release: PASS
 debug: PASS
 failure-install: PASS
@@ -10,3 +10,4 @@ bootstrap: PASS
 preserve-existing: PASS
 missing-vs: PASS
 cmake-fallback: PASS
+legacy-tooling: PASS

@@ -11,10 +11,11 @@ AddressSanitizer/UndefinedBehaviorSanitizer on EStudioUI and its test/demo code.
 Dependencies/Mesa were not instrumented. Leak detection was disabled because
 this host's process tracing prevents LeakSanitizer; no leak-free claim is made.
 
-`powershell-tests.txt` records 24 orchestration checks on PowerShell 7.6.7 with
+`powershell-tests.txt` records 27 orchestration checks on PowerShell 7.6.7 with
 mock native tools: Release/Debug, the custom triplet, the CRT flag, paths with
 spaces, bootstrap, preserving nonempty directories, missing VS, CMake fallback,
-and failure propagation at install/configure/build/core-test/GPU-test stages.
+fallback from legacy tooling without changing a shared checkout, and failure
+propagation at install/configure/build/core-test/GPU-test stages.
 These mock checks do not establish native MSVC compilation. The GitHub Actions
 workflow separately runs the real Build.ps1 under Windows PowerShell 5.1 for
 MSVC Debug/Release, with -SkipGpuTest on hosted runners. Native GPU tests run by
