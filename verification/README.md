@@ -1,32 +1,50 @@
-# Local verification / EStudioUI 0.2.0
+# Local verification / EStudioUI 0.3.0
 
-These records come from the repository's actual C++ renderer and a real vcpkg
-manifest install, not the previous source-bundled prototype. Runtime packages
-were GLFW 3.4#1, FreeType 2.13.3, HarfBuzz 10.2.0#3, and utf8proc 2.10.0, all
+These records and PNGs come from the actual C++ project and renderer. Runtime
+packages were GLFW 3.4#1, FreeType 2.13.3, HarfBuzz 10.2.0#3, and utf8proc 2.10.0,
 without default features. Build-only vcpkg helper/Meson ports were also installed.
+No new runtime dependency was added for the new controls or scene contexts.
 
-Debug and Release CTest runs passed both tests: 78 core outcome checks and the
-GPU integration checks. `sanitizer-tests.txt` records the same checks with
-AddressSanitizer/UndefinedBehaviorSanitizer on EStudioUI and its test/demo code.
-Dependencies/Mesa were not instrumented. Leak detection was disabled because
-this host's process tracing prevents LeakSanitizer; no leak-free claim is made.
+Debug and Release CTest passed all three suites: Core (78 assertions),
+WidgetsAndLayout (3,674 assertions, including 300 randomized allocations), and
+GpuIntegration (actual framebuffer/context/interaction checks). The recorded
+CTest logs include command lines and program output.
 
-`powershell-tests.txt` records 27 orchestration checks on PowerShell 7.6.7 with
-mock native tools: Release/Debug, the custom triplet, the CRT flag, paths with
-spaces, bootstrap, preserving nonempty directories, missing VS, CMake fallback,
-fallback from legacy tooling without changing a shared checkout, and failure
-propagation at install/configure/build/core-test/GPU-test stages.
-These mock checks do not establish native MSVC compilation. The GitHub Actions
-workflow separately runs the real Build.ps1 under Windows PowerShell 5.1 for
-MSVC Debug/Release, with -SkipGpuTest on hosted runners. Native GPU tests run by
-default when a developer invokes Build.ps1 without that switch.
+`sanitizer-tests.txt` records the same three suites with AddressSanitizer and
+UndefinedBehaviorSanitizer on EStudioUI and its test/demo C++ code. Dependencies
+and Mesa were not instrumented. Leak detection was disabled because the host's
+process tracing prevents LeakSanitizer; no leak-free claim is made.
 
-The PNGs are actual framebuffer captures: initial dark theme, focused selection,
-light theme after editing, resized layout, a primitive scene at two times pixel
-scale, and the 640-box/3,840-glyph stress scene. The driver was Mesa llvmpipe
-software OpenGL. Benchmark samples include CPU submission and synchronous
-readback and exclude widget layout/shaping; hardware throughput is unmeasured.
-See benchmark.txt / benchmark.csv for this run's measurements.
+`powershell-tests.txt` retains the 27 orchestration checks for the unchanged
+Build.ps1 on PowerShell 7.6.7 with mock native tools. Those mocks cover flow,
+triplets/CRT arguments, paths, bootstrap, shared-checkout preservation, and failure
+propagation. The GitHub Actions workflow separately runs the real Build.ps1
+under Windows PowerShell 5.1 for MSVC Debug/Release. Hosted Windows CI explicitly
+uses -SkipGpuTest; the developer script runs native GPU tests by default.
+
+## Actual framebuffer captures
+
+| Capture | What it exercises |
+| --- | --- |
+| `widgets-dark.png`, `widgets-light.png` | Tabs, toolbar, hierarchy, 2,006-item list, 10,000-row editable table |
+| `table-editing.png` | Reusable floating cell editor and selection |
+| `context-menu.png` | Popup layer above the table |
+| `opengl-scenes.png` | Two depth-tested cube/grid scenes with separate contexts |
+| `context-isolation.png` | Distinct red/green scene textures with a translucent UI overlay |
+| `layout-880.png`, `layout-1180.png`, `layout-1520.png` | Fixed/capped/remaining Fill sizing at three native window sizes |
+| `dark.png`, `selection.png`, `light.png`, `resized.png` | Original button/editor regression gallery |
+| `primitives-2x.png` | Clipping, blending, rounded corners, analytic glyphs, two-times pixel scale |
+| `benchmark.png` | 640 boxes and 3,840 glyphs in one ordered draw |
+
+PNG conversion is lossless from the PPM files written by `Renderer::SavePpm`.
+The scene-context checks verify sharing, context-local state, two-way fences,
+physical-size/depth attachments, resize, static-scene caching, input invalidation,
+initialization failure recovery, and cleanup. `widgets-report.txt` records the
+additional GPU checks.
+
+The driver was Mesa llvmpipe software OpenGL. Benchmark samples include CPU
+submission and synchronous readback and exclude widget layout/shaping; hardware
+throughput is unmeasured. See benchmark.txt / benchmark.csv for current samples.
 
 The headless clipboard is an in-memory adapter. Native OS input, clipboard,
-per-monitor DPI, and hardware drivers require target-machine validation.
+per-monitor DPI changes, and hardware drivers require target-machine validation.

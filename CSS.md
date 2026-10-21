@@ -1,4 +1,4 @@
-# CSS supported by EStudioUI 0.2
+# CSS supported by EStudioUI 0.3
 
 Style is external UTF-8 text, with optional BOM and `/* comments */`. Parsing is
 atomic: an unknown property, unsupported value, or malformed rule rejects the
@@ -9,7 +9,7 @@ CSS is loaded on request, not watched automatically. Press F5 in the demo to rel
 
 | Form | Example |
 | --- | --- |
-| Type, matched without case | `button`, `textbox`, `label`, `panel`, `window` |
+| Type, matched without case | `button`, `textbox`, `toolbutton`, `tabwidget`, `listwidget`, `treewidget`, `tablewidget`, `contextmenu`, `openglwidget`, `label`, `panel`, `window` |
 | Universal | `*` |
 | Case-sensitive ID | `#editor` |
 | Case-sensitive class | `.primary` |
@@ -18,6 +18,7 @@ CSS is loaded on request, not watched automatically. Press F5 in the demo to rel
 | Immediate child | `.row > button` |
 | Selector list | `button, textbox` |
 | Interaction states | `:hover`, `:active`, `:pressed`, `:focus` |
+| Selection/toggle | `:selected`, `:checked` (aliases on toggle buttons) |
 | Availability | `:enabled`, `:disabled`, `:read-only` |
 
 Type names are the strings passed to `Widget`'s constructor. IDs and classes are
@@ -33,7 +34,8 @@ the cascade. Only `color`, `font-size`, and `text-align` inherit.
 ## Properties
 
 Numeric lengths are logical pixels, written as `12px` or `12`. Width and height
-also allow percentages relative to the parent's content size, or `auto`. All
+also allow percentages relative to the parent's content size, `auto` / `content`,
+and positive Fill weights such as `1fr` / `2fr`. All
 sizes include padding and borders: the model is **border-box**.
 
 | Property | Values |
@@ -46,7 +48,7 @@ sizes include padding and borders: the model is **border-box**.
 | `opacity` | Nonnegative number, clamped to 0..1 |
 | `padding`, `margin` | One to four nonnegative pixel lengths in CSS edge order |
 | `padding-top/right/bottom/left` | One nonnegative pixel length |
-| `width`, `height` | `auto`, nonnegative pixels, percentage |
+| `width`, `height` | `auto`, `content`, nonnegative pixels, percentage, positive `fr` |
 | `min-width/height`, `max-width/height` | Nonnegative pixels |
 | `display` | `none`, `flex`, `block` |
 | `flex-direction` | `row`, `column` |
@@ -55,7 +57,12 @@ sizes include padding and borders: the model is **border-box**.
 | `align-items` | `stretch`, `start`, `center`, `end`, `flex-start`, `flex-end` |
 | `justify-content` | `start`, `center`, `end`, `space-between`, `flex-start`, `flex-end` |
 | `box-shadow` | `x y blur color` or `none`; offsets can be negative |
-| `selection-background-color`, `selection-color` | Text-box selection colors |
+| `selection-background-color`, `selection-color` | Editor and collection selection colors |
+| `row-height` | List/tree/table row height, at least 12px |
+| `indent-size` | Nonnegative tree indentation per depth |
+| `header-background` | Table header background color |
+| `alternate-background`, `hover-background` | Alternating and hovered collection row colors |
+| `grid-color` | Table grid color |
 | `placeholder-color`, `caret-color` | Text-box colors |
 
 Padding and margin shorthand order is top, right, bottom, left. Two values mean
@@ -79,9 +86,28 @@ pointer input. Very small windows can therefore clip controls.
 
 `display: none` removes a subtree from layout and input, and clears focus/capture
 within it. A minimum larger than a maximum raises the effective maximum to the
-minimum. Growth is clamped to min/max without redistributing leftover space.
+minimum. Growth is clamped to min/max and leftover space is redistributed to other
+growing children. Fractional dimensions start at their hard minimum rather than
+their measured content size. See [LAYOUTS.md](LAYOUTS.md) for size contracts,
+API precedence, and explicit overflow diagnostics.
 The root occupies the entire logical window; its width/height properties do not
 resize the native window.
+
+## Control styling
+
+Tab strips use `tabbar toolbutton` and a `.selected` class for the active tab.
+ToolButton's `:checked` / `:selected` state is persistent; `:active` remains the
+transient press state. Toolbars and menus accept ordinary child selectors.
+
+Collection rows/cells are model entries, not child widgets. Configure their
+selection, hover, alternating backgrounds, row height, indentation, header, and
+grid through the properties above on `listwidget`, `treewidget`, and
+`tablewidget`. Arbitrary per-row selectors and subcontrol pseudo-elements are not
+implemented. The reusable table editor is `tablewidget textbox.cell-editor`.
+
+Code-level size/direction/gap contracts take precedence over CSS for the explicitly
+set values; other computed properties still follow the cascade. Popup placement
+and table editor bounds are controlled by their owners, outside normal flow.
 
 ## Explicit omissions
 

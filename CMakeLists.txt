@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.24)
-project(EStudioUI VERSION 0.2.0 LANGUAGES C CXX)
+project(EStudioUI VERSION 0.3.0 LANGUAGES C CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -33,6 +33,8 @@ target_include_directories(EStudioUIGl PUBLIC third_party/glad/include)
 add_library(EStudioUI STATIC
     src/Style.cpp src/TextBuffer.cpp src/FontFace.cpp src/Renderer.cpp
     src/Widget.cpp src/UiContext.cpp src/Label.cpp src/Button.cpp src/TextBox.cpp src/Window.cpp
+    src/SizeRule.cpp src/Layout.cpp src/ToolButton.cpp src/ToolBar.cpp src/TabWidget.cpp
+    src/ContextMenu.cpp src/ScrollWidget.cpp src/ListWidget.cpp src/TreeWidget.cpp src/TableWidget.cpp src/OpenGLWidget.cpp
 )
 add_library(EStudioUI::EStudioUI ALIAS EStudioUI)
 target_compile_features(EStudioUI PUBLIC cxx_std_20)
@@ -50,8 +52,8 @@ if(ESTUDIOUI_ENABLE_SANITIZERS AND CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
 endif()
 
 if(ESTUDIOUI_BUILD_DEMO)
-    add_executable(EStudioUIDemo demo/main.cpp)
-    target_link_libraries(EStudioUIDemo PRIVATE EStudioUI::EStudioUI)
+    add_executable(EStudioUIDemo demo/main.cpp demo/WidgetGallery.cpp demo/DemoScene.cpp)
+    target_link_libraries(EStudioUIDemo PRIVATE EStudioUI::EStudioUI EStudioUIGl glfw)
     if(MSVC)
         target_compile_options(EStudioUIDemo PRIVATE /utf-8)
     endif()
@@ -91,6 +93,16 @@ if(ESTUDIOUI_BUILD_TESTS)
         target_compile_options(EStudioUICoreTests PRIVATE /utf-8)
     endif()
     add_test(NAME Core COMMAND EStudioUICoreTests)
+    add_executable(EStudioUIWidgetTests tests/WidgetTests.cpp)
+    target_link_libraries(EStudioUIWidgetTests PRIVATE EStudioUI::EStudioUI)
+    target_compile_definitions(EStudioUIWidgetTests PRIVATE
+        ESTUDIOUI_FONT_PATH="${CMAKE_CURRENT_SOURCE_DIR}/third_party/fonts/NotoSans.ttf"
+        ESTUDIOUI_ASSETS_PATH="${CMAKE_CURRENT_SOURCE_DIR}/assets")
+    if(MSVC)
+        target_compile_options(EStudioUIWidgetTests PRIVATE /utf-8)
+    endif()
+    add_test(NAME WidgetsAndLayout COMMAND EStudioUIWidgetTests)
+
     if(ESTUDIOUI_GPU_TESTS AND TARGET EStudioUIDemo AND UNIX AND NOT APPLE)
         add_test(NAME GpuIntegration COMMAND EStudioUIDemo --headless --self-test --output "${CMAKE_CURRENT_BINARY_DIR}/verification")
         set_tests_properties(GpuIntegration PROPERTIES TIMEOUT 60)

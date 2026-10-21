@@ -1,0 +1,6 @@
+EStudioUI 0.3 widget integration: PASS
+Real renderer captures: dark/light collections, table editor, popup menu, two 3D scenes, three layout sizes.
+10,000 table rows and 2,006 list items; only viewport rows submitted.
+Checked: selection/editing, toolbar toggles/actions, popup keyboard/clipboard, fixed and capped Fill sizing,
+distinct native contexts, scene callback contexts, static-scene caching, orbit input, shared-texture colors,
+context state isolation, DPI-sized FBOs, depth attachments, resize, callback failure recovery and cleanup.

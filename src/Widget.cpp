@@ -4,6 +4,7 @@
 
 #include <algorithm>
 #include <cctype>
+#include <cmath>
 #include <stdexcept>
 
 namespace EStudioUI
@@ -97,6 +98,70 @@ void Widget::SetEnabled(bool enabled)
 bool Widget::IsEnabled() const
 {
     return m_Enabled && (!m_Parent || m_Parent->IsEnabled());
+}
+
+void Widget::SetVisible(bool visible)
+{
+    if (m_Visible != visible)
+    {
+        m_Visible = visible;
+        Invalidate();
+    }
+}
+
+bool Widget::IsVisible() const
+{
+    return m_Visible && m_Style.m_Displayed && (!m_Parent || m_Parent->IsVisible());
+}
+
+void Widget::SetWidth(SizeRule rule)
+{
+    rule.Validate();
+    m_WidthRule = rule;
+    Invalidate();
+}
+
+void Widget::SetHeight(SizeRule rule)
+{
+    rule.Validate();
+    m_HeightRule = rule;
+    Invalidate();
+}
+
+void Widget::SetLayoutDirection(Axis axis)
+{
+    m_Direction = axis;
+    Invalidate();
+}
+
+void Widget::SetGap(float pixels)
+{
+    if (!std::isfinite(pixels) || pixels < 0 || pixels > 1000000)
+        throw std::invalid_argument("A layout gap must be finite and nonnegative.");
+    m_Gap = pixels;
+    Invalidate();
+}
+
+void Widget::SetFloatingBounds(Rect bounds)
+{
+    if (!std::isfinite(bounds.m_X) || !std::isfinite(bounds.m_Y) || !std::isfinite(bounds.m_Width) ||
+        !std::isfinite(bounds.m_Height) || bounds.m_Width < 0 || bounds.m_Height < 0)
+        throw std::invalid_argument("Floating bounds must be finite with nonnegative dimensions.");
+    if (m_FloatingBounds && m_FloatingBounds->m_X == bounds.m_X && m_FloatingBounds->m_Y == bounds.m_Y &&
+        m_FloatingBounds->m_Width == bounds.m_Width && m_FloatingBounds->m_Height == bounds.m_Height)
+        return;
+    m_FloatingBounds = bounds;
+    Invalidate();
+}
+
+Widget* Widget::GetParent() const
+{
+    return m_Parent;
+}
+
+Signal<Point>& Widget::ContextMenuRequested()
+{
+    return m_ContextMenuRequested;
 }
 
 bool Widget::IsFocused() const
@@ -193,6 +258,33 @@ void Widget::OnFocus(bool)
 }
 
 void Widget::OnCaptureLost()
+{
+}
+
+void Widget::OnLayout()
+{
+}
+
+bool Widget::OnScroll(Point, Modifiers)
+{
+    return false;
+}
+
+bool Widget::OnKeyPreview(Key, bool, bool, Modifiers)
+{
+    return false;
+}
+
+void Widget::PrepareFrame(double, float, float)
+{
+}
+
+bool Widget::NeedsContinuousRendering() const
+{
+    return false;
+}
+
+void Widget::FrameSubmitted()
 {
 }
 

@@ -23,3 +23,14 @@
 - Update CSS.md / ARCHITECTURE.md when the supported behavior changes. Captures
   and measurements must come from the actual C++ renderer. Do not substitute
   hand-made screenshots or infer hardware speed from a software GL run.
+
+- Preserve explicit Fixed/Content/Fill contracts across theme reloads. Reuse the
+  bounded allocator for widgets/columns, redistribute capped shares, and report
+  overflow without violating fixed sizes or hard minima. Keep hidden pages out
+  of measurement/input.
+- Collections store model data and paint viewport rows; do not create a child
+  widget for every row or cell. Update the widget/layout tests for behavioral changes.
+- OpenGLWidget scene resources belong to their separate shared context. Preserve
+  producer AND consumer synchronization around shared textures, resize, and cleanup.
+  Restore the containing context after callback errors. Keep scene lifecycle
+  mutations outside scene-render callbacks; do not claim worker-thread rendering.

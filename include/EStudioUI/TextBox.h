@@ -46,6 +46,9 @@ class TextBox final : public Widget
     //! Returns the signal emitted on Enter.
     Signal<const std::string&>& Submitted();
 
+    //! Reports focus loss after editor state is reset, useful for committing cells.
+    Signal<>& FocusLost();
+
     //! Returns the caret's next repaint deadline.
     double NextCaretDeadline(double now) const;
 
@@ -128,5 +131,8 @@ class TextBox final : public Widget
 
     //! Delivers Enter-key submissions.
     Signal<const std::string&> m_Submitted;
+
+    //! Delivers editing-session focus loss.
+    Signal<> m_FocusLost;
 };
 } // namespace EStudioUI

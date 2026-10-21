@@ -1,11 +1,11 @@
 # EStudioUI
 
 A C++20 GUI toolkit prototype with GLFW windows, analytic GPU shapes and text,
-typed signals, and CSS styling. The first controls are working buttons and
-single-line UTF-8 text boxes. Dependencies are managed with a pinned vcpkg
+typed signals, and CSS styling. Controls include buttons, single-line UTF-8 text boxes, tabs, lists, trees,
+editable tables, toolbars/tool buttons, popup menus, and embedded 3D surfaces. Dependencies are managed with a pinned vcpkg
 manifest; no Qt or commercial SDK is required.
 
-![EStudioUI demo](verification/dark.png)
+![EStudioUI widget gallery](verification/widgets-dark.png)
 
 ## One-command Windows build
 
@@ -74,8 +74,9 @@ Other projects' installed packages and the shared checkout's HEAD are preserved.
 library registry baseline. A preferred checkout that predates this tooling
 snapshot uses a private `.tools/vcpkg-<revision>` copy; this avoids stale tool
 URLs while preserving shared checkouts. Missing historical registry objects are
-fetched without checking out another branch in a shared checkout. First-time setup downloads tools/sources; later runs reuse vcpkg caches
-and the incremental application build. Existing nonempty directories are never
+fetched without checking out another branch in a shared checkout. First-time
+setup downloads tools/sources; later runs reuse vcpkg caches and the incremental
+application build. Existing nonempty directories are never
 replaced with a fresh vcpkg checkout.
 
 ## Dependencies and reproducibility
@@ -106,6 +107,21 @@ selected alternatives, including FreeType's FTL.
 - Text boxes provide committed Unicode input, grapheme navigation, mouse and
   keyboard selection, double/triple click, clipboard, undo/redo, placeholders,
   read-only mode, and `TextChanged()` / `Submitted()` signals.
+- `TabWidget` owns persistent pages and excludes inactive pages from layout/input.
+  Arrow/Home/End keys navigate the tab strip; Ctrl+Tab / Ctrl+Shift+Tab switch pages.
+- `ListWidget` supports selection, prefix search, activation, keyboard/page
+  navigation, and scrolling. `TreeWidget` adds stable IDs and expansion/navigation.
+- `TableWidget` supports virtualized rows, cell selection/copying, stable
+  lexicographic sorting, resizable columns, and in-place editing. Enter/F2 or a
+  double-click edits; Enter/focus loss commits and Escape cancels.
+- `ToolBar` contains compact `ToolButton` commands, checked toggles, separators,
+  and ordinary child controls. `ContextMenu` uses a popup layer with outside-click
+  dismissal, focus restoration, keyboard navigation, and disabled actions.
+- `OpenGLWidget` embeds separate shared GL contexts with depth buffers, physical
+  framebuffer sizing, input signals, static-scene caching, and optional animation.
+- Explicit `Fixed`, `Content`, and weighted `Fill` contracts control sizing. The
+  allocator redistributes space after a child reaches its maximum and reports
+  overflow when hard limits cannot fit. See [LAYOUTS.md](LAYOUTS.md).
 - Tab / Shift+Tab move focus. Ctrl+A/C/X/V/Z/Y and Ctrl+Shift+Z edit text.
 - Dark / Light load external CSS. F5 reloads the current file; F6 switches themes.
   Invalid CSS retains the last valid stylesheet and displays a recoverable error.
@@ -157,19 +173,35 @@ does not disconnect when its handle is destroyed; use `Disconnect()` or
 `ScopedConnection` for receiver lifetime management. Signals run synchronously on
 the GUI thread and support mutation, nested delivery, and sender deletion.
 
+The demo opens on Data & actions with 10,000 table rows and 2,006 list items.
+Only viewport rows are painted. Inputs preserves the original editor/button
+examples; 3D surfaces has two independent orbit/zoom scenes; Layout lab exposes
+fixed and bounded Fill behavior at different native window sizes.
+
+![Two independent 3D contexts](verification/opengl-scenes.png)
+
+The same one-shot build command installs/builds/tests this gallery. See
+[OPENGL_WIDGET.md](OPENGL_WIDGET.md) for scene lifecycle, input, texture sharing,
+manual frame driving, and render-thread boundaries.
+
 ## Rendering and boundaries
 
 A single ordered instance stream combines rounded boxes, borders, shadows,
 selection, carets, and glyphs. The Slug-derived fragment shader evaluates quadratic
 font outlines directly, without a bitmap/SDF atlas. Shaping and glyph outlines are
-cached, and the event loop sleeps between changes/caret deadlines. The demo and
-a 640-box / 3,840-glyph rendering stress scene each use one draw call.
+cached, and the event loop sleeps between changes/caret deadlines unless a
+visible surface requests animation. UI shapes/glyphs use one ordered draw when
+no scene textures are present. Embedded textures split batches where needed to
+preserve painter order; scene rendering has its own submissions. The 640-box /
+3,840-glyph stress scene still uses one draw call.
 
 This is a prototype: text editing is single-line and left-to-right, with one font
 and no font fallback, IME pre-edit integration, full bidi, or color emoji. Layout
-supports a basic row/column flex subset and rectangular ancestor clips, without
-wrapping, shrink, or scrolling containers. Accessibility and coordinated
-multiwindow loops are future work. Large UIs need finer style/layout invalidation
+supports nested rows/columns, explicit size contracts, and rectangular ancestor
+clips. Grid, automatic wrapping/height-for-width, splitters, and general-purpose
+scrolling forms remain future work. Collection controls currently use single
+selection; tables store UTF-8 strings and sort lexicographically; menus are
+single-level. Accessibility and coordinated multiwindow loops are future work. Large UIs need finer style/layout invalidation
 and profiling. See [ARCHITECTURE.md](ARCHITECTURE.md).
 
 ## Linux, manual CMake, and checks

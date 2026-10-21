@@ -2,7 +2,7 @@
 
 namespace EStudioUI
 {
-Button::Button(std::string text) : Label(std::move(text), "button")
+Button::Button(std::string text, std::string type) : Label(std::move(text), std::move(type))
 {
 }
 

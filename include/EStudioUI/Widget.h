@@ -2,8 +2,11 @@
 
 #include "Signal.h"
 #include "Style.h"
+#include "Layout.h"
+#include "SizeRule.h"
 
 #include <memory>
+#include <optional>
 #include <string>
 #include <utility>
 #include <vector>
@@ -69,6 +72,33 @@ class Widget
     //! Returns effective enabled state including ancestors.
     bool IsEnabled() const;
 
+    //! Includes or removes this subtree from layout, painting, and focus.
+    void SetVisible(bool visible);
+
+    //! Returns effective programmatic/CSS visibility including ancestors.
+    bool IsVisible() const;
+
+    //! Sets an explicit width contract; code contracts override CSS dimensions.
+    void SetWidth(SizeRule rule);
+
+    //! Sets an explicit height contract; code contracts override CSS dimensions.
+    void SetHeight(SizeRule rule);
+
+    //! Selects the container's flow direction independently of its theme.
+    void SetLayoutDirection(Axis axis);
+
+    //! Sets a nonnegative logical-pixel distance between children.
+    void SetGap(float pixels);
+
+    //! Places a child outside normal flow at absolute window coordinates.
+    void SetFloatingBounds(Rect bounds);
+
+    //! Returns this node's immediate owner, or null for a detached/root node.
+    Widget* GetParent() const;
+
+    //! Requests a context menu; right-click and the Menu key bubble to listeners.
+    Signal<Point>& ContextMenuRequested();
+
     //! Returns whether this widget currently owns keyboard focus.
     bool IsFocused() const;
 
@@ -130,6 +160,24 @@ class Widget
     //! Cancels an outstanding capture, for example after window deactivation.
     virtual void OnCaptureLost();
 
+    //! Updates internal child geometry before children are arranged.
+    virtual void OnLayout();
+
+    //! Handles wheel motion; returning false lets an ancestor scroll instead.
+    virtual bool OnScroll(Point delta, Modifiers modifiers);
+
+    //! Intercepts descendant key commands before normal focus dispatch.
+    virtual bool OnKeyPreview(Key key, bool down, bool repeat, Modifiers modifiers);
+
+    //! Renders external surfaces before the main UI context begins painting.
+    virtual void PrepareFrame(double time, float scaleX, float scaleY);
+
+    //! Returns whether this visible widget requests animation frames.
+    virtual bool NeedsContinuousRendering() const;
+
+    //! Records completion ordering after the UI has submitted texture consumers.
+    virtual void FrameSubmitted();
+
     //! Requests style/layout reevaluation and a new frame.
     void Invalidate();
 
@@ -169,6 +217,30 @@ class Widget
 
     //! Stores local enabled state.
     bool m_Enabled = true;
+
+    //! Stores the local visibility contract.
+    bool m_Visible = true;
+
+    //! Stores an optional code-level width contract.
+    std::optional<SizeRule> m_WidthRule;
+
+    //! Stores an optional code-level height contract.
+    std::optional<SizeRule> m_HeightRule;
+
+    //! Stores an optional code-level flow direction.
+    std::optional<Axis> m_Direction;
+
+    //! Stores an optional code-level gap.
+    std::optional<float> m_Gap;
+
+    //! Stores absolute geometry for an out-of-flow child.
+    std::optional<Rect> m_FloatingBounds;
+
+    //! Excludes a popup from ordinary layout, hit testing, and painting.
+    bool m_Overlay = false;
+
+    //! Delivers application-owned popup requests.
+    Signal<Point> m_ContextMenuRequested;
 };
 
 //! Observes a widget without extending its lifetime.

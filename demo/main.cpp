@@ -1,3 +1,5 @@
+#include "WidgetGallery.h"
+
 #include <EStudioUI/Button.h>
 #include <EStudioUI/TextBox.h>
 #include <EStudioUI/Window.h>
@@ -106,16 +108,20 @@ class Demo
         header.SetId("header");
         auto& brand = header.Add<Widget>();
         brand.SetId("brand");
-        auto& title = brand.Add<Label>("EStudioUI / first light");
+        auto& title = brand.Add<Label>("EStudioUI / widget lab");
         title.SetId("title");
-        auto& subtitle = brand.Add<Label>("A small C++ GUI. Real widgets. Analytic GPU drawing.");
+        auto& subtitle = brand.Add<Label>("GPU controls. Explicit layouts. Independent 3D contexts.");
         subtitle.AddClass("subtitle");
         auto& themes = header.Add<Widget>();
         themes.SetId("themes");
         auto& dark = themes.Add<Button>("Dark");
         auto& light = themes.Add<Button>("Light");
         auto& reload = themes.Add<Button>("Reload CSS");
-        auto& workspace = root.Add<Widget>();
+        m_Tabs = &root.Add<TabWidget>();
+        m_Tabs->SetId("gallery");
+        m_Tabs->SetHeight(SizeRule::Fill());
+        auto& inputs = m_Tabs->AddTab("Inputs");
+        auto& workspace = inputs.Add<Widget>();
         workspace.SetId("workspace");
         auto& left = workspace.Add<Widget>();
         left.AddClass("card");
@@ -168,6 +174,8 @@ class Demo
                                        "  F5: reload CSS    F6: theme");
         footer.SetId("footer");
 
+        m_Gallery = std::make_unique<WidgetGallery>(window, *m_Tabs);
+
         m_Increment->Clicked().Connect(
             [this]
             {
@@ -215,6 +223,7 @@ class Demo
             });
         if (!LoadCss(m_CurrentCss))
             throw std::runtime_error("Initial CSS could not be loaded.");
+        m_Tabs->SetCurrentIndex(1);
     }
 
     ~Demo()
@@ -247,6 +256,7 @@ class Demo
         fs::create_directories(output);
         auto& ui = m_Window.Ui();
         auto& gpu = m_Window.Graphics();
+        m_Tabs->SetCurrentIndex(0);
         m_Window.RenderFrame();
         gpu.SavePpm(output / "dark.ppm");
         const auto stats = gpu.GetStats();
@@ -326,6 +336,7 @@ class Demo
         Check(ui.Root().GetBounds().m_Width == 1320, "resize propagates through CSS layout");
         gpu.SavePpm(output / "resized.ppm");
         VerifyPrimitives(output);
+        m_Gallery->Verify(m_Assets, output);
         std::ofstream report(output / "gpu-report.txt");
         report << "EStudioUI GPU integration: PASS\nDriver: " << gpu.GetDriverDescription()
                << "\nInitial demo: " << stats.m_DrawCalls << " draw call, " << stats.m_Shapes << " shapes, "
@@ -390,6 +401,8 @@ class Demo
         gpu.SavePpm(output / "primitives-2x.ppm");
     }
 
+    TabWidget* m_Tabs = nullptr;
+    std::unique_ptr<WidgetGallery> m_Gallery;
     Window& m_Window;
     fs::path m_Assets;
     fs::path m_CurrentCss;

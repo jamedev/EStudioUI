@@ -87,3 +87,56 @@ textbox:disabled { opacity: 0.5; }
 #edit-status { height: 20px; font-size: 12px; color: #6980a4; }
 #footer { height: 24px; font-size: 12px; color: #7787a4; }
 .error { color: #b43c4f !important; }
+
+/* Widget gallery: structure belongs to C++ size contracts; appearance lives here. */
+#gallery { height: 1fr; }
+tabwidget { gap: 10px; }
+tabbar { gap: 4px; }
+tabbar toolbutton { height: 40px; padding: 8px 18px; border-radius: 8px; }
+tabbar .selected { background: #5066d9; color: #ffffff; border-color: #5066d9; }
+tabpage { gap: 12px; }
+toolbar { padding: 6px; gap: 6px; background: #ffffff; border: 1px solid #c5cddd; border-radius: 8px; }
+toolbutton { height: 34px; padding: 6px 12px; background: #edf1f8; border: 1px solid #c5cddd; border-radius: 5px; font-size: 14px; text-align: center; }
+toolbutton:hover { background: #dde5f5; }
+toolbutton:focus { border: 2px solid #5066d9; }
+toolbutton:active { background: #cbd7ed; }
+toolbutton:checked { background: #5066d9; color: #ffffff; }
+toolbutton:disabled { opacity: 0.4; }
+separator { background: #c5cddd; margin: 4px; }
+.gallery-body { gap: 16px; }
+.gallery-pane { padding: 12px; gap: 8px; background: #ffffff; border: 1px solid #c5cddd; border-radius: 10px; }
+.pane-title { font-size: 13px; height: 24px; color: #586780; }
+.gallery-status { font-size: 13px; height: 28px; color: #586780; }
+listwidget, treewidget, tablewidget {
+    background: #f8faff;
+    color: #24324b;
+    border: 1px solid #c5cddd;
+    border-radius: 6px;
+    padding: 3px;
+    font-size: 14px;
+    row-height: 32px;
+    indent-size: 18px;
+    selection-background-color: #5066d9;
+    selection-color: #ffffff;
+    header-background: #e5ebf6;
+    alternate-background: rgba(60, 90, 150, 0.04);
+    hover-background: rgba(70, 100, 180, 0.12);
+    grid-color: rgba(80, 105, 150, 0.18);
+    placeholder-color: #586780;
+}
+listwidget:focus, treewidget:focus, tablewidget:focus { border-color: #5066d9; }
+tablewidget.compact { row-height: 24px; font-size: 12px; }
+tablewidget textbox.cell-editor { padding: 3px 7px; border: 1px solid #5066d9; border-radius: 0; font-size: 14px; }
+contextmenu { width: 250px; padding: 6px; background: #ffffff; border: 1px solid #c5cddd; border-radius: 8px; box-shadow: 0px 8px 18px rgba(0, 0, 0, 0.3); }
+contextmenu toolbutton { text-align: left; background: transparent; border: 0px solid transparent; }
+contextmenu toolbutton:hover, contextmenu toolbutton:focus { background: #dde5f5; border: 0px solid transparent; }
+contextmenu separator { margin: 4px 2px; }
+openglwidget { background: #f8faff; border: 1px solid #c5cddd; border-radius: 6px; padding: 1px; }
+openglwidget:focus { border-color: #5066d9; }
+.layout-box { padding: 16px; gap: 8px; border: 1px solid #c5cddd; border-radius: 10px; }
+.layout-fixed { background: #e1edfa; }
+.layout-capped { background: #eee7fa; }
+.layout-fluid { background: #e1f3ec; }
+.layout-caption { font-size: 15px; height: 32px; }
+.layout-description { font-size: 13px; height: 80px; }
+.layout-note { font-size: 14px; height: 48px; color: #586780; }

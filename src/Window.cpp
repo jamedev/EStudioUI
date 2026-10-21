@@ -30,6 +30,8 @@ Modifiers TranslateModifiers(int value)
 
 Key TranslateKey(int key)
 {
+    if (key >= GLFW_KEY_A && key <= GLFW_KEY_Z)
+        return static_cast<Key>(static_cast<int>(Key::A) + key - GLFW_KEY_A);
     switch (key)
     {
     case GLFW_KEY_TAB:
@@ -43,6 +45,18 @@ Key TranslateKey(int key)
         return Key::Left;
     case GLFW_KEY_RIGHT:
         return Key::Right;
+    case GLFW_KEY_UP:
+        return Key::Up;
+    case GLFW_KEY_DOWN:
+        return Key::Down;
+    case GLFW_KEY_PAGE_UP:
+        return Key::PageUp;
+    case GLFW_KEY_PAGE_DOWN:
+        return Key::PageDown;
+    case GLFW_KEY_F2:
+        return Key::F2;
+    case GLFW_KEY_MENU:
+        return Key::Menu;
     case GLFW_KEY_HOME:
         return Key::Home;
     case GLFW_KEY_END:
@@ -51,18 +65,6 @@ Key TranslateKey(int key)
         return Key::Backspace;
     case GLFW_KEY_DELETE:
         return Key::Delete;
-    case GLFW_KEY_A:
-        return Key::A;
-    case GLFW_KEY_C:
-        return Key::C;
-    case GLFW_KEY_X:
-        return Key::X;
-    case GLFW_KEY_V:
-        return Key::V;
-    case GLFW_KEY_Z:
-        return Key::Z;
-    case GLFW_KEY_Y:
-        return Key::Y;
     case GLFW_KEY_ESCAPE:
         return Key::Escape;
     case GLFW_KEY_F5:
@@ -268,12 +270,18 @@ Window::Window(const WindowOptions& options, const std::filesystem::path& fontPa
         self.m_Window,
         [](GLFWwindow* window, int button, int action, int modifiers)
         {
-            if (button != GLFW_MOUSE_BUTTON_LEFT)
+            if (button != GLFW_MOUSE_BUTTON_LEFT && button != GLFW_MOUSE_BUTTON_RIGHT)
                 return;
             Impl::Dispatch(window,
                            [&](Impl& state)
                            {
                                const auto point = state.Cursor();
+                               if (button == GLFW_MOUSE_BUTTON_RIGHT)
+                               {
+                                   if (action == GLFW_PRESS)
+                                       state.m_Ui->ContextMenu(point);
+                                   return;
+                               }
                                if (action == GLFW_PRESS)
                                {
                                    const double now = glfwGetTime();
@@ -289,20 +297,32 @@ Window::Window(const WindowOptions& options, const std::filesystem::path& fontPa
                                    state.m_Ui->PointerUp(point, TranslateModifiers(modifiers));
                            });
         });
-    glfwSetKeyCallback(self.m_Window,
-                       [](GLFWwindow* window, int key, int, int action, int modifiers)
-                       {
-                           Impl::Dispatch(window,
-                                          [&](Impl& state)
-                                          {
-                                              const auto translated = TranslateKey(key);
-                                              state.m_Ui->KeyEvent(translated, action != GLFW_RELEASE,
-                                                                   action == GLFW_REPEAT,
-                                                                   TranslateModifiers(modifiers));
-                                              if (action == GLFW_PRESS)
-                                                  state.m_KeyPressed.Emit(translated);
-                                          });
-                       });
+    glfwSetScrollCallback(self.m_Window,
+                          [](GLFWwindow* window, double x, double y)
+                          {
+                              Impl::Dispatch(window,
+                                             [&](Impl& state)
+                                             {
+                                                 state.m_Ui->Scroll(state.Cursor(),
+                                                                    {static_cast<float>(x), static_cast<float>(y)},
+                                                                    state.CurrentModifiers());
+                                             });
+                          });
+    glfwSetKeyCallback(
+        self.m_Window,
+        [](GLFWwindow* window, int key, int, int action, int modifiers)
+        {
+            Impl::Dispatch(window,
+                           [&](Impl& state)
+                           {
+                               const auto translated =
+                                   key == GLFW_KEY_F10 && (modifiers & GLFW_MOD_SHIFT) ? Key::Menu : TranslateKey(key);
+                               state.m_Ui->KeyEvent(translated, action != GLFW_RELEASE, action == GLFW_REPEAT,
+                                                    TranslateModifiers(modifiers));
+                               if (action == GLFW_PRESS)
+                                   state.m_KeyPressed.Emit(translated);
+                           });
+        });
     glfwSetCharCallback(
         self.m_Window, [](GLFWwindow* window, unsigned codepoint)
         { Impl::Dispatch(window, [&](Impl& state) { state.m_Ui->TextInput(EncodeUtf8(codepoint)); }); });
@@ -332,6 +352,16 @@ Renderer& Window::Graphics()
     return *m_Impl->m_Renderer;
 }
 
+std::uintptr_t Window::GetContextIdentity() const
+{
+    return reinterpret_cast<std::uintptr_t>(m_Impl->m_Window);
+}
+
+bool Window::IsHeadless() const
+{
+    return m_Impl->m_Headless;
+}
+
 Signal<Key>& Window::KeyPressed()
 {
     return m_Impl->m_KeyPressed;
@@ -351,10 +381,13 @@ void Window::RenderFrame()
         return;
     self.m_Ui->Prepare(static_cast<float>(width), static_cast<float>(height));
     const double now = glfwGetTime();
+    self.m_Ui->PrepareSurfaces(now, static_cast<float>(framebufferWidth) / static_cast<float>(width),
+                               static_cast<float>(framebufferHeight) / static_cast<float>(height));
     self.m_Renderer->BeginFrame(static_cast<float>(width), static_cast<float>(height), framebufferWidth,
                                 framebufferHeight, self.m_Ui->Root().GetStyle().m_Background);
     self.m_Ui->Paint(*self.m_Renderer, now);
     self.m_Renderer->EndFrame();
+    self.m_Ui->FrameSubmitted();
 }
 
 int Window::Run()
@@ -362,14 +395,20 @@ int Window::Run()
     auto& self = *m_Impl;
     while (!glfwWindowShouldClose(self.m_Window))
     {
+        const double animationDeadline = glfwGetTime() + 1.0 / 60.0;
         self.m_Ui->SetTime(glfwGetTime());
-        if (self.m_Ui->NeedsRepaint())
+        if (self.m_Ui->NeedsRepaint() || self.m_Ui->HasAnimations())
         {
             RenderFrame();
             glfwSwapBuffers(self.m_Window);
         }
-        if (const auto* textBox = dynamic_cast<TextBox*>(self.m_Ui->GetFocus());
-            textBox && !textBox->IsReadOnly() && self.m_Focused)
+        if (self.m_Ui->HasAnimations())
+        {
+            glfwWaitEventsTimeout(std::max(0.0005, animationDeadline - glfwGetTime()));
+            self.m_Ui->RequestRepaint();
+        }
+        else if (const auto* textBox = dynamic_cast<TextBox*>(self.m_Ui->GetFocus());
+                 textBox && !textBox->IsReadOnly() && self.m_Focused)
         {
             const auto now = glfwGetTime();
             glfwWaitEventsTimeout(std::clamp(textBox->NextCaretDeadline(now) - now, 0.001, 0.51));

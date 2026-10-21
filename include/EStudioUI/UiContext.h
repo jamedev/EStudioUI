@@ -4,6 +4,7 @@
 #include "Widget.h"
 
 #include <functional>
+#include <unordered_map>
 
 namespace EStudioUI
 {
@@ -55,6 +56,33 @@ class UiContext
 
     //! Releases capture even when the pointer is outside the pressed widget.
     void PointerUp(Point position, Modifiers modifiers = {});
+
+    //! Routes wheel deltas to the nearest scrollable ancestor.
+    void Scroll(Point position, Point delta, Modifiers modifiers = {});
+
+    //! Bubbles a right-click or Menu-key request through the hit ancestor path.
+    void ContextMenu(Point position);
+
+    //! Shows one owned overlay, clamps it to the window, and saves keyboard focus.
+    void ShowPopup(Widget& popup, Point anchor);
+
+    //! Dismisses the active overlay and restores the previous live focus target.
+    void ClosePopup();
+
+    //! Returns the live active popup, or null.
+    Widget* GetPopup() const;
+
+    //! Prepares external GPU surfaces while the window's GL context is current.
+    void PrepareSurfaces(double time, float scaleX, float scaleY);
+
+    //! Records surface-consumer fences after Renderer::EndFrame.
+    void FrameSubmitted();
+
+    //! Returns whether visible surfaces request continuous animation.
+    bool HasAnimations() const;
+
+    //! Reports containers whose fixed/content bases exceed their available space.
+    const std::vector<WidgetRef>& GetOverflowingContainers() const;
 
     //! Dispatches a keyboard event or performs Tab navigation.
     void KeyEvent(Key key, bool down, bool repeat = false, Modifiers modifiers = {});
@@ -149,5 +177,20 @@ class UiContext
 
     //! Writes platform clipboard text.
     std::function<void(std::string_view)> m_SetClipboard;
+
+    //! Observes the active overlay without extending its lifetime.
+    WidgetRef m_Popup;
+
+    //! Saves focus for restoration when a popup closes.
+    WidgetRef m_PopupReturnFocus;
+
+    //! Stores the requested popup origin in logical window coordinates.
+    Point m_PopupAnchor;
+
+    //! Caches one bottom-up measurement per visible node and prepare pass.
+    std::unordered_map<Widget*, Point> m_Measurements;
+
+    //! Records explicit main-axis overflow for layout diagnostics.
+    std::vector<WidgetRef> m_OverflowingContainers;
 };
 } // namespace EStudioUI

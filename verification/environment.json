@@ -1,6 +1,6 @@
 {
   "date_utc": "2026-10-21",
-  "project": "EStudioUI 0.2.0",
+  "project": "EStudioUI 0.3.0",
   "system": "Linux",
   "machine": "x86_64",
   "compiler": "c++ (Ubuntu 13.3.0-6ubuntu2~24.04) 13.3.0",
@@ -21,12 +21,21 @@
   "opengl": "4.5 Core Profile Mesa 25.1.7-1ubuntu2~24.04.2; shaders target 3.3 core",
   "core_checks": 78,
   "powershell_mock_checks": 27,
-  "debug_ctest": "2/2 pass",
-  "release_ctest": "2/2 pass",
-  "address_and_undefined_sanitizers": "2/2 pass, own C++ code instrumented",
+  "debug_ctest": "3/3 pass",
+  "release_ctest": "3/3 pass",
+  "address_and_undefined_sanitizers": "3/3 pass, own C++ code instrumented",
   "leak_sanitizer": "host ptrace restriction; detect_leaks=0",
   "native_windows_msvc": "See GitHub Actions; not executed by the local Linux host",
   "native_platform_clipboard": "not exercised by headless tests",
   "bootstrap_tooling_revision": "a2f9862da6d88040a8537fb9b8cb24deaa9a196b",
-  "local_vcpkg_install_tooling_revision": "ce613c41372b23b1f51333815feb3edd87ef8a8b"
+  "local_vcpkg_install_tooling_revision": "ce613c41372b23b1f51333815feb3edd87ef8a8b",
+  "widget_and_layout_assertions": 3674,
+  "randomized_layout_samples": 300,
+  "embedded_contexts": "Two separate GLFW contexts sharing GPU textures; OSMesa tests passed",
+  "scene_thread": "GUI thread; no separate render thread",
+  "collection_demo": {
+    "table_rows": 10000,
+    "list_items": 2006,
+    "row_widgets": false
+  }
 }

@@ -138,6 +138,13 @@ template <typename... Args> class Signal
         }
     }
 
+    //! Returns whether at least one listener is active.
+    bool HasConnections() const
+    {
+        return std::any_of(m_State->m_Slots.begin(), m_State->m_Slots.end(),
+                           [](const auto& slot) { return *slot->m_Active; });
+    }
+
     //! Disconnects all slots, including callbacks pending in an active emission.
     void DisconnectAll()
     {

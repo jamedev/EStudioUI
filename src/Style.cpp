@@ -73,8 +73,15 @@ float Number(std::string value, bool allowNegative = false)
 
 Length Dimension(const std::string& value)
 {
-    if (value == "auto")
+    if (value == "auto" || value == "content")
         return {};
+    if (value.ends_with("fr"))
+    {
+        const auto weight = Number(value.substr(0, value.size() - 2));
+        if (weight <= 0)
+            throw std::runtime_error("Fractional sizes require a positive weight.");
+        return {Length::Unit::Fraction, weight};
+    }
     if (value.ends_with('%'))
         return {Length::Unit::Percent, Number(value.substr(0, value.size() - 1))};
     return {Length::Unit::Pixels, Number(value)};
@@ -223,6 +230,22 @@ void StyleSheet::Apply(Style& style, const Declaration& declaration)
         style.m_MaxHeight = Number(value);
     else if (name == "gap")
         style.m_Gap = Number(value);
+    else if (name == "row-height")
+    {
+        style.m_RowHeight = Number(value);
+        if (style.m_RowHeight < 12)
+            throw std::runtime_error("row-height must be at least 12px.");
+    }
+    else if (name == "indent-size")
+        style.m_Indent = Number(value);
+    else if (name == "header-background")
+        style.m_HeaderBackground = ParseColor(value);
+    else if (name == "alternate-background")
+        style.m_AlternateBackground = ParseColor(value);
+    else if (name == "hover-background")
+        style.m_HoverBackground = ParseColor(value);
+    else if (name == "grid-color")
+        style.m_GridColor = ParseColor(value);
     else if (name == "flex-grow" || name == "flex")
         style.m_FlexGrow = Number(value);
     else if (name == "flex-direction")
@@ -418,6 +441,8 @@ bool StyleSheet::Parse(std::string_view css, std::string& error)
                                 part.m_Forbidden |= Disabled;
                             else if (word == "read-only")
                                 part.m_Required |= ReadOnly;
+                            else if (word == "selected" || word == "checked")
+                                part.m_Required |= Selected;
                             else
                                 throw std::runtime_error("Unsupported pseudo-class: " + word);
                             rule.m_Specificity += 100;
@@ -506,7 +531,7 @@ Style StyleSheet::Compute(const StyleNode& node, const Style* inherited) const
         style.m_FontSize = inherited->m_FontSize;
         style.m_TextAlign = inherited->m_TextAlign;
     }
-    if (node.m_Type == "button" || node.m_Type == "textbox")
+    if (node.m_Type == "button" || node.m_Type == "toolbutton" || node.m_Type == "textbox")
     {
         style.m_Height = {Length::Unit::Pixels, 44};
         style.m_Padding = {10, 14, 10, 14};
@@ -514,7 +539,7 @@ Style StyleSheet::Compute(const StyleNode& node, const Style* inherited) const
         style.m_BorderWidth = 1;
         style.m_Background = {0.12f, 0.16f, 0.25f, 1};
         style.m_BorderColor = {0.3f, 0.4f, 0.6f, 1};
-        if (node.m_Type == "button")
+        if (node.m_Type == "button" || node.m_Type == "toolbutton")
             style.m_TextAlign = "center";
     }
 

@@ -42,6 +42,11 @@ Signal<const std::string&>& TextBox::Submitted()
     return m_Submitted;
 }
 
+Signal<>& TextBox::FocusLost()
+{
+    return m_FocusLost;
+}
+
 void TextBox::SetText(std::string_view text)
 {
     const auto previous = m_Buffer.GetText();
@@ -172,7 +177,10 @@ void TextBox::OnFocus(bool focused)
     if (focused)
         ResetCaret();
     else
+    {
         m_Dragging = false;
+        m_FocusLost.Emit();
+    }
 }
 
 void TextBox::OnText(std::string_view text)

@@ -5,11 +5,11 @@
 namespace EStudioUI
 {
 //! A focusable button with pointer capture and keyboard activation.
-class Button final : public Label
+class Button : public Label
 {
   public:
     //! Creates a button with a UTF-8 caption.
-    explicit Button(std::string text = {});
+    explicit Button(std::string text = {}, std::string type = "button");
 
     //! Returns whether the control participates in Tab navigation.
     bool IsFocusable() const override;

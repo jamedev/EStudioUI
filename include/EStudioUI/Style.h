@@ -16,7 +16,8 @@ enum PseudoState : unsigned
     Pressed = 2,
     Focus = 4,
     Disabled = 8,
-    ReadOnly = 16
+    ReadOnly = 16,
+    Selected = 32
 };
 
 //! Describes the identity and states visible to CSS selectors.
@@ -46,7 +47,8 @@ struct Length
     {
         Auto,
         Pixels,
-        Percent
+        Percent,
+        Fraction
     };
 
     //! Dimension unit.
@@ -174,6 +176,24 @@ struct Style
 
     //! Text alignment: left, center, right.
     std::string m_TextAlign = "left";
+
+    //! Height of a list/tree/table row in logical pixels.
+    float m_RowHeight = 32;
+
+    //! Horizontal tree indentation per nesting level.
+    float m_Indent = 20;
+
+    //! Table header and popup separator background.
+    Color m_HeaderBackground{0.15f, 0.19f, 0.28f, 1};
+
+    //! Alternating row background.
+    Color m_AlternateBackground{0.5f, 0.6f, 0.8f, 0.04f};
+
+    //! Background of a hovered row.
+    Color m_HoverBackground{0.5f, 0.6f, 0.9f, 0.14f};
+
+    //! Table grid and scrollbar track color.
+    Color m_GridColor{0.4f, 0.5f, 0.7f, 0.2f};
 };
 
 //! Parses and applies a documented CSS subset with an atomic reload operation.

@@ -56,6 +56,9 @@ class Renderer
     //! Appends a cached shaped run at its baseline origin.
     void DrawText(const TextLayout& layout, Point baseline, Color color, Rect clip);
 
+    //! Composites a shared RGBA GL texture, preserving surrounding painter order.
+    void DrawTexture(Rect bounds, std::uint32_t texture, Rect clip, float opacity = 1);
+
     //! Uploads changed buffers and submits batches in painting order.
     void EndFrame();
 

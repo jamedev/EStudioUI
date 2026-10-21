@@ -3,6 +3,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <stdexcept>
 
 namespace EStudioUI
 {
@@ -85,6 +86,23 @@ void UiContext::Restyle(Widget& widget, const Style* parent)
     else
         widget.m_Node.m_State |= Disabled;
     widget.m_Style = m_StyleSheet.Compute(widget.m_Node, parent);
+    widget.m_Style.m_Displayed = widget.m_Style.m_Displayed && widget.m_Visible;
+    const auto applySize = [](const std::optional<SizeRule>& rule, Length& length, float& minimum, float& maximum)
+    {
+        if (!rule)
+            return;
+        minimum = rule->m_Minimum;
+        maximum = rule->m_Maximum;
+        length = rule->m_Mode == SizeRule::Mode::Fixed  ? Length{Length::Unit::Pixels, rule->m_Value}
+                 : rule->m_Mode == SizeRule::Mode::Fill ? Length{Length::Unit::Fraction, rule->m_Value}
+                                                        : Length{};
+    };
+    applySize(widget.m_WidthRule, widget.m_Style.m_Width, widget.m_Style.m_MinWidth, widget.m_Style.m_MaxWidth);
+    applySize(widget.m_HeightRule, widget.m_Style.m_Height, widget.m_Style.m_MinHeight, widget.m_Style.m_MaxHeight);
+    if (widget.m_Direction)
+        widget.m_Style.m_Row = *widget.m_Direction == Axis::Horizontal;
+    if (widget.m_Gap)
+        widget.m_Style.m_Gap = *widget.m_Gap;
     for (auto& child : widget.m_Children)
         Restyle(*child, &widget.m_Style);
 }
@@ -95,33 +113,42 @@ Point UiContext::Measure(Widget& widget, float parentWidth, float parentHeight)
     if (!style.m_Displayed)
         return {};
     Point size = widget.Measure(m_Font);
+    const float width = style.m_Width.Resolve(parentWidth, parentWidth);
+    const float height = style.m_Height.Resolve(parentHeight, parentHeight);
+    const float innerWidth =
+        std::max(0.0f, width - style.m_Padding.m_Left - style.m_Padding.m_Right - 2 * style.m_BorderWidth);
+    const float innerHeight =
+        std::max(0.0f, height - style.m_Padding.m_Top - style.m_Padding.m_Bottom - 2 * style.m_BorderWidth);
     float main = 0;
     float cross = 0;
     int count = 0;
-    const float innerWidth =
-        std::max(0.0f, parentWidth - style.m_Padding.m_Left - style.m_Padding.m_Right - 2 * style.m_BorderWidth);
-    const float innerHeight =
-        std::max(0.0f, parentHeight - style.m_Padding.m_Top - style.m_Padding.m_Bottom - 2 * style.m_BorderWidth);
     for (auto& child : widget.m_Children)
     {
         if (!child->m_Style.m_Displayed)
             continue;
         const auto measured = Measure(*child, innerWidth, innerHeight);
+        if (child->m_Overlay || child->m_FloatingBounds)
+            continue;
         const auto& margin = child->m_Style.m_Margin;
-        const float width = measured.m_X + margin.m_Left + margin.m_Right;
-        const float height = measured.m_Y + margin.m_Top + margin.m_Bottom;
-        main += style.m_Row ? width : height;
-        cross = std::max(cross, style.m_Row ? height : width);
+        const float childWidth = measured.m_X + margin.m_Left + margin.m_Right;
+        const float childHeight = measured.m_Y + margin.m_Top + margin.m_Bottom;
+        main += style.m_Row ? childWidth : childHeight;
+        cross = std::max(cross, style.m_Row ? childHeight : childWidth);
         ++count;
     }
     if (count > 1)
         main += static_cast<float>(count - 1) * style.m_Gap;
-    size.m_X = std::max(size.m_X, style.m_Row ? main : cross);
-    size.m_Y = std::max(size.m_Y, style.m_Row ? cross : main);
-    size.m_X += style.m_Padding.m_Left + style.m_Padding.m_Right + 2 * style.m_BorderWidth;
-    size.m_Y += style.m_Padding.m_Top + style.m_Padding.m_Bottom + 2 * style.m_BorderWidth;
-    size.m_X = std::clamp(style.m_Width.Resolve(parentWidth, size.m_X), style.m_MinWidth, style.m_MaxWidth);
-    size.m_Y = std::clamp(style.m_Height.Resolve(parentHeight, size.m_Y), style.m_MinHeight, style.m_MaxHeight);
+    size.m_X = std::max(size.m_X, style.m_Row ? main : cross) + style.m_Padding.m_Left + style.m_Padding.m_Right +
+               2 * style.m_BorderWidth;
+    size.m_Y = std::max(size.m_Y, style.m_Row ? cross : main) + style.m_Padding.m_Top + style.m_Padding.m_Bottom +
+               2 * style.m_BorderWidth;
+    size.m_X =
+        std::clamp(style.m_Width.m_Unit == Length::Unit::Fraction ? 0.0f : style.m_Width.Resolve(parentWidth, size.m_X),
+                   style.m_MinWidth, style.m_MaxWidth);
+    size.m_Y = std::clamp(
+        style.m_Height.m_Unit == Length::Unit::Fraction ? 0.0f : style.m_Height.Resolve(parentHeight, size.m_Y),
+        style.m_MinHeight, style.m_MaxHeight);
+    m_Measurements[&widget] = size;
     return size;
 }
 
@@ -129,63 +156,63 @@ void UiContext::Layout(Widget& widget, Rect bounds, Rect clip)
 {
     widget.m_Bounds = bounds;
     widget.m_Clip = clip;
+    widget.OnLayout();
     const auto content = widget.GetContentBounds();
     const auto childClip = clip.Intersect(content);
     const auto& style = widget.m_Style;
-
-    struct Item
-    {
-        Widget* m_Widget;
-        Point m_Size;
-    };
-
-    std::vector<Item> items;
-    float used = 0;
-    float grow = 0;
+    std::vector<Widget*> children;
+    std::vector<LayoutItem> items;
+    float margins = 0;
     for (auto& child : widget.m_Children)
     {
-        if (!child->m_Style.m_Displayed)
+        const auto& childStyle = child->m_Style;
+        if (!childStyle.m_Displayed || child->m_Overlay || child->m_FloatingBounds)
             continue;
-        const auto size = Measure(*child, content.m_Width, content.m_Height);
-        const auto& margin = child->m_Style.m_Margin;
-        used += style.m_Row ? size.m_X + margin.m_Left + margin.m_Right : size.m_Y + margin.m_Top + margin.m_Bottom;
-        grow += child->m_Style.m_FlexGrow;
-        items.push_back({child.get(), size});
+        auto size = m_Measurements[child.get()];
+        if (childStyle.m_Width.m_Unit == Length::Unit::Percent)
+            size.m_X = std::clamp(childStyle.m_Width.Resolve(content.m_Width, size.m_X), childStyle.m_MinWidth,
+                                  childStyle.m_MaxWidth);
+        if (childStyle.m_Height.m_Unit == Length::Unit::Percent)
+            size.m_Y = std::clamp(childStyle.m_Height.Resolve(content.m_Height, size.m_Y), childStyle.m_MinHeight,
+                                  childStyle.m_MaxHeight);
+        m_Measurements[child.get()] = size;
+        const auto& dimension = style.m_Row ? childStyle.m_Width : childStyle.m_Height;
+        const auto& margin = childStyle.m_Margin;
+        margins += style.m_Row ? margin.m_Left + margin.m_Right : margin.m_Top + margin.m_Bottom;
+        items.push_back({style.m_Row ? size.m_X : size.m_Y,
+                         style.m_Row ? childStyle.m_MinWidth : childStyle.m_MinHeight,
+                         style.m_Row ? childStyle.m_MaxWidth : childStyle.m_MaxHeight,
+                         dimension.m_Unit == Length::Unit::Fraction ? dimension.m_Value : childStyle.m_FlexGrow});
+        children.push_back(child.get());
     }
     float gap = style.m_Gap;
-    if (items.size() > 1)
-        used += gap * static_cast<float>(items.size() - 1);
+    const float gaps = children.empty() ? 0 : gap * static_cast<float>(children.size() - 1);
     const float available = style.m_Row ? content.m_Width : content.m_Height;
-    const float extra = std::max(0.0f, available - used);
+    const auto allocation = EStudioUI::Layout::Distribute(available - margins - gaps, items);
+    if (allocation.m_Overflow > 0.01f || margins + gaps > available + 0.01f)
+        m_OverflowingContainers.emplace_back(&widget);
     float position = style.m_Row ? content.m_X : content.m_Y;
-    if (grow == 0)
+    if (style.m_Justify == "center")
+        position += allocation.m_Unused * 0.5f;
+    else if (style.m_Justify == "end")
+        position += allocation.m_Unused;
+    else if (style.m_Justify == "space-between" && children.size() > 1)
+        gap += allocation.m_Unused / static_cast<float>(children.size() - 1);
+    for (std::size_t i = 0; i < children.size(); ++i)
     {
-        if (style.m_Justify == "center")
-            position += extra * 0.5f;
-        else if (style.m_Justify == "end")
-            position += extra;
-        else if (style.m_Justify == "space-between" && items.size() > 1)
-            gap += extra / static_cast<float>(items.size() - 1);
-    }
-    for (auto& item : items)
-    {
-        auto& child = *item.m_Widget;
+        auto& child = *children[i];
         const auto& childStyle = child.m_Style;
         const auto& margin = childStyle.m_Margin;
-        float main = style.m_Row ? item.m_Size.m_X : item.m_Size.m_Y;
-        if (grow > 0)
-            main += extra * childStyle.m_FlexGrow / grow;
-        main = std::clamp(main, style.m_Row ? childStyle.m_MinWidth : childStyle.m_MinHeight,
-                          style.m_Row ? childStyle.m_MaxWidth : childStyle.m_MaxHeight);
+        const auto size = m_Measurements[&child];
         const float before = style.m_Row ? margin.m_Left : margin.m_Top;
         const float after = style.m_Row ? margin.m_Right : margin.m_Bottom;
         const float crossBefore = style.m_Row ? margin.m_Top : margin.m_Left;
         const float crossAfter = style.m_Row ? margin.m_Bottom : margin.m_Right;
         const float crossAvailable =
             std::max(0.0f, (style.m_Row ? content.m_Height : content.m_Width) - crossBefore - crossAfter);
-        float cross = style.m_Row ? item.m_Size.m_Y : item.m_Size.m_X;
         const auto crossUnit = style.m_Row ? childStyle.m_Height.m_Unit : childStyle.m_Width.m_Unit;
-        if (style.m_Align == "stretch" && crossUnit == Length::Unit::Auto)
+        float cross = style.m_Row ? size.m_Y : size.m_X;
+        if (crossUnit == Length::Unit::Fraction || (style.m_Align == "stretch" && crossUnit == Length::Unit::Auto))
             cross = crossAvailable;
         cross = std::clamp(cross, style.m_Row ? childStyle.m_MinHeight : childStyle.m_MinWidth,
                            style.m_Row ? childStyle.m_MaxHeight : childStyle.m_MaxWidth);
@@ -195,11 +222,14 @@ void UiContext::Layout(Widget& widget, Rect bounds, Rect clip)
         else if (style.m_Align == "end")
             crossPosition += crossAvailable - cross;
         position += before;
-        const Rect childBounds =
-            style.m_Row ? Rect{position, crossPosition, main, cross} : Rect{crossPosition, position, cross, main};
+        const Rect childBounds = style.m_Row ? Rect{position, crossPosition, allocation.m_Sizes[i], cross}
+                                             : Rect{crossPosition, position, cross, allocation.m_Sizes[i]};
         Layout(child, childBounds, childClip);
-        position += main + after + gap;
+        position += allocation.m_Sizes[i] + after + gap;
     }
+    for (auto& child : widget.m_Children)
+        if (child->m_Style.m_Displayed && child->m_FloatingBounds && !child->m_Overlay)
+            Layout(*child, *child->m_FloatingBounds, childClip);
 }
 
 void UiContext::Prepare(float width, float height)
@@ -220,6 +250,11 @@ void UiContext::Prepare(float width, float height)
     if (!m_Dirty)
         return;
     Restyle(m_Root, nullptr);
+    if (auto* popup = m_Popup.Get(); popup && (!popup->IsVisible() || !popup->IsEnabled()))
+    {
+        ClosePopup();
+        Restyle(m_Root, nullptr);
+    }
     const auto visible = [](Widget* widget)
     {
         for (auto* node = widget; node; node = node->m_Parent)
@@ -241,7 +276,20 @@ void UiContext::Prepare(float width, float height)
     }
     if (statesChanged)
         Restyle(m_Root, nullptr);
+    m_Measurements.clear();
+    m_OverflowingContainers.clear();
+    Measure(m_Root, width, height);
     Layout(m_Root, {0, 0, width, height}, {0, 0, width, height});
+    if (auto* popup = m_Popup.Get(); popup && popup->IsVisible())
+    {
+        const auto measured = m_Measurements[popup];
+        const float popupWidth = std::min(width, measured.m_X);
+        const float popupHeight = std::min(height, measured.m_Y);
+        Layout(*popup,
+               {std::clamp(m_PopupAnchor.m_X, 0.0f, width - popupWidth),
+                std::clamp(m_PopupAnchor.m_Y, 0.0f, height - popupHeight), popupWidth, popupHeight},
+               {0, 0, width, height});
+    }
     m_Dirty = false;
 }
 
@@ -252,13 +300,16 @@ void UiContext::PaintTree(Widget& widget, Renderer& renderer, double time, float
     opacity *= widget.m_Style.m_Opacity;
     widget.Paint(renderer, m_Font, time, opacity);
     for (auto& child : widget.m_Children)
-        PaintTree(*child, renderer, time, opacity);
+        if (!child->m_Overlay)
+            PaintTree(*child, renderer, time, opacity);
 }
 
 void UiContext::Paint(Renderer& renderer, double time)
 {
     m_Time = time;
     PaintTree(m_Root, renderer, time, 1);
+    if (auto* popup = m_Popup.Get())
+        PaintTree(*popup, renderer, time, 1);
     m_Repaint = false;
 }
 
@@ -267,15 +318,16 @@ Widget* UiContext::HitTest(Widget& widget, Point position) const
     if (!widget.m_Style.m_Displayed || !widget.m_Bounds.Contains(position) || !widget.m_Clip.Contains(position))
         return nullptr;
     for (auto i = widget.m_Children.rbegin(); i != widget.m_Children.rend(); ++i)
-        if (auto* found = HitTest(**i, position))
-            return found;
+        if (!(*i)->m_Overlay)
+            if (auto* found = HitTest(**i, position))
+                return found;
     return &widget;
 }
 
 void UiContext::PointerMove(Point position, Modifiers modifiers)
 {
     Prepare(m_Width, m_Height);
-    auto* target = HitTest(m_Root, position);
+    auto* target = HitTest(m_Popup.Get() ? *m_Popup.Get() : m_Root, position);
     std::vector<Widget*> path;
     for (auto* node = target; node; node = node->m_Parent)
         path.push_back(node);
@@ -290,17 +342,25 @@ void UiContext::PointerMove(Point position, Modifiers modifiers)
     }
     if (auto* capture = m_Capture.Get())
         capture->OnPointerMove({position, modifiers, 1});
+    else if (target && target->IsEnabled())
+        target->OnPointerMove({position, modifiers, 1});
 }
 
 void UiContext::PointerDown(Point position, Modifiers modifiers, int clicks)
 {
+    Prepare(m_Width, m_Height);
+    if (auto* popup = m_Popup.Get(); popup && !popup->GetBounds().Contains(position))
+    {
+        ClosePopup();
+        return;
+    }
     const auto previousCapture = m_Capture;
     m_Capture = {};
     if (auto* previous = previousCapture.Get())
         previous->OnCaptureLost();
     PointerMove(position, modifiers);
     Prepare(m_Width, m_Height);
-    auto* target = HitTest(m_Root, position);
+    auto* target = HitTest(m_Popup.Get() ? *m_Popup.Get() : m_Root, position);
     if (!target || !target->IsEnabled())
         return;
     const WidgetRef reference(target);
@@ -324,17 +384,20 @@ void UiContext::PointerUp(Point position, Modifiers modifiers)
 
 void UiContext::SetFocus(Widget* widget)
 {
-    if (widget && (!widget->IsEnabled() || !widget->IsFocusable() || widget->m_Context != this))
+    if (widget && (!widget->IsEnabled() || !widget->IsFocusable() || widget->m_Context != this || !widget->IsVisible()))
         widget = nullptr;
     if (m_Focus.Get() == widget)
         return;
     const WidgetRef next(widget);
-    if (auto* previous = m_Focus.Get())
+    const auto previousFocus = m_Focus;
+    m_Focus = next;
+    if (auto* previous = previousFocus.Get())
     {
         previous->SetState(Focus, false);
         previous->OnFocus(false);
     }
-    m_Focus = next;
+    if (m_Focus.Get() != next.Get())
+        return;
     if (auto* current = next.Get())
     {
         current->SetState(Focus, true);
@@ -347,14 +410,14 @@ void UiContext::FocusNext(bool backwards)
     std::vector<Widget*> candidates;
     const auto collect = [&](auto&& self, Widget& widget) -> void
     {
-        if (!widget.m_Style.m_Displayed || !widget.IsEnabled())
+        if (!widget.IsVisible() || !widget.IsEnabled())
             return;
         if (widget.IsFocusable())
             candidates.push_back(&widget);
         for (auto& child : widget.m_Children)
             self(self, *child);
     };
-    collect(collect, m_Root);
+    collect(collect, m_Popup.Get() ? *m_Popup.Get() : m_Root);
     if (candidates.empty())
     {
         SetFocus(nullptr);
@@ -369,8 +432,26 @@ void UiContext::FocusNext(bool backwards)
 void UiContext::KeyEvent(Key key, bool down, bool repeat, Modifiers modifiers)
 {
     Prepare(m_Width, m_Height);
+    if (down && key == Key::Escape && m_Popup.Get())
+    {
+        ClosePopup();
+        return;
+    }
+    if (down && key == Key::Menu && m_Focus.Get())
+    {
+        const auto bounds = m_Focus.Get()->GetBounds();
+        ContextMenu({bounds.m_X + bounds.m_Width * 0.5f, bounds.m_Y + bounds.m_Height * 0.5f});
+        return;
+    }
+    std::vector<WidgetRef> preview;
+    for (auto* node = m_Focus.Get(); node; node = node->m_Parent)
+        preview.emplace_back(node);
+    for (auto& reference : preview)
+        if (auto* node = reference.Get(); node && node->OnKeyPreview(key, down, repeat, modifiers))
+            return;
     if (key == Key::Tab && down)
     {
+        Prepare(m_Width, m_Height);
         if (!repeat)
             FocusNext(modifiers.m_Shift);
         return;
@@ -388,6 +469,7 @@ void UiContext::TextInput(std::string_view text)
 
 void UiContext::Deactivate()
 {
+    ClosePopup();
     if (auto* captured = m_Capture.Get())
         captured->OnCaptureLost();
     m_Capture = {};
@@ -413,5 +495,129 @@ void UiContext::SetClipboardText(std::string_view text) const
 {
     if (m_SetClipboard)
         m_SetClipboard(text);
+}
+} // namespace EStudioUI
+
+namespace EStudioUI
+{
+void UiContext::Scroll(Point position, Point delta, Modifiers modifiers)
+{
+    Prepare(m_Width, m_Height);
+    std::vector<WidgetRef> path;
+    for (auto* node = HitTest(m_Popup.Get() ? *m_Popup.Get() : m_Root, position); node; node = node->m_Parent)
+        path.emplace_back(node);
+    for (auto& reference : path)
+        if (auto* node = reference.Get(); node && node->IsEnabled() && node->OnScroll(delta, modifiers))
+            return;
+}
+
+void UiContext::ContextMenu(Point position)
+{
+    ClosePopup();
+    Prepare(m_Width, m_Height);
+    std::vector<WidgetRef> path;
+    for (auto* node = HitTest(m_Root, position); node; node = node->m_Parent)
+        path.emplace_back(node);
+    for (auto& reference : path)
+        if (auto* node = reference.Get(); node && node->IsEnabled() && node->m_ContextMenuRequested.HasConnections())
+        {
+            node->m_ContextMenuRequested.Emit(position);
+            return;
+        }
+}
+
+void UiContext::ShowPopup(Widget& popup, Point anchor)
+{
+    if (!std::isfinite(anchor.m_X) || !std::isfinite(anchor.m_Y))
+        throw std::invalid_argument("Popup coordinates must be finite.");
+    if (popup.GetContext() != this || &popup == &m_Root || popup.GetParent() != &m_Root)
+        throw std::invalid_argument("Popups must be immediate owned children of this UI root.");
+    const WidgetRef popupRef(&popup);
+    ClosePopup();
+    if (!popupRef.Get())
+        return;
+    m_PopupReturnFocus = m_Focus;
+    m_Popup = WidgetRef(&popup);
+    m_PopupAnchor = anchor;
+    popup.m_Overlay = true;
+    popup.SetVisible(true);
+    Invalidate();
+    Prepare(m_Width, m_Height);
+    SetFocus(&popup);
+}
+
+void UiContext::ClosePopup()
+{
+    const auto popup = m_Popup;
+    const auto restore = m_PopupReturnFocus;
+    m_Popup = {};
+    m_PopupReturnFocus = {};
+    if (auto* live = popup.Get())
+    {
+        live->SetVisible(false);
+        const auto capture = m_Capture;
+        m_Capture = {};
+        if (auto* captured = capture.Get())
+            captured->OnCaptureLost();
+        auto* target = restore.Get();
+        while (target && (!target->IsVisible() || !target->IsEnabled() || !target->IsFocusable()))
+            target = target->m_Parent;
+        SetFocus(target);
+    }
+    Invalidate();
+}
+
+Widget* UiContext::GetPopup() const
+{
+    return m_Popup.Get();
+}
+
+void UiContext::PrepareSurfaces(double time, float scaleX, float scaleY)
+{
+    if (!std::isfinite(scaleX) || !std::isfinite(scaleY) || scaleX <= 0 || scaleY <= 0)
+        throw std::invalid_argument("Surface pixel scales must be finite and positive.");
+    const auto visit = [&](auto&& self, Widget& widget) -> void
+    {
+        if (!widget.IsVisible() || widget.GetBounds().Intersect(widget.GetClip()).m_Width <= 0 ||
+            widget.GetBounds().Intersect(widget.GetClip()).m_Height <= 0)
+            return;
+        widget.PrepareFrame(time, scaleX, scaleY);
+        for (auto& child : widget.m_Children)
+            self(self, *child);
+    };
+    visit(visit, m_Root);
+}
+
+bool UiContext::HasAnimations() const
+{
+    const auto visit = [&](auto&& self, const Widget& widget) -> bool
+    {
+        if (!widget.IsVisible() || widget.GetBounds().Intersect(widget.GetClip()).m_Width <= 0 ||
+            widget.GetBounds().Intersect(widget.GetClip()).m_Height <= 0)
+            return false;
+        if (widget.NeedsContinuousRendering())
+            return true;
+        return std::any_of(widget.m_Children.begin(), widget.m_Children.end(),
+                           [&](const auto& child) { return self(self, *child); });
+    };
+    return visit(visit, m_Root);
+}
+
+void UiContext::FrameSubmitted()
+{
+    const auto visit = [&](auto&& self, Widget& widget) -> void
+    {
+        if (!widget.IsVisible())
+            return;
+        widget.FrameSubmitted();
+        for (auto& child : widget.m_Children)
+            self(self, *child);
+    };
+    visit(visit, m_Root);
+}
+
+const std::vector<WidgetRef>& UiContext::GetOverflowingContainers() const
+{
+    return m_OverflowingContainers;
 }
 } // namespace EStudioUI

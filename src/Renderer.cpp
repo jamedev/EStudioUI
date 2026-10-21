@@ -64,6 +64,7 @@ flat in vec4 vBands;
 flat in ivec4 vData;
 uniform samplerBuffer uCurves;
 uniform usamplerBuffer uBands;
+uniform sampler2D uImage;
 out vec4 result;
 uint rootCode(float y1,float y2,float y3)
 {
@@ -95,6 +96,11 @@ vec2 solveCurve(vec4 p12,vec2 p3,bool vertical)
 void main()
 {
     if(any(lessThan(vPosition,vClip.xy)) || any(greaterThanEqual(vPosition,vClip.xy+vClip.zw))) discard;
+    if(vData.w==2)
+    {
+        result=texture(uImage,vEm)*vColor;
+        return;
+    }
     if(vData.w==0)
     {
         float radius=min(vParams.x,min(vRect.z,vRect.w)*0.5);
@@ -249,6 +255,7 @@ struct Renderer::Impl
     int m_FramebufferHeight = 1;
     bool m_FontDirty = true;
     std::vector<Instance> m_Instances;
+    std::vector<std::pair<std::size_t, GLuint>> m_Images;
     std::size_t m_ShapeCount = 0;
     std::size_t m_GlyphCount = 0;
     std::vector<Float4> m_Curves{{0, 0, 0, 0}};
@@ -389,8 +396,10 @@ void Renderer::BeginFrame(float width, float height, int framebufferWidth, int f
     self.m_FramebufferWidth = std::max(1, framebufferWidth);
     self.m_FramebufferHeight = std::max(1, framebufferHeight);
     self.m_Instances.clear();
+    self.m_Images.clear();
     self.m_ShapeCount = 0;
     self.m_GlyphCount = 0;
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
     glViewport(0, 0, self.m_FramebufferWidth, self.m_FramebufferHeight);
     glDisable(GL_DEPTH_TEST);
     glDisable(GL_CULL_FACE);
@@ -459,6 +468,16 @@ void Renderer::DrawText(const TextLayout& layout, Point baseline, Color color, R
     }
 }
 
+void Renderer::DrawTexture(Rect bounds, std::uint32_t texture, Rect clip, float opacity)
+{
+    if (!texture || bounds.m_Width <= 0 || bounds.m_Height <= 0 || bounds.Intersect(clip).m_Width <= 0 ||
+        bounds.Intersect(clip).m_Height <= 0)
+        return;
+    auto& self = *m_Impl;
+    self.m_Images.emplace_back(self.m_Instances.size(), texture);
+    self.m_Instances.push_back({Values(bounds), {0, 1, 1, -1}, {1, 1, 1, opacity}, {}, Values(clip), {}, {0, 0, 0, 2}});
+}
+
 void Renderer::EndFrame()
 {
     auto& self = *m_Impl;
@@ -491,17 +510,34 @@ void Renderer::EndFrame()
     glBindTexture(GL_TEXTURE_BUFFER, self.m_CurveTexture);
     glActiveTexture(GL_TEXTURE1);
     glBindTexture(GL_TEXTURE_BUFFER, self.m_BandTexture);
-    for (unsigned i = 0; i < 6; ++i)
-        Impl::FloatAttribute(i, sizeof(Impl::Instance), i * sizeof(Float4));
-    glEnableVertexAttribArray(6);
-    glVertexAttribIPointer(6, 4, GL_INT, sizeof(Impl::Instance),
-                           reinterpret_cast<const void*>(offsetof(Impl::Instance, m_Data)));
-    glVertexAttribDivisor(6, 1);
+    glUniform1i(glGetUniformLocation(self.m_Program, "uImage"), 2);
     if (self.m_Instances.size() > static_cast<std::size_t>(std::numeric_limits<GLsizei>::max()))
         throw std::runtime_error("Frame exceeds the maximum GL instance count.");
-    if (!self.m_Instances.empty())
-        glDrawArraysInstanced(GL_TRIANGLES, 0, 6, static_cast<GLsizei>(self.m_Instances.size()));
-    self.m_Stats = {self.m_Instances.empty() ? 0u : 1u, self.m_ShapeCount, self.m_GlyphCount, self.m_GlyphCache.size(),
+    std::size_t calls = 0;
+    const auto submit = [&](std::size_t begin, std::size_t end)
+    {
+        if (end <= begin)
+            return;
+        const auto offset = begin * sizeof(Impl::Instance);
+        for (unsigned i = 0; i < 6; ++i)
+            Impl::FloatAttribute(i, sizeof(Impl::Instance), offset + i * sizeof(Float4));
+        glEnableVertexAttribArray(6);
+        glVertexAttribIPointer(6, 4, GL_INT, sizeof(Impl::Instance),
+                               reinterpret_cast<const void*>(offset + offsetof(Impl::Instance, m_Data)));
+        glVertexAttribDivisor(6, 1);
+        glDrawArraysInstanced(GL_TRIANGLES, 0, 6, static_cast<GLsizei>(end - begin));
+        ++calls;
+    };
+    std::size_t begin = 0;
+    for (const auto& image : self.m_Images)
+    {
+        submit(begin, image.first);
+        glActiveTexture(GL_TEXTURE2);
+        glBindTexture(GL_TEXTURE_2D, image.second);
+        begin = image.first;
+    }
+    submit(begin, self.m_Instances.size());
+    self.m_Stats = {calls, self.m_ShapeCount, self.m_GlyphCount, self.m_GlyphCache.size(),
                     self.m_Curves.size() * sizeof(Float4) + self.m_Bands.size() * sizeof(UInt2)};
     const auto error = glGetError();
     if (error != GL_NO_ERROR)

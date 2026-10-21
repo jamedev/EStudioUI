@@ -1,9 +1,53 @@
-Test project /workspace/scratch/e2c95811cd0a/EStudioUI/build/release
-    Start 1: Core
-1/2 Test #1: Core .............................   Passed    0.01 sec
-    Start 2: GpuIntegration
-2/2 Test #2: GpuIntegration ...................   Passed    0.14 sec
+Start testing: Oct 21 10:11 PDT
+----------------------------------------------------------
+1/3 Testing: Core
+1/3 Test: Core
+Command: "/workspace/scratch/e2c95811cd0a/EStudioUI/build/release/EStudioUICoreTests"
+Directory: /workspace/scratch/e2c95811cd0a/EStudioUI/build/release
+"Core" start time: Oct 21 10:11 PDT
+Output:
+----------------------------------------------------------
+Core PASS / 78 checks
+<end of output>
+Test time =   0.01 sec
+----------------------------------------------------------
+Test Passed.
+"Core" end time: Oct 21 10:11 PDT
+"Core" time elapsed: 00:00:00
+----------------------------------------------------------
 
-100% tests passed out of 2
+2/3 Testing: WidgetsAndLayout
+2/3 Test: WidgetsAndLayout
+Command: "/workspace/scratch/e2c95811cd0a/EStudioUI/build/release/EStudioUIWidgetTests"
+Directory: /workspace/scratch/e2c95811cd0a/EStudioUI/build/release
+"WidgetsAndLayout" start time: Oct 21 10:11 PDT
+Output:
+----------------------------------------------------------
+Widgets and layout PASS / 3674 checks
+<end of output>
+Test time =   0.01 sec
+----------------------------------------------------------
+Test Passed.
+"WidgetsAndLayout" end time: Oct 21 10:11 PDT
+"WidgetsAndLayout" time elapsed: 00:00:00
+----------------------------------------------------------
 
-Total Test time (real) =   0.15 sec
+3/3 Testing: GpuIntegration
+3/3 Test: GpuIntegration
+Command: "/workspace/scratch/e2c95811cd0a/EStudioUI/build/release/EStudioUIDemo" "--headless" "--self-test" "--output" "/workspace/scratch/e2c95811cd0a/EStudioUI/build/release/verification"
+Directory: /workspace/scratch/e2c95811cd0a/EStudioUI/build/release
+"GpuIntegration" start time: Oct 21 10:11 PDT
+Output:
+----------------------------------------------------------
+Cannot read stylesheet:
+GPU integration PASS / llvmpipe (LLVM 20.1.2, 256 bits) | 4.5 (Core Profile) Mesa 25.1.7-1ubuntu2~24.04.2
+Demo: 1 draw call / 787 glyphs / 83784 outline bytes
+<end of output>
+Test time =   0.35 sec
+----------------------------------------------------------
+Test Passed.
+"GpuIntegration" end time: Oct 21 10:11 PDT
+"GpuIntegration" time elapsed: 00:00:00
+----------------------------------------------------------
+
+End testing: Oct 21 10:11 PDT

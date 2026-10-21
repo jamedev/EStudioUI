@@ -71,19 +71,45 @@ enum class Key
     Space,
     Left,
     Right,
+    Up,
+    Down,
+    PageUp,
+    PageDown,
     Home,
     End,
     Backspace,
     Delete,
     A,
+    B,
     C,
-    X,
+    D,
+    E,
+    F,
+    G,
+    H,
+    I,
+    J,
+    K,
+    L,
+    M,
+    N,
+    O,
+    P,
+    Q,
+    R,
+    S,
+    T,
+    U,
     V,
-    Z,
+    W,
+    X,
     Y,
+    Z,
     Escape,
     F5,
-    F6
+    F6,
+    F2,
+    Menu
 };
 
 //! Keyboard modifiers normalized by the platform backend.
@@ -110,5 +136,21 @@ struct PointerEvent
 
     //! Successive press count, including double and triple clicks.
     int m_Clicks = 1;
+};
+
+//! A normalized keyboard event delivered to an embedded scene.
+struct KeyboardEvent
+{
+    //! Physical key independent of the text input layout.
+    Key m_Key = Key::Unknown;
+
+    //! Whether the key is pressed rather than released.
+    bool m_Down = false;
+
+    //! Whether this is an auto-repeat event.
+    bool m_Repeat = false;
+
+    //! Modifier state accompanying this event.
+    Modifiers m_Modifiers;
 };
 } // namespace EStudioUI

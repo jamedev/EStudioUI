@@ -43,6 +43,12 @@ class Window
     //! Returns the window's GL renderer and diagnostics.
     Renderer& Graphics();
 
+    //! Returns the diagnostic identity of the window's OpenGL context.
+    std::uintptr_t GetContextIdentity() const;
+
+    //! Returns whether this window uses the null platform and OSMesa.
+    bool IsHeadless() const;
+
     //! Runs the native event loop, sleeping between changes and caret deadlines.
     int Run();
 
