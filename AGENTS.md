@@ -41,3 +41,9 @@
 - Verify animation changes with deterministic timeline/input tests and actual
   framebuffer samples. Explicit layout contracts must retain precedence over CSS
   animation overrides; absolute geometry remains an intentional out-of-flow API.
+
+- Rich CSS values compile once; keep parsing and selector evaluation out of paint-only
+  ticks. Keep automatic CSS presentation below explicit C++ overrides and code size
+  contracts. Decorative layers are paint records, not widgets. Preserve transformed
+  hit testing AND world-space capture clipping. Extend the RichCss and framebuffer
+  probes when changing gradients, shadow ordering, clipping, or timeline semantics.

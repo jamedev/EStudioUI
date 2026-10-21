@@ -10,6 +10,7 @@ without exposing third-party types in its public widget headers.
 | `Widget`, `Label`, `Button`, `TextBox` | Owned model, cached shaping, behavior, emitted signals |
 | `SizeRule`, `Layout` | Fixed/content/fill contracts, bounded weighted distribution, overflow |
 | `Animation`, `AnimationSystem`, `EasingCurve` | Synchronized typed tracks, elapsed-time scheduling, easing, cancellation and lifetime safety |
+| `CssMotion`, `VisualStyle` | Compiled CSS timelines, decorative paint layers, gradients, affine transforms |
 | `StyleProperty` | Typed computed-style access, valid-range clamping, paint-only invalidation classification |
 | `TabWidget`, `ToolBar`, `ToolButton`, `ContextMenu` | Owned pages, commands/toggles, popup layer |
 | `ScrollWidget`, `ListWidget`, `TreeWidget`, `TableWidget` | Cached viewport text, virtualized rows, selection/editing |
@@ -41,6 +42,22 @@ code layout contracts. Paint-only overrides update cached presentation without
 repeating style resolution or measurement; inherited/geometry changes use the
 existing invalidation path. See [ANIMATIONS.md](ANIMATIONS.md).
 
+CSS declarations compile into typed assignments once per stylesheet parse.
+`CssMotion` caches underlying and presented styles separately for each widget and
+its before/after paint layers. Automatic state transitions start from the current
+presentation. Keyframes compile into per-property knot tracks, with missing
+endpoints drawn from the underlying style. Ticks visit active property sets,
+without selector evaluation or string/number parsing. Explicit application style
+overrides and size contracts retain precedence. Stylesheet replacement resets
+automatic tracks. Weak references protect deletion and address reuse.
+
+Affine paint transforms compose through the tree without changing allocated
+bounds. Input uses inverse composed matrices, with a separate ancestor-clip flag
+for capture events. Rounded/transformed clip chains share the same geometry on
+CPU and GPU. Decorations draw within the owner paint order, without interactive
+children. `UiStats` reports cumulative style/layout work; `RenderStats` reports
+draws, shapes, glyphs, instance/effect upload bytes, gradients, and shadows.
+
 Each label/editor caches shaping until text or CSS font size changes. FreeType
 loads unhinted outlines only once per glyph ID. Curves use em-space coordinates;
 TrueType quadratics remain exact. CFF cubic curves are recursively approximated
@@ -66,8 +83,13 @@ Shapes, text, selection highlights, and carets share one shader program and one
 instance buffer. A flat instance kind selects shape or glyph processing. Without scene textures, a single
 instanced draw preserves painter order and alpha blending, including translucent
 primitives interleaved with glyphs. Per-instance clip rectangles avoid scissor
-state changes. The fixed-width stream costs 112 bytes per visible instance.
-Cached font buffers upload only after new glyphs are encountered; per-frame
+state changes. The fixed-width stream costs 128 bytes per visible instance.
+An additional 16-byte instance field indexes an RGBA32F effect buffer for affine
+matrices, clip chains, and analytic gradient/shadow parameters. The ordinary
+identity-transform path avoids matrix texture fetches; axis-aligned clips remain
+in the instance. Effect values are bounded (eight gradient stops/shadows/transform
+operations, 32 complex clip levels). No effect creates a widget or offscreen
+render pass. Cached font buffers upload only after new glyphs are encountered; per-frame
 instance data uses GL buffer orphaning/upload. Existing vector capacities are
 reused. Texture-buffer limits are checked and diagnosed; eviction is future work.
 
@@ -156,6 +178,15 @@ pause/seek/resume, replacement, deleted targets, callback mutation/failures,
 stylesheet retargeting, mixed units, focus/hover/hit testing, and paint-only
 cache reuse. GPU probes compare animated color/opacity and geometry with actual
 framebuffer pixels. Captures come from paused timelines sampled with Seek.
+
+Rich CSS tests cover transactional nested parsing, compiled cascade assignments,
+keyframe segments, timing longhands, interrupted state transitions, pause/resume,
+fixed sizing, inverse transformed input, capture clipping, weak targets, and
+500-widget cache reuse. Real framebuffer probes check linear/radial gradients,
+inset/multiple shadows, rounded pseudo-element clipping, keyframe colors and
+movement. A synchronous 160-button baseline/rich benchmark reports median/p95
+frame time and batch/upload counts. See `verification/rich-css-performance.txt`
+for the measured host and limitations.
 
 A practical next sequence is Windows hardware validation, grid/wrapping/splitters,
 IME/bidirectional text and accessibility, then incremental style/layout and GPU

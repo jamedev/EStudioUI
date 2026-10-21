@@ -9,8 +9,9 @@ namespace EStudioUI
 {
 namespace
 {
-using Member = std::variant<float Style::*, Color Style::*, Insets Style::*, Shadow Style::*, Length Style::*,
-                            bool Style::*, std::string Style::*>;
+using Member =
+    std::variant<float Style::*, Color Style::*, Insets Style::*, Shadow Style::*, Length Style::*, bool Style::*,
+                 std::string Style::*, Gradient Style::*, Transform Style::*, ShadowLayers Style::*, Anchors Style::*>;
 
 struct PropertyInfo
 {
@@ -52,7 +53,13 @@ const auto s_Properties = std::to_array<PropertyInfo>({{"background-color", &Sty
                                                        {"hover-background", &Style::m_HoverBackground},
                                                        {"grid-color", &Style::m_GridColor},
                                                        {"translate-x", &Style::m_TranslateX},
-                                                       {"translate-y", &Style::m_TranslateY}});
+                                                       {"translate-y", &Style::m_TranslateY},
+                                                       {"background-image", &Style::m_BackgroundImage},
+                                                       {"transform", &Style::m_Transform},
+                                                       {"shadow-layers", &Style::m_ShadowLayers},
+                                                       {"overflow", &Style::m_ClipContent},
+                                                       {"content", &Style::m_Decoration},
+                                                       {"inset", &Style::m_Anchors}});
 static_assert(s_Properties.size() == static_cast<std::size_t>(StyleProperty::Count));
 
 const PropertyInfo& Info(StyleProperty property)
@@ -82,7 +89,62 @@ Insets Sanitize(Insets value)
 
 Shadow Sanitize(Shadow value)
 {
-    return {Finite(value.m_X, -1000000), Finite(value.m_Y, -1000000), Finite(value.m_Blur), Sanitize(value.m_Color)};
+    return {Finite(value.m_X, -1000000), Finite(value.m_Y, -1000000),      Finite(value.m_Blur),
+            Sanitize(value.m_Color),     Finite(value.m_Spread, -1000000), value.m_Inset};
+}
+
+Gradient Sanitize(Gradient value)
+{
+    if (value.m_Kind < Gradient::Kind::None || value.m_Kind > Gradient::Kind::Radial || value.m_Stops.size() > 8 ||
+        (value.m_Kind != Gradient::Kind::None && value.m_Stops.size() < 2))
+        throw std::invalid_argument("Gradients require two to eight stops.");
+    value.m_Angle = Finite(value.m_Angle, -1000000);
+    value.m_Center = {Finite(value.m_Center.m_X, -1000, 1000), Finite(value.m_Center.m_Y, -1000, 1000)};
+    value.m_Radius = {Finite(value.m_Radius.m_X, 0.0001f, 1000), Finite(value.m_Radius.m_Y, 0.0001f, 1000)};
+    float previous = -1000000;
+    for (auto& stop : value.m_Stops)
+    {
+        stop.m_Position = std::max(previous, Finite(stop.m_Position, -1000000));
+        stop.m_Color = Sanitize(stop.m_Color);
+        previous = stop.m_Position;
+    }
+    return value;
+}
+
+Transform Sanitize(Transform value)
+{
+    if (value.m_Operations.size() > 8)
+        throw std::invalid_argument("Transforms support at most eight operations.");
+    value.m_Origin = {Finite(value.m_Origin.m_X, -1000, 1000), Finite(value.m_Origin.m_Y, -1000, 1000)};
+    for (auto& operation : value.m_Operations)
+    {
+        if (operation.m_Kind < TransformOperation::Kind::Translate ||
+            operation.m_Kind > TransformOperation::Kind::Matrix)
+            throw std::invalid_argument("Unknown transform operation.");
+        for (auto& component : operation.m_Values)
+            component = Finite(component, -1000000);
+    }
+    return value;
+}
+
+ShadowLayers Sanitize(ShadowLayers value)
+{
+    if (value.m_Layers.size() > 7)
+        throw std::invalid_argument("Box shadows support at most eight layers.");
+    for (auto& shadow : value.m_Layers)
+        shadow = Sanitize(shadow);
+    return value;
+}
+
+Anchors Sanitize(Anchors value)
+{
+    for (auto* edge : {&value.m_Top, &value.m_Right, &value.m_Bottom, &value.m_Left})
+    {
+        if (edge->m_Unit < Length::Unit::Auto || edge->m_Unit > Length::Unit::Percent)
+            throw std::invalid_argument("Decoration offsets require auto, pixels, or percentages.");
+        edge->m_Value = Finite(edge->m_Value, -1000000);
+    }
+    return value;
 }
 
 Length Sanitize(Length value)
@@ -105,6 +167,12 @@ bool IsPaintOnlyProperty(StyleProperty property)
 {
     switch (property)
     {
+    case StyleProperty::BackgroundImage:
+    case StyleProperty::Transform:
+    case StyleProperty::ShadowLayers:
+    case StyleProperty::ClipContent:
+    case StyleProperty::Decoration:
+    case StyleProperty::Anchors:
     case StyleProperty::Background:
     case StyleProperty::BorderColor:
     case StyleProperty::SelectionBackground:
@@ -167,5 +235,32 @@ void SetStyleValue(Style& style, StyleProperty property, const StyleValue& value
                 style.*member = Sanitize(*typed);
         },
         Info(property).m_Member);
+}
+} // namespace EStudioUI
+
+namespace EStudioUI
+{
+std::vector<StyleProperty> FindStyleProperties(std::string_view name)
+{
+    std::vector<StyleProperty> result;
+    for (int i = 0; i < static_cast<int>(StyleProperty::Count); ++i)
+    {
+        const auto property = static_cast<StyleProperty>(i);
+        if (name == "all" || GetStylePropertyName(property) == name)
+            result.push_back(property);
+    }
+    if (name == "background")
+        result = {StyleProperty::Background, StyleProperty::BackgroundImage};
+    else if (name == "box-shadow")
+        result = {StyleProperty::BoxShadow, StyleProperty::ShadowLayers};
+    else if (name == "border")
+        result = {StyleProperty::BorderWidth, StyleProperty::BorderColor};
+    else if (name == "transform-origin")
+        result = {StyleProperty::Transform};
+    else if (name == "flex")
+        result = {StyleProperty::FlexGrow};
+    else if (name == "left" || name == "right" || name == "top" || name == "bottom")
+        result = {StyleProperty::Anchors};
+    return result;
 }
 } // namespace EStudioUI

@@ -16,6 +16,7 @@
 namespace EStudioUI
 {
 class UiContext;
+class CssMotion;
 class FontFace;
 class Renderer;
 
@@ -202,6 +203,8 @@ class Widget
     void SetState(unsigned flag, bool enabled);
 
   private:
+    friend class CssMotion;
+
     //! Attaches or detaches a complete subtree.
     void Attach(UiContext* context, Widget* parent);
 

@@ -2,6 +2,7 @@
 
 #include "DemoScene.h"
 #include "AnimationGallery.h"
+#include "RichCssGallery.h"
 
 #include <EStudioUI/ContextMenu.h>
 #include <EStudioUI/ListWidget.h>
@@ -101,6 +102,9 @@ class WidgetGallery
 
     //! Observes the geometry readout.
     Label* m_LayoutReadout = nullptr;
+
+    //! Owns the CSS paint gallery and its verification probes.
+    std::unique_ptr<RichCssGallery> m_RichCss;
 
     //! Owns the animation playground and its scheduler connection.
     std::unique_ptr<AnimationGallery> m_Animations;

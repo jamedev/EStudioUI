@@ -26,9 +26,13 @@ layout(location=3) in vec4 aBorder;
 layout(location=4) in vec4 aClip;
 layout(location=5) in vec4 aBands;
 layout(location=6) in ivec4 aData;
+layout(location=7) in ivec4 aEffects;
+uniform samplerBuffer uEffects;
 uniform vec2 uViewport;
 out vec2 vEm;
 out vec2 vPosition;
+out vec2 vWorld;
+flat out ivec4 vEffects;
 flat out vec4 vRect;
 flat out vec4 vParams;
 flat out vec4 vColor;
@@ -40,9 +44,17 @@ const vec2 corners[6]=vec2[6](vec2(0,0),vec2(1,0),vec2(0,1),vec2(0,1),vec2(1,0),
 void main()
 {
     vec2 corner=corners[gl_VertexID];
-    float padding=aData.w==0?aAux.w:0.0;
+    float padding=(aData.w==0 || aData.w==4)?aAux.w:0.0;
     vec2 p=aRect.xy-vec2(padding)+corner*(aRect.zw+2.0*padding);
-    gl_Position=vec4(p.x/uViewport.x*2.0-1.0,1.0-p.y/uViewport.y*2.0,0,1);
+    vec2 world=p;
+    if(aEffects.x!=0)
+    {
+        vec4 row0=texelFetch(uEffects,aEffects.x);
+        vec4 row1=texelFetch(uEffects,aEffects.x+1);
+        world=vec2(dot(vec3(p,1),row0.xyz),dot(vec3(p,1),row1.xyz));
+    }
+    gl_Position=vec4(world.x/uViewport.x*2.0-1.0,1.0-world.y/uViewport.y*2.0,0,1);
+    vWorld=world;vEffects=aEffects;
     vPosition=p;vEm=aAux.xy+corner*aAux.zw;
     vRect=aRect;vParams=aAux;vColor=aColor;vBorder=aBorder;
     vClip=aClip;vBands=aBands;vData=aData;
@@ -55,6 +67,8 @@ void main()
 const char* UnifiedFragment = R"GLSL(#version 330 core
 in vec2 vEm;
 in vec2 vPosition;
+in vec2 vWorld;
+flat in ivec4 vEffects;
 flat in vec4 vRect;
 flat in vec4 vParams;
 flat in vec4 vBorder;
@@ -65,6 +79,7 @@ flat in ivec4 vData;
 uniform samplerBuffer uCurves;
 uniform usamplerBuffer uBands;
 uniform sampler2D uImage;
+uniform samplerBuffer uEffects;
 out vec4 result;
 uint rootCode(float y1,float y2,float y3)
 {
@@ -93,30 +108,102 @@ vec2 solveCurve(vec4 p12,vec2 p3,bool vertical)
     if(vertical) return (a.y*t-2.0*b.y)*t+p12.y;
     return (a.x*t-2.0*b.x)*t+p12.x;
 }
+float boxDistance(vec2 point, vec4 rect, float radius)
+{
+    radius=clamp(radius,0.0,min(rect.z,rect.w)*0.5);
+    vec2 q=abs(point-(rect.xy+rect.zw*0.5))-(rect.zw*0.5-vec2(radius));
+    return length(max(q,0.0))+min(max(q.x,q.y),0.0)-radius;
+}
+float coverage(float distance)
+{
+    float aa=max(fwidth(distance),0.0001);
+    return 1.0-smoothstep(-aa*0.5,aa*0.5,distance);
+}
+vec4 premultiply(vec4 color) { return vec4(color.rgb*color.a,color.a); }
+vec4 straight(vec4 color) { return vec4(color.a>0.000001?color.rgb/color.a:vec3(0),color.a); }
+vec4 gradientColor(int index)
+{
+    vec4 header=texelFetch(uEffects,index);
+    vec4 params=texelFetch(uEffects,index+1);
+    vec2 p=(vPosition-vRect.xy)/max(vRect.zw,vec2(0.0001));
+    float t;
+    if(header.x==1.0)
+    {
+        vec2 direction=vec2(sin(header.z),-cos(header.z));
+        float extent=abs(direction.x)*vRect.z+abs(direction.y)*vRect.w;
+        t=0.5+dot(vPosition-vRect.xy-vRect.zw*0.5,direction)/max(extent,0.0001);
+    }
+    else t=length((p-params.xy)/max(params.zw,vec2(0.0001)));
+    float previousPosition=texelFetch(uEffects,index+2).x;
+    vec4 previousColor=premultiply(texelFetch(uEffects,index+3));
+    if(t<previousPosition) return straight(previousColor)*vec4(1,1,1,header.w);
+    for(int i=1;i<8;++i)
+    {
+        if(i>=int(header.y)) break;
+        float position=texelFetch(uEffects,index+2+i*2).x;
+        vec4 color=premultiply(texelFetch(uEffects,index+3+i*2));
+        if(t<position)
+        {
+            float weight=clamp((t-previousPosition)/max(position-previousPosition,0.000001),0.0,1.0);
+            return straight(mix(previousColor,color,weight))*vec4(1,1,1,header.w);
+        }
+        previousPosition=position;previousColor=color;
+    }
+    return straight(previousColor)*vec4(1,1,1,header.w);
+}
 void main()
 {
-    if(any(lessThan(vPosition,vClip.xy)) || any(greaterThanEqual(vPosition,vClip.xy+vClip.zw))) discard;
+    if(any(lessThan(vWorld,vClip.xy)) || any(greaterThanEqual(vWorld,vClip.xy+vClip.zw))) discard;
+    int clip=vEffects.y;
+    float clipCoverage=1.0;
+    for(int depth=0;depth<32;++depth)
+    {
+        if(clip==0) break;
+        vec4 rect=texelFetch(uEffects,clip);
+        vec4 first=texelFetch(uEffects,clip+1);
+        vec4 second=texelFetch(uEffects,clip+2);
+        vec2 local=vec2(dot(vec3(vWorld,1),vec3(first.zw,second.x)),dot(vec3(vWorld,1),second.yzw));
+        clipCoverage=min(clipCoverage,coverage(boxDistance(local,rect,first.x)));
+        if(clipCoverage<=0.0) discard;
+        clip=int(first.y);
+    }
     if(vData.w==2)
     {
         result=texture(uImage,vEm)*vColor;
+        result.a*=clipCoverage;
         return;
     }
-    if(vData.w==0)
+    if(vData.w==0 || vData.w==3 || vData.w==4)
     {
-        float radius=min(vParams.x,min(vRect.z,vRect.w)*0.5);
-        vec2 q=abs(vPosition-vRect.xy-vRect.zw*0.5)-vRect.zw*0.5+radius;
-        float d=length(max(q,vec2(0)))+min(max(q.x,q.y),0.0)-radius;
-        float aa=max(fwidth(d),0.0001);
-        float coverage=clamp(0.5-d/aa,0.0,1.0);
-        vec4 color=vColor;
-        if(vParams.z>0.0)
-            coverage=1.0-smoothstep(-vParams.z,vParams.z,d);
-        else if(vParams.y>0.0)
+        float d=boxDistance(vPosition,vRect,vParams.x);
+        float alpha=coverage(d);
+        if(vParams.z>0.0) alpha=1.0-smoothstep(-vParams.z,vParams.z,d);
+        vec4 fill=vColor;
+        if(vEffects.z!=0)
         {
-            float interior=clamp(0.5-(d+vParams.y)/aa,0.0,1.0);
-            color=mix(vBorder,vColor,interior);
+            vec4 image=premultiply(gradientColor(vEffects.z));
+            fill=straight(image+premultiply(fill)*(1.0-image.a));
         }
-        result=vec4(color.rgb,color.a*coverage);
+        if(vData.w==3)
+        {
+            vec4 hole=texelFetch(uEffects,vEffects.w);
+            vec4 shadow=texelFetch(uEffects,vEffects.w+1);
+            float holeDistance=boxDistance(vPosition,hole,shadow.x);
+            float holeCoverage=shadow.y>0.0?1.0-smoothstep(-shadow.y,shadow.y,holeDistance):coverage(holeDistance);
+            alpha=coverage(d)*(1.0-holeCoverage);
+        }
+        if(vData.w==4)
+        {
+            vec4 owner=texelFetch(uEffects,vEffects.w);
+            float radius=texelFetch(uEffects,vEffects.w+1).x;
+            alpha*=1.0-coverage(boxDistance(vPosition,owner,radius));
+        }
+        if(vParams.y>0.0)
+        {
+            float inner=coverage(d+vParams.y);
+            fill=straight(mix(premultiply(vBorder),premultiply(fill),inner));
+        }
+        result=vec4(fill.rgb,fill.a*alpha*clipCoverage);
         return;
     }
     vec2 pixelsPerEm=1.0/max(fwidth(vEm),vec2(0.0000001));
@@ -154,7 +241,7 @@ void main()
         }
     }
     float coverage=max(abs(xcov*xwgt+ycov*ywgt)/max(xwgt+ywgt,1.0/65536.0),min(abs(xcov),abs(ycov)));
-    result=vec4(vColor.rgb,vColor.a*clamp(coverage,0.0,1.0));
+    result=vec4(vColor.rgb,vColor.a*clamp(coverage,0.0,1.0)*clipCoverage);
 }
 )GLSL";
 
@@ -230,6 +317,7 @@ struct Renderer::Impl
         Float4 m_Clip;
         Float4 m_Bands;
         std::array<int, 4> m_Data;
+        std::array<int, 4> m_Effects;
     };
 
     struct GpuGlyph
@@ -239,6 +327,82 @@ struct Renderer::Impl
         int m_Count = 1;
         Float4 m_Transform{};
     };
+
+    struct State
+    {
+        Affine m_Transform;
+        int m_TransformIndex = 0, m_ClipIndex = 0, m_ClipDepth = 0;
+        Rect m_Scissor, m_IgnoredClip, m_Owner;
+        const Style* m_Before = nullptr;
+        bool m_BeforeDrawn = false, m_Rounded = false;
+        float m_Radius = 0;
+    };
+
+    GLuint m_EffectBuffer = 0, m_EffectTexture = 0;
+    std::vector<Float4> m_Effects;
+    std::vector<State> m_States;
+    std::size_t m_GradientCount = 0, m_ShadowCount = 0;
+
+    int AppendClip(Rect bounds, float radius, const State& state)
+    {
+        if (state.m_ClipDepth >= 32)
+            throw std::runtime_error("Rounded/transformed clip nesting exceeds 32 levels.");
+        Affine inverse;
+        if (!state.m_Transform.Inverse(inverse))
+            return -1;
+        const auto index = static_cast<int>(m_Effects.size());
+        m_Effects.push_back(Values(bounds));
+        m_Effects.push_back({radius, static_cast<float>(state.m_ClipIndex), inverse.m_A, inverse.m_C});
+        m_Effects.push_back({inverse.m_X, inverse.m_B, inverse.m_D, inverse.m_Y});
+        return index;
+    }
+
+    std::pair<Rect, std::array<int, 4>> DrawingState(Rect clip)
+    {
+        auto state = m_States.back();
+        if (clip.m_Width <= 0 || clip.m_Height <= 0)
+            return {Rect{}, {0, -1, 0, 0}};
+        if (clip != state.m_IgnoredClip)
+        {
+            if (state.m_Transform.m_B == 0 && state.m_Transform.m_C == 0)
+                state.m_Scissor = state.m_Scissor.Intersect(state.m_Transform.MapBounds(clip));
+            else
+            {
+                state.m_ClipIndex = AppendClip(clip, 0, state);
+                ++state.m_ClipDepth;
+            }
+        }
+        if (state.m_Rounded)
+        {
+            state.m_ClipIndex = AppendClip(state.m_Owner, state.m_Radius, state);
+            ++state.m_ClipDepth;
+        }
+        return {state.m_Scissor, {state.m_TransformIndex, state.m_ClipIndex, 0, 0}};
+    }
+
+    int AddGradient(const Gradient& gradient, float opacity)
+    {
+        if (gradient.m_Kind == Gradient::Kind::None)
+            return 0;
+        const int index = static_cast<int>(m_Effects.size());
+        m_Effects.push_back({static_cast<float>(gradient.m_Kind), static_cast<float>(gradient.m_Stops.size()),
+                             gradient.m_Angle * 3.14159265358979323846f / 180, opacity});
+        m_Effects.push_back(
+            {gradient.m_Center.m_X, gradient.m_Center.m_Y, gradient.m_Radius.m_X, gradient.m_Radius.m_Y});
+        for (const auto& stop : gradient.m_Stops)
+        {
+            m_Effects.push_back({stop.m_Position, 0, 0, 0});
+            m_Effects.push_back({stop.m_Color.m_R, stop.m_Color.m_G, stop.m_Color.m_B, stop.m_Color.m_A});
+        }
+        ++m_GradientCount;
+        return index;
+    }
+
+    bool Visible(Rect bounds, Rect clip) const
+    {
+        const auto visible = m_States.back().m_Transform.MapBounds(bounds).Intersect(clip);
+        return visible.m_Width > 0 && visible.m_Height > 0;
+    }
 
     FontFace& m_Font;
     GLuint m_Program = 0;
@@ -271,6 +435,8 @@ struct Renderer::Impl
     {
         if (m_Program)
             glDeleteProgram(m_Program);
+        glDeleteBuffers(1, &m_EffectBuffer);
+        glDeleteTextures(1, &m_EffectTexture);
         glDeleteBuffers(1, &m_InstanceBuffer);
         glDeleteBuffers(1, &m_CurveBuffer);
         glDeleteBuffers(1, &m_BandBuffer);
@@ -279,18 +445,23 @@ struct Renderer::Impl
         glDeleteVertexArrays(1, &m_Vao);
     }
 
-    void Shape(Rect bounds, Color color, Color border, Float4 params, Rect clip)
+    void Shape(Rect bounds, Color color, Color border, Float4 params, Rect clip, int kind = 0, int gradient = 0,
+               int shadow = 0)
     {
-        if (bounds.m_Width <= 0 || bounds.m_Height <= 0 || clip.m_Width <= 0 || clip.m_Height <= 0)
+        if (bounds.m_Width <= 0 || bounds.m_Height <= 0)
+            return;
+        auto [scissor, effects] = DrawingState(clip);
+        if (effects[1] < 0)
             return;
         const float padding = params[3];
-        const auto visible = Rect{bounds.m_X - padding, bounds.m_Y - padding, bounds.m_Width + 2 * padding,
-                                  bounds.m_Height + 2 * padding}
-                                 .Intersect(clip);
-        if (visible.m_Width <= 0 || visible.m_Height <= 0)
+        if (!Visible({bounds.m_X - padding, bounds.m_Y - padding, bounds.m_Width + 2 * padding,
+                      bounds.m_Height + 2 * padding},
+                     scissor))
             return;
+        effects[2] = gradient;
+        effects[3] = shadow;
         ++m_ShapeCount;
-        m_Instances.push_back({Values(bounds), params, color, border, Values(clip), {}, {0, 0, 0, 0}});
+        m_Instances.push_back({Values(bounds), params, color, border, Values(scissor), {}, {0, 0, 0, kind}, effects});
     }
 
     const GpuGlyph& Glyph(std::uint32_t id)
@@ -369,8 +540,8 @@ struct Renderer::Impl
 
 Renderer::Renderer(FontFace& font) : m_Impl(std::make_unique<Impl>(font))
 {
-    static_assert(sizeof(Impl::Instance) == 112 && sizeof(int) == 4,
-                  "The GL vertex attribute stream requires a packed 112-byte instance and 32-bit integers.");
+    static_assert(sizeof(Impl::Instance) == 128 && sizeof(int) == 4,
+                  "The GL vertex attribute stream requires a packed 128-byte instance and 32-bit integers.");
     if (!GLAD_GL_VERSION_3_3)
         throw std::runtime_error("OpenGL 3.3 core is required.");
     m_Impl->m_Program = Program(UnifiedVertex, UnifiedFragment);
@@ -378,6 +549,9 @@ Renderer::Renderer(FontFace& font) : m_Impl(std::make_unique<Impl>(font))
     glUseProgram(m_Impl->m_Program);
     glUniform1i(glGetUniformLocation(m_Impl->m_Program, "uCurves"), 0);
     glUniform1i(glGetUniformLocation(m_Impl->m_Program, "uBands"), 1);
+    glUniform1i(glGetUniformLocation(m_Impl->m_Program, "uEffects"), 3);
+    glGenBuffers(1, &m_Impl->m_EffectBuffer);
+    glGenTextures(1, &m_Impl->m_EffectTexture);
     glGenVertexArrays(1, &m_Impl->m_Vao);
     glGenBuffers(1, &m_Impl->m_InstanceBuffer);
     glGenBuffers(1, &m_Impl->m_CurveBuffer);
@@ -397,6 +571,12 @@ void Renderer::BeginFrame(float width, float height, int framebufferWidth, int f
     self.m_FramebufferHeight = std::max(1, framebufferHeight);
     self.m_Instances.clear();
     self.m_Images.clear();
+    self.m_Effects = {{1, 0, 0, 0}, {0, 1, 0, 0}};
+    self.m_States.clear();
+    Impl::State state;
+    state.m_Scissor = {0, 0, self.m_Width, self.m_Height};
+    self.m_States.push_back(state);
+    self.m_GradientCount = self.m_ShadowCount = 0;
     self.m_ShapeCount = 0;
     self.m_GlyphCount = 0;
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
@@ -410,24 +590,151 @@ void Renderer::BeginFrame(float width, float height, int framebufferWidth, int f
     glClear(GL_COLOR_BUFFER_BIT);
 }
 
+void Renderer::PushState(Affine local)
+{
+    auto& self = *m_Impl;
+    auto state = self.m_States.back();
+    state.m_Before = nullptr;
+    state.m_Rounded = false;
+    state.m_IgnoredClip = {};
+    if (local != Affine{})
+    {
+        state.m_Transform = state.m_Transform * local;
+        state.m_TransformIndex = static_cast<int>(self.m_Effects.size());
+        const auto& t = state.m_Transform;
+        self.m_Effects.push_back({t.m_A, t.m_C, t.m_X, 0});
+        self.m_Effects.push_back({t.m_B, t.m_D, t.m_Y, 0});
+    }
+    self.m_States.push_back(state);
+}
+
+void Renderer::PopState()
+{
+    if (m_Impl->m_States.size() <= 1)
+        throw std::logic_error("Unbalanced renderer state stack.");
+    m_Impl->m_States.pop_back();
+}
+
+void Renderer::PushClip(Rect bounds, float radius)
+{
+    auto& self = *m_Impl;
+    auto& state = self.m_States.back();
+    if (radius <= 0 && state.m_Transform.m_B == 0 && state.m_Transform.m_C == 0)
+        state.m_Scissor = state.m_Scissor.Intersect(state.m_Transform.MapBounds(bounds));
+    else
+    {
+        state.m_ClipIndex = self.AppendClip(bounds, radius, state);
+        ++state.m_ClipDepth;
+    }
+}
+
+void Renderer::SetWidgetPaint(Rect bounds, Rect inheritedClip, const Style* before, bool rounded, float radius)
+{
+    auto& state = m_Impl->m_States.back();
+    state.m_Owner = bounds;
+    state.m_IgnoredClip = inheritedClip;
+    state.m_Before = before;
+    state.m_BeforeDrawn = false;
+    state.m_Rounded = rounded;
+    state.m_Radius = radius;
+}
+
+void Renderer::DrawDecoration(Rect owner, const Style& style, Rect clip, float opacity)
+{
+    const auto& edges = style.m_Anchors;
+    const float left = edges.m_Left.Resolve(owner.m_Width, 0);
+    const float right = edges.m_Right.Resolve(owner.m_Width, 0);
+    const float top = edges.m_Top.Resolve(owner.m_Height, 0);
+    const float bottom = edges.m_Bottom.Resolve(owner.m_Height, 0);
+    const float width = std::clamp(style.m_Width.Resolve(owner.m_Width, std::max(0.0f, owner.m_Width - left - right)),
+                                   style.m_MinWidth, style.m_MaxWidth);
+    const float height =
+        std::clamp(style.m_Height.Resolve(owner.m_Height, std::max(0.0f, owner.m_Height - top - bottom)),
+                   style.m_MinHeight, style.m_MaxHeight);
+    Rect bounds{owner.m_X + (edges.m_Left.m_Unit == Length::Unit::Auto && edges.m_Right.m_Unit != Length::Unit::Auto
+                                 ? owner.m_Width - right - width
+                                 : left),
+                owner.m_Y + (edges.m_Top.m_Unit == Length::Unit::Auto && edges.m_Bottom.m_Unit != Length::Unit::Auto
+                                 ? owner.m_Height - bottom - height
+                                 : top),
+                width, height};
+    bounds.m_X += style.m_TranslateX;
+    bounds.m_Y += style.m_TranslateY;
+    PushState(style.m_Transform.Resolve(bounds));
+    // The owner clip was installed before entering the decorative transform.
+    m_Impl->m_States.back().m_IgnoredClip = clip;
+    DrawBox(bounds, style, clip, opacity * style.m_Opacity);
+    PopState();
+}
+
 void Renderer::DrawBox(Rect bounds, const Style& style, Rect clip, float opacity)
 {
+    auto& self = *m_Impl;
     auto fill = style.m_Background;
     auto border = style.m_BorderColor;
     fill.m_A *= opacity;
     border.m_A *= opacity;
-    if (style.m_Shadow.m_Color.m_A > 0)
+    // Outer shadows must remain outside the owner's optional rounded content clip.
+    const bool rounded = self.m_States.back().m_Rounded;
+    self.m_States.back().m_Rounded = false;
+    const auto shadowShape = [&](const Shadow& shadow)
     {
-        auto shadow = style.m_Shadow.m_Color;
-        shadow.m_A *= opacity;
-        auto shadowBounds = bounds;
-        shadowBounds.m_X += style.m_Shadow.m_X;
-        shadowBounds.m_Y += style.m_Shadow.m_Y;
-        m_Impl->Shape(shadowBounds, shadow, {}, {style.m_Radius, 0, style.m_Shadow.m_Blur, style.m_Shadow.m_Blur + 1},
-                      clip);
+        if (shadow.m_Color.m_A <= 0)
+            return;
+        auto color = shadow.m_Color;
+        color.m_A *= opacity;
+        const int index = static_cast<int>(self.m_Effects.size());
+        if (!shadow.m_Inset)
+        {
+            self.m_Effects.push_back(Values(bounds));
+            self.m_Effects.push_back({style.m_Radius, 0, 0, 0});
+            const Rect cast{bounds.m_X + shadow.m_X - shadow.m_Spread, bounds.m_Y + shadow.m_Y - shadow.m_Spread,
+                            std::max(0.0f, bounds.m_Width + 2 * shadow.m_Spread),
+                            std::max(0.0f, bounds.m_Height + 2 * shadow.m_Spread)};
+            self.Shape(cast, color, {},
+                       {std::max(0.0f, style.m_Radius + shadow.m_Spread), 0, shadow.m_Blur, shadow.m_Blur + 1}, clip, 4,
+                       0, index);
+        }
+        else
+        {
+            const float inset = std::min(style.m_BorderWidth, std::min(bounds.m_Width, bounds.m_Height) * 0.5f);
+            const Rect inner{bounds.m_X + inset, bounds.m_Y + inset, bounds.m_Width - 2 * inset,
+                             bounds.m_Height - 2 * inset};
+            const Rect hole{inner.m_X + shadow.m_X + shadow.m_Spread, inner.m_Y + shadow.m_Y + shadow.m_Spread,
+                            std::max(0.0f, inner.m_Width - 2 * shadow.m_Spread),
+                            std::max(0.0f, inner.m_Height - 2 * shadow.m_Spread)};
+            const float radius = std::max(0.0f, style.m_Radius - inset);
+            self.m_Effects.push_back(Values(hole));
+            self.m_Effects.push_back({std::max(0.0f, radius - shadow.m_Spread), shadow.m_Blur, 0, 0});
+            self.Shape(inner, color, {}, {radius, 0, 0, 0}, clip, 3, 0, index);
+        }
+        ++self.m_ShadowCount;
+    };
+    for (auto i = style.m_ShadowLayers.m_Layers.rbegin(); i != style.m_ShadowLayers.m_Layers.rend(); ++i)
+        if (!i->m_Inset)
+            shadowShape(*i);
+    if (!style.m_Shadow.m_Inset)
+        shadowShape(style.m_Shadow);
+    if (fill.m_A > 0 || style.m_BackgroundImage.m_Kind != Gradient::Kind::None ||
+        (style.m_BorderWidth > 0 && border.m_A > 0))
+        self.Shape(bounds, fill, border, {style.m_Radius, style.m_BorderWidth, 0, 1}, clip, 0,
+                   self.AddGradient(style.m_BackgroundImage, opacity));
+    for (auto i = style.m_ShadowLayers.m_Layers.rbegin(); i != style.m_ShadowLayers.m_Layers.rend(); ++i)
+        if (i->m_Inset)
+            shadowShape(*i);
+    if (style.m_Shadow.m_Inset)
+        shadowShape(style.m_Shadow);
+    self.m_States.back().m_Rounded = rounded;
+    const auto state = self.m_States.back();
+    if (state.m_Before && !state.m_BeforeDrawn && state.m_Owner == bounds)
+    {
+        self.m_States.back().m_BeforeDrawn = true;
+        PushState();
+        if (rounded)
+            PushClip(bounds, style.m_Radius);
+        DrawDecoration(bounds, *state.m_Before, clip, opacity);
+        PopState();
     }
-    if (fill.m_A > 0 || (style.m_BorderWidth > 0 && border.m_A > 0))
-        m_Impl->Shape(bounds, fill, border, {style.m_Radius, style.m_BorderWidth, 0, 1}, clip);
 }
 
 void Renderer::DrawSolid(Rect bounds, Color color, Rect clip)
@@ -441,6 +748,9 @@ void Renderer::DrawText(const TextLayout& layout, Point baseline, Color color, R
     if (clip.m_Width <= 0 || clip.m_Height <= 0 || color.m_A <= 0 || layout.m_FontSize <= 0)
         return;
     auto& self = *m_Impl;
+    const auto [scissor, effects] = self.DrawingState(clip);
+    if (effects[1] < 0)
+        return;
     const float paddingX = 0.75f * self.m_Width / static_cast<float>(self.m_FramebufferWidth);
     const float paddingY = 0.75f * self.m_Height / static_cast<float>(self.m_FramebufferHeight);
     const float size = layout.m_FontSize;
@@ -454,7 +764,7 @@ void Renderer::DrawText(const TextLayout& layout, Point baseline, Color color, R
                         baseline.m_Y - positioned.m_Y - bounds.m_MaxY * size - paddingY,
                         (bounds.m_MaxX - bounds.m_MinX) * size + 2 * paddingX,
                         (bounds.m_MaxY - bounds.m_MinY) * size + 2 * paddingY};
-        if (rect.Intersect(clip).m_Width <= 0 || rect.Intersect(clip).m_Height <= 0)
+        if (!self.Visible(rect, scissor))
             continue;
         ++self.m_GlyphCount;
         self.m_Instances.push_back({Values(rect),
@@ -462,20 +772,24 @@ void Renderer::DrawText(const TextLayout& layout, Point baseline, Color color, R
                                      rect.m_Width / size, -rect.m_Height / size},
                                     color,
                                     {},
-                                    Values(clip),
+                                    Values(scissor),
                                     glyph.m_Transform,
-                                    {glyph.m_Start, glyph.m_Count, glyph.m_Count, 1}});
+                                    {glyph.m_Start, glyph.m_Count, glyph.m_Count, 1},
+                                    effects});
     }
 }
 
 void Renderer::DrawTexture(Rect bounds, std::uint32_t texture, Rect clip, float opacity)
 {
-    if (!texture || bounds.m_Width <= 0 || bounds.m_Height <= 0 || bounds.Intersect(clip).m_Width <= 0 ||
-        bounds.Intersect(clip).m_Height <= 0)
+    if (!texture || bounds.m_Width <= 0 || bounds.m_Height <= 0)
         return;
     auto& self = *m_Impl;
+    const auto [scissor, effects] = self.DrawingState(clip);
+    if (effects[1] < 0 || !self.Visible(bounds, scissor))
+        return;
     self.m_Images.emplace_back(self.m_Instances.size(), texture);
-    self.m_Instances.push_back({Values(bounds), {0, 1, 1, -1}, {1, 1, 1, opacity}, {}, Values(clip), {}, {0, 0, 0, 2}});
+    self.m_Instances.push_back(
+        {Values(bounds), {0, 1, 1, -1}, {1, 1, 1, opacity}, {}, Values(scissor), {}, {0, 0, 0, 2}, effects});
 }
 
 void Renderer::EndFrame()
@@ -501,6 +815,16 @@ void Renderer::EndFrame()
         glTexBuffer(GL_TEXTURE_BUFFER, GL_RG32UI, self.m_BandBuffer);
         self.m_FontDirty = false;
     }
+    GLint effectLimit = 0;
+    glGetIntegerv(GL_MAX_TEXTURE_BUFFER_SIZE, &effectLimit);
+    if (self.m_Effects.size() > static_cast<std::size_t>(effectLimit))
+        throw std::runtime_error("Frame effects exceed the texture buffer limit.");
+    glBindBuffer(GL_TEXTURE_BUFFER, self.m_EffectBuffer);
+    glBufferData(GL_TEXTURE_BUFFER, static_cast<GLsizeiptr>(self.m_Effects.size() * sizeof(Float4)),
+                 self.m_Effects.data(), GL_STREAM_DRAW);
+    glActiveTexture(GL_TEXTURE3);
+    glBindTexture(GL_TEXTURE_BUFFER, self.m_EffectTexture);
+    glTexBuffer(GL_TEXTURE_BUFFER, GL_RGBA32F, self.m_EffectBuffer);
     glBindBuffer(GL_ARRAY_BUFFER, self.m_InstanceBuffer);
     glBufferData(GL_ARRAY_BUFFER, static_cast<GLsizeiptr>(self.m_Instances.size() * sizeof(Impl::Instance)),
                  self.m_Instances.data(), GL_STREAM_DRAW);
@@ -525,6 +849,10 @@ void Renderer::EndFrame()
         glVertexAttribIPointer(6, 4, GL_INT, sizeof(Impl::Instance),
                                reinterpret_cast<const void*>(offset + offsetof(Impl::Instance, m_Data)));
         glVertexAttribDivisor(6, 1);
+        glEnableVertexAttribArray(7);
+        glVertexAttribIPointer(7, 4, GL_INT, sizeof(Impl::Instance),
+                               reinterpret_cast<const void*>(offset + offsetof(Impl::Instance, m_Effects)));
+        glVertexAttribDivisor(7, 1);
         glDrawArraysInstanced(GL_TRIANGLES, 0, 6, static_cast<GLsizei>(end - begin));
         ++calls;
     };
@@ -537,8 +865,15 @@ void Renderer::EndFrame()
         begin = image.first;
     }
     submit(begin, self.m_Instances.size());
-    self.m_Stats = {calls, self.m_ShapeCount, self.m_GlyphCount, self.m_GlyphCache.size(),
-                    self.m_Curves.size() * sizeof(Float4) + self.m_Bands.size() * sizeof(UInt2)};
+    self.m_Stats = {calls,
+                    self.m_ShapeCount,
+                    self.m_GlyphCount,
+                    self.m_GlyphCache.size(),
+                    self.m_Curves.size() * sizeof(Float4) + self.m_Bands.size() * sizeof(UInt2),
+                    self.m_Instances.size() * sizeof(Impl::Instance),
+                    self.m_Effects.size() * sizeof(Float4),
+                    self.m_GradientCount,
+                    self.m_ShadowCount};
     const auto error = glGetError();
     if (error != GL_NO_ERROR)
         throw std::runtime_error("OpenGL error after rendering: " + std::to_string(error));

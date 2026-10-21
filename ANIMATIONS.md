@@ -1,4 +1,4 @@
-# Animation system / EStudioUI 0.4
+# Animation system / EStudioUI 0.5
 
 The animation system drives current computed CSS properties and arbitrary
 application properties on one GUI-thread timeline. It adds no runtime dependency.
@@ -198,3 +198,22 @@ hit testing, explicit size contracts, inherited colors, and layout-cache reuse.
 GpuIntegration captures actual C++ renderer start/middle/end frames, compares
 framebuffer pixels with computed colors and geometry, and activates a translated
 button in the synchronized property group.
+
+## Automatic CSS motion (0.5)
+
+`transition` and named `@keyframes` now run through the same GUI clock as explicit
+C++ animations. They operate on the widget's cached CSS presentation, and on
+noninteractive `::before/::after` styles. State changes transition from the current
+visible CSS value; paused/finished timelines stop requesting frames. Application
+style overrides remain above automatic CSS values. Code size contracts still win.
+
+`BackgroundImage`, `Transform`, `ShadowLayers`, `ClipContent`, `Decoration`, and
+`Anchors` extend typed `StyleProperty` access. Gradients and compatible ordered
+transform lists interpolate components; transforms also update painted/input
+coordinates without invalidating layout. The older `AddTranslation` behavior
+continues to modify translated layout bounds. `EasingCurve::Steps` adds discrete
+CSS timing. See [CSS.md](CSS.md) for syntax, limits, and structure compatibility.
+
+Whole-stylesheet animation snapshots widgets; it does not generate synchronized
+tracks for decorative layers. Existing CSS timelines on those layers continue
+independently. Use their CSS transitions/keyframes for layer animation.

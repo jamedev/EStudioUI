@@ -26,6 +26,18 @@ struct RenderStats
 
     //! Bytes of outline and band data currently cached on the GPU.
     std::size_t m_FontBytes = 0;
+
+    //! Bytes submitted in the ordered instance stream.
+    std::size_t m_InstanceBytes = 0;
+
+    //! Bytes submitted for transforms, clip chains, and analytic paint effects.
+    std::size_t m_EffectBytes = 0;
+
+    //! Number of analytic gradient fills.
+    std::size_t m_Gradients = 0;
+
+    //! Number of outer or inset shadow shapes.
+    std::size_t m_Shadows = 0;
 };
 
 //! Batches analytic shapes and outline glyphs using an OpenGL 3.3 core context.
@@ -46,6 +58,21 @@ class Renderer
 
     //! Starts a new logical-pixel frame and clears the framebuffer.
     void BeginFrame(float width, float height, int framebufferWidth, int framebufferHeight, Color clear);
+
+    //! Saves drawing state and composes a visual transform.
+    void PushState(Affine local = {});
+
+    //! Restores the preceding transform and clipping state.
+    void PopState();
+
+    //! Intersects the current clip with a local rounded rectangle.
+    void PushClip(Rect bounds, float radius = 0);
+
+    //! Supplies the owner and optional before layer for one widget paint call.
+    void SetWidgetPaint(Rect bounds, Rect inheritedClip, const Style* before, bool rounded, float radius);
+
+    //! Draws one noninteractive CSS pseudo-element.
+    void DrawDecoration(Rect owner, const Style& style, Rect clip, float opacity);
 
     //! Appends a widget background, optional shadow, and border.
     void DrawBox(Rect bounds, const Style& style, Rect clip, float opacity = 1);

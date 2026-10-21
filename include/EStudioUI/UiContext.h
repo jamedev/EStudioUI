@@ -9,6 +9,18 @@
 
 namespace EStudioUI
 {
+class CssMotion;
+
+//! Cumulative counters used to verify cache behavior across animation frames.
+struct UiStats
+{
+    //! Number of computed widget or decorative styles.
+    std::size_t m_StyleResolutions = 0;
+
+    //! Number of complete measurement and arrangement passes.
+    std::size_t m_LayoutPasses = 0;
+};
+
 //! Owns one window's widget tree, style resolution, layout, and input routing.
 class UiContext
 {
@@ -116,6 +128,12 @@ class UiContext
     //! Advances property timelines and the caret clock before layout and painting.
     void SetTime(double time);
 
+    //! Returns cumulative style and layout work.
+    const UiStats& GetStats() const;
+
+    //! Converts window input coordinates into a widget's untransformed layout coordinates.
+    Point ToLayoutPoint(const Widget& widget, Point point) const;
+
     //! Returns current monotonic GUI time.
     double GetTime() const;
 
@@ -145,7 +163,10 @@ class UiContext
     void Layout(Widget& widget, Rect bounds, Rect clip);
 
     //! Finds the frontmost displayed widget inside all ancestor clips.
-    Widget* HitTest(Widget& widget, Point position) const;
+    Widget* HitTest(Widget& widget, Point position, Affine parentTransform = {}) const;
+
+    //! Maps pointer coordinates and preserves world-space ancestor clipping during capture.
+    PointerEvent MakePointerEvent(const Widget& widget, Point position, Modifiers modifiers = {}, int clicks = 1) const;
 
     //! Refreshes hover after geometry changes without synthesizing pointer callbacks.
     bool RefreshHover();
@@ -171,6 +192,12 @@ class UiContext
 
     //! Owns GUI-thread timelines, destroyed before the widget tree.
     AnimationSystem m_Animations;
+
+    //! Owns compiled CSS timelines and lightweight decorative presentations.
+    std::unique_ptr<CssMotion> m_CssMotion;
+
+    //! Cumulative cache instrumentation.
+    UiStats m_Stats;
 
     //! Identifies the current whole-stylesheet transition for replacement.
     AnimationId m_StyleTransition = 0;

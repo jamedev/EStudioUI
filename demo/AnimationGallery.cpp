@@ -161,14 +161,16 @@ void AnimationGallery::Reset()
     m_Badge->ClearFloatingBounds();
     m_Counter->SetText("Custom magnitude: 0 / 100");
     std::string error;
-    Check(ui.SetStyleSheet(ReadAsset("dark.css") + ReadAsset("animation-start.css"), error), error);
+    Check(ui.SetStyleSheet(ReadAsset("dark.css") + ReadAsset("rich-buttons.css") + ReadAsset("animation-start.css"),
+                           error),
+          error);
     m_Status->SetText("Start endpoint restored. All examples share the same GUI-thread animation scheduler.");
 }
 
 void AnimationGallery::PlayStyle(const AnimationOptions& options)
 {
     Reset();
-    const auto base = ReadAsset("dark.css");
+    const auto base = ReadAsset("dark.css") + ReadAsset("rich-buttons.css");
     std::string error;
     m_Id = m_Window.Ui().AnimateStyleSheet(base + ReadAsset("animation-start.css"),
                                            base + ReadAsset("animation-end.css"), options, error);

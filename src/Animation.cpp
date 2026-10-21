@@ -9,7 +9,7 @@ namespace EStudioUI
 {
 namespace
 {
-StyleValue Interpolate(const StyleValue& from, const StyleValue& to, double progress)
+StyleValue InterpolateValue(const StyleValue& from, const StyleValue& to, double progress)
 {
     return std::visit(
         [&](const auto& first) -> StyleValue
@@ -21,12 +21,114 @@ StyleValue Interpolate(const StyleValue& from, const StyleValue& to, double prog
             else if constexpr (std::is_same_v<Value, Length>)
                 return Length{first.m_Unit, std::max(first.m_Unit == Length::Unit::Fraction ? 0.0001f : 0.0f,
                                                      Tween(first.m_Value, last.m_Value, progress))};
+            else if constexpr (std::is_same_v<Value, Gradient>)
+            {
+                auto a = first;
+                auto b = last;
+                if (a.m_Kind == Gradient::Kind::None)
+                {
+                    a = b;
+                    for (auto& stop : a.m_Stops)
+                        stop.m_Color.m_A = 0;
+                }
+                if (b.m_Kind == Gradient::Kind::None)
+                {
+                    b = a;
+                    for (auto& stop : b.m_Stops)
+                        stop.m_Color.m_A = 0;
+                }
+                if (a.m_Kind != b.m_Kind || a.m_Stops.size() != b.m_Stops.size())
+                    return progress >= 1 ? last : first;
+                auto result = a;
+                result.m_Angle = Tween(a.m_Angle, b.m_Angle, progress);
+                result.m_Center = Tween(a.m_Center, b.m_Center, progress);
+                result.m_Radius = Tween(a.m_Radius, b.m_Radius, progress);
+                for (std::size_t i = 0; i < result.m_Stops.size(); ++i)
+                    result.m_Stops[i] = {Tween(a.m_Stops[i].m_Position, b.m_Stops[i].m_Position, progress),
+                                         Tween(a.m_Stops[i].m_Color, b.m_Stops[i].m_Color, progress)};
+                return result;
+            }
+            else if constexpr (std::is_same_v<Value, Transform>)
+            {
+                auto a = first;
+                auto b = last;
+                const auto neutral = [](Transform model)
+                {
+                    for (auto& operation : model.m_Operations)
+                    {
+                        operation.m_Values = {};
+                        if (operation.m_Kind == TransformOperation::Kind::Scale)
+                            operation.m_Values[0] = operation.m_Values[1] = 1;
+                        if (operation.m_Kind == TransformOperation::Kind::Matrix)
+                            operation.m_Values[0] = operation.m_Values[3] = 1;
+                    }
+                    return model;
+                };
+                if (a.m_Operations.empty())
+                    a = neutral(b);
+                if (b.m_Operations.empty())
+                    b = neutral(a);
+                if (a.m_Operations.size() != b.m_Operations.size())
+                    return progress >= 1 ? last : first;
+                auto result = a;
+                result.m_Origin = Tween(first.m_Origin, last.m_Origin, progress);
+                for (std::size_t i = 0; i < a.m_Operations.size(); ++i)
+                {
+                    const auto& x = a.m_Operations[i];
+                    const auto& y = b.m_Operations[i];
+                    if (x.m_Kind != y.m_Kind || x.m_PercentX != y.m_PercentX || x.m_PercentY != y.m_PercentY)
+                        return progress >= 1 ? last : first;
+                    for (std::size_t j = 0; j < 6; ++j)
+                        result.m_Operations[i].m_Values[j] = Tween(x.m_Values[j], y.m_Values[j], progress);
+                }
+                return result;
+            }
+            else if constexpr (std::is_same_v<Value, ShadowLayers>)
+            {
+                ShadowLayers result;
+                for (std::size_t i = 0; i < std::max(first.m_Layers.size(), last.m_Layers.size()); ++i)
+                {
+                    Shadow a = i < first.m_Layers.size() ? first.m_Layers[i] : Shadow{};
+                    Shadow b = i < last.m_Layers.size() ? last.m_Layers[i] : Shadow{};
+                    if (i >= first.m_Layers.size())
+                        a.m_Inset = b.m_Inset;
+                    if (i >= last.m_Layers.size())
+                        b.m_Inset = a.m_Inset;
+                    result.m_Layers.push_back(Tween(a, b, progress));
+                }
+                return result;
+            }
+            else if constexpr (std::is_same_v<Value, Anchors>)
+            {
+                auto result = first;
+                const auto edge = [progress](Length a, Length b)
+                {
+                    return a.m_Unit == b.m_Unit ? Length{a.m_Unit, Tween(a.m_Value, b.m_Value, progress)}
+                                                : (progress >= 1 ? b : a);
+                };
+                result.m_Top = edge(first.m_Top, last.m_Top);
+                result.m_Right = edge(first.m_Right, last.m_Right);
+                result.m_Bottom = edge(first.m_Bottom, last.m_Bottom);
+                result.m_Left = edge(first.m_Left, last.m_Left);
+                return result;
+            }
             else
                 return Tween(first, last, progress);
         },
         from);
 }
 } // namespace
+
+StyleValue InterpolateStyleValue(const StyleValue& from, const StyleValue& to, double progress)
+{
+    if (from.index() != to.index() || !std::isfinite(progress))
+        throw std::invalid_argument("Style interpolation requires matching finite values.");
+    if (progress == 0)
+        return from;
+    if (progress == 1)
+        return to;
+    return InterpolateValue(from, to, progress);
+}
 
 float Tween(float from, float to, double progress)
 {
@@ -93,8 +195,25 @@ Insets Tween(Insets from, Insets to, double progress)
 
 Shadow Tween(Shadow from, Shadow to, double progress)
 {
-    return {Tween(from.m_X, to.m_X, progress), Tween(from.m_Y, to.m_Y, progress),
-            std::max(0.0f, Tween(from.m_Blur, to.m_Blur, progress)), Tween(from.m_Color, to.m_Color, progress)};
+    const auto first = from;
+    const auto last = to;
+    if (from.m_Color.m_A == 0)
+        from.m_Inset = to.m_Inset;
+    if (to.m_Color.m_A == 0)
+        to.m_Inset = from.m_Inset;
+    const Shadow result{Tween(from.m_X, to.m_X, progress),
+                        Tween(from.m_Y, to.m_Y, progress),
+                        std::max(0.0f, Tween(from.m_Blur, to.m_Blur, progress)),
+                        Tween(from.m_Color, to.m_Color, progress),
+                        Tween(from.m_Spread, to.m_Spread, progress),
+                        progress >= 1 ? to.m_Inset : from.m_Inset};
+    if (progress == 0)
+        return first;
+    if (progress == 1)
+        return last;
+    if (from.m_Inset != to.m_Inset)
+        return progress >= 1 ? last : first;
+    return result;
 }
 
 void AnimationOptions::Validate() const
@@ -147,7 +266,7 @@ Animation& Animation::AddStyleProperty(Widget& widget, StyleProperty property, S
     }
     AddCustom(widget, "style:" + std::string(GetStylePropertyName(property)),
               [property, from = std::move(from), to = std::move(to)](Widget& target, double progress)
-              { target.SetStyleProperty(property, Interpolate(from, to, progress)); });
+              { target.SetStyleProperty(property, InterpolateStyleValue(from, to, progress)); });
     m_Tracks.back().m_Release = [property](Widget& target) { target.ClearStyleProperty(property); };
     m_Tracks.back().m_Discrete = std::holds_alternative<bool>(GetStyleValue(validation, property)) ||
                                  std::holds_alternative<std::string>(GetStyleValue(validation, property));

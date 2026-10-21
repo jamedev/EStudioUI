@@ -224,7 +224,7 @@ class Demo
             });
         if (!LoadCss(m_CurrentCss))
             throw std::runtime_error("Initial CSS could not be loaded.");
-        m_Tabs->SetCurrentIndex(1);
+        m_Tabs->SetCurrentIndex(5);
     }
 
     ~Demo()
@@ -238,13 +238,15 @@ class Demo
         std::string error;
         std::ifstream theme(path, std::ios::binary);
         std::ifstream animation(m_Assets / "animation-start.css", std::ios::binary);
+        std::ifstream rich(m_Assets / "rich-buttons.css", std::ios::binary);
         bool loaded = false;
-        if (theme && animation)
+        if (theme && animation && rich)
             loaded = m_Window.Ui().SetStyleSheet(std::string(std::istreambuf_iterator<char>(theme), {}) + "\n" +
-                                                     std::string(std::istreambuf_iterator<char>(animation), {}),
+                                                     std::string(std::istreambuf_iterator<char>(animation), {}) + "\n" +
+                                                     std::string(std::istreambuf_iterator<char>(rich), {}),
                                                  error);
         else
-            error = "Cannot read theme or animation-start.css.";
+            error = "Cannot read theme, animation-start.css, or rich-buttons.css.";
         if (!loaded)
         {
             m_Message->AddClass("error");

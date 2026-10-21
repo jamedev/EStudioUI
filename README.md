@@ -7,6 +7,22 @@ manifest; no Qt or commercial SDK is required.
 
 ![EStudioUI widget gallery](verification/widgets-dark.png)
 
+## Rich GPU styling (0.5)
+
+The **Rich CSS** tab contains twelve working button styles and a focusable text
+box. Edit [assets/rich-buttons.css](assets/rich-buttons.css) and press F5.
+Linear/radial gradients, before/after paint layers, 2D transforms, multiple/inset
+shadows, rounded clipping, state transitions, and named keyframes use the existing
+OpenGL batch. No runtime dependencies were added. See [CSS.md](CSS.md) for the
+exact subset and [ANIMATIONS.md](ANIMATIONS.md) for the C++ animation API.
+
+![Rich CSS buttons rendered by EStudioUI](verification/rich-buttons-rest.png)
+
+Performance checks assert zero style/layout work during 240 paint-only ticks for
+500 widgets, and one ordered draw for 160 rich animated buttons plus text.
+The framebuffer test writes measured baseline/rich frame times and upload counts
+to `rich-css-performance.txt`; software GL results do not establish hardware FPS.
+
 ## One-command Windows build
 
 Prerequisites: **Visual Studio 2022** with **Desktop development with C++**, a

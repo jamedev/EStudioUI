@@ -1,4 +1,4 @@
-# CSS supported by EStudioUI 0.4
+# CSS supported by EStudioUI 0.5
 
 Style is external UTF-8 text, with optional BOM and `/* comments */`. Parsing is
 atomic: an unknown property, unsupported value, or malformed rule rejects the
@@ -19,6 +19,7 @@ CSS is loaded on request, not watched automatically. Press F5 in the demo to rel
 | Selector list | `button, textbox` |
 | Interaction states | `:hover`, `:active`, `:pressed`, `:focus` |
 | Selection/toggle | `:selected`, `:checked` (aliases on toggle buttons) |
+| Decorative paint layers | `button::before`, `button:hover::after` |
 | Availability | `:enabled`, `:disabled`, `:read-only` |
 
 Type names are the strings passed to `Widget`'s constructor. IDs and classes are
@@ -40,7 +41,14 @@ sizes include padding and borders: the model is **border-box**.
 
 | Property | Values |
 | --- | --- |
-| `background`, `background-color`, `color` | A supported color |
+| `background`, `background-color`, `color` | A supported color; `background` also accepts a gradient and resets the other background component |
+| `background-image` | `none`, `linear-gradient(...)`, `radial-gradient(...)` |
+| `transform` | Ordered `translate`, `translateX/Y`, `scale`, `scaleX/Y`, `rotate`, `skewX/Y`, `matrix`, or `none` |
+| `transform-origin` | One/two percentages or edge/center keywords; defaults to `50% 50%` |
+| `overflow` | `hidden` clips content and decorative layers to the rounded border box; `visible` retains ordinary ancestor content clips |
+| `content` | Empty quoted string enables a decorative layer; `none` disables it |
+| `position` | `absolute` for decorative layers; does not change widget layout |
+| `inset`, `top/right/bottom/left` | Decorative offsets: signed pixels, percentages, or `auto` |
 | `border` | `2px solid #abcdef`, `none`, or `0` |
 | `border-color`, `border-width`, `border-radius` | A color or nonnegative pixel length |
 | `font-size` | Pixel size clamped to 0..512; zero hides text |
@@ -57,7 +65,7 @@ sizes include padding and borders: the model is **border-box**.
 | `gap` | Nonnegative pixels |
 | `align-items` | `stretch`, `start`, `center`, `end`, `flex-start`, `flex-end` |
 | `justify-content` | `start`, `center`, `end`, `space-between`, `flex-start`, `flex-end` |
-| `box-shadow` | `x y blur color` or `none`; offsets can be negative |
+| `box-shadow` | Up to eight comma-separated `[inset] x y [blur [spread]] color` layers, or `none` |
 | `selection-background-color`, `selection-color` | Editor and collection selection colors |
 | `row-height` | List/tree/table row height, at least 12px |
 | `indent-size` | Nonnegative tree indentation per depth |
@@ -68,10 +76,10 @@ sizes include padding and borders: the model is **border-box**.
 
 Padding and margin shorthand order is top, right, bottom, left. Two values mean
 vertical/horizontal; three mean top/horizontal/bottom. Margin side longhands are
-not implemented. A shadow has no spread or inset variant. Color forms:
+not implemented. Color forms:
 `#rgb`, `#rgba`, `#rrggbb`, `#rrggbbaa`, `rgb(0, 0, 0)`, and `rgba(0, 0, 0, 0.5)`.
 RGB channels are 0..255 and alpha is 0..1. Named colors are `transparent`, `black`,
-`white`, `red`, `green`, `blue`, `gray`, and `grey`. Percentage RGB is unsupported.
+`white`, `red`, `green`, `blue`, `gray`, and `grey`. Percentage RGB/alpha channels are also accepted.
 
 ## Layout semantics
 
@@ -110,24 +118,132 @@ Code-level size/direction/gap contracts take precedence over CSS for the explici
 set values; other computed properties still follow the cascade. Popup placement
 and table editor bounds are controlled by their owners, outside normal flow.
 
-## Animation
+## GPU paint and decorative layers
 
-`UiContext::AnimateStyleSheet` interpolates existing widgets between complete
-stylesheets with duration, delay, easing, and optional repeating/alternate
-playback. It parses endpoints once and animates changed computed values, including
-colors, dimensions, insets, shadows, typography, and translation. Non-numeric
-values switch discretely at iteration endpoints. Layout contracts remain in
-force. See [ANIMATIONS.md](ANIMATIONS.md) for the C++ API, typed property groups,
-interruption, mixed-unit endpoint measurement, and performance boundaries.
+Gradients are evaluated analytically in the fragment shader, without allocating
+images or framebuffer passes. Linear gradients accept a CSS angle (`deg`, `rad`,
+`turn`) or `to right/left/top/bottom` and corner directions. Each of two to eight
+stops is `color [position%]`; missing offsets distribute between their neighboring
+explicit stops, and coincident offsets produce hard color changes. Color
+interpolation uses premultiplied alpha in the existing component color space.
+
+Radial syntax is `radial-gradient([ellipse [rx% ry%] at x% y%,] stops...)`.
+The default radii are 70.7107% of each box dimension. Explicit percentage radii
+also work with the `circle` spelling, but remain box-relative ellipse radii on a
+non-square box; browser circle/farthest-corner sizing keywords are not implemented.
+
+Each widget can have two noninteractive paint layers. `::before` is drawn after
+the widget's background and before its caption/children; `::after` is drawn after
+its children. They allocate no widgets, focus entries, signals, or GL contexts.
+Enable them with `content: ""`; textual generated content is not supported.
+Offsets, dimensions, and transforms refer to the owner's border box. Auto width
+and height fill the space between specified edges. Width/height, shadows, radius,
+opacity, gradients, and CSS motion also work on these layers.
+
+`transform` accepts up to eight ordered operations and moves every drawn primitive
+and descendant. Translation percentages resolve against the transformed box;
+scale is unitless; rotations/skews use angle units. Transform origin accepts
+percentages/keywords. Matrix syntax is `matrix(a,b,c,d,tx,ty)`.
+Visual transforms preserve layout allocation and text shaping. Pointer routing
+uses inverse composed matrices; capture retains world-space ancestor clipping.
+Singular transforms paint no visible area and cannot capture input. Extremely
+large composed matrices are suppressed before they can overflow GPU coordinates.
+The older `translate-x/y` APIs retain their layout-bound translation semantics.
+
+Outer shadows paint behind the box, inset shadows inside it, and the first shadow
+of each kind paints on top. Spread can be negative. Shadows use an analytic soft
+edge approximation rather than a browser's Gaussian blur. `overflow: hidden`
+adds a rounded clip for text, decorations, and children; the owner's outer shadow
+remains visible. Axis-aligned rectangle clips collapse into the ordinary
+per-instance rectangle. Rounded/transformed clip chains are bounded to 32 levels.
+Opacity remains per primitive rather than an isolated composited group.
+
+## CSS transitions and keyframes
+
+```css
+button.launch {
+    background: linear-gradient(120deg, #2877ff, #9d43d5);
+    transform: translateY(0px) scale(1);
+    transition: transform 220ms ease, box-shadow 220ms ease;
+}
+button.launch:hover {
+    transform: translateY(-4px) scale(1.04);
+    box-shadow: 0 8px 20px #7555ff88;
+}
+button.launch:active { transform: translateY(0px) scale(.97); }
+button.busy::after {
+    content: "";
+    left: 14px; right: 14px; bottom: 6px; height: 2px;
+    background: linear-gradient(90deg, #32d9cc, #73a7ff);
+    transform-origin: left center;
+    animation: progress 1.8s ease-in-out infinite alternate;
+}
+@keyframes progress {
+    from { transform: scaleX(.1); opacity: .5; }
+    50% { opacity: 1; }
+    to { transform: scaleX(1); }
+}
+```
+
+`transition` lists property/shorthand/`all`, duration, optional easing and delay.
+State/class changes retarget from the current presentation, preserving continuity
+on interruption. Initial attachment and stylesheet replacement do not start state
+transitions. Times accept `s` and `ms`, with nonnegative durations/delays. The last
+matching transition definition selects a property's timing.
+
+`animation` accepts a name, duration, easing, optional delay, positive integer
+iteration count or `infinite`, `normal/reverse/alternate/alternate-reverse`,
+`none/forwards/backwards/both` fill, and `running/paused`. Up to eight timelines
+can run on one widget/layer; later animations win overlapping properties.
+Pause/resume preserves elapsed time; removing an animation restores underlying CSS.
+Undefined names have no active tracks. Zero-duration infinite repetition is
+rejected in shorthand and suppressed if assembled through longhands.
+
+Transition longhands: `transition-property/duration/delay/timing-function`.
+Animation longhands: `animation-name/duration/delay/timing-function/iteration-count/
+direction/fill-mode/play-state`. Comma-separated timing values cycle across the
+current property/name list. Declare that list before timing lists when their
+lengths differ; this bounded parser does not retain independent browser longhand
+list lengths for later expansion.
+
+Keyframes support `from`, `to`, percentage and grouped offsets, duplicate offsets
+in source order, missing endpoints from the underlying style, and up to 256 blocks
+per name. Easing applies to each property segment; keyframe blocks can set
+`animation-timing-function`. Curves are `linear`, `ease`, `ease-in/out/in-out`,
+`cubic-bezier(x1,y1,x2,y2)`, `step-start/end`, and `steps(n,start/end)` (also
+`jump-start/end`). `!important` is rejected inside keyframes.
+
+Matching gradient types/stop counts interpolate their angles, centers, radii,
+stops, and colors. `none` fades to/from a gradient. Matching transform operation
+lists interpolate components, retaining full turns; `none` supplies neutral
+operations. Incompatible lists/units/image structures switch discretely at the
+endpoint. Length interpolation in automatic CSS motion requires matching units;
+use the C++ whole-stylesheet API for measured content/Fill/mixed-unit endpoints.
+Missing shadow layers pad with transparent shadows. Visible inset/outer mismatches
+switch discretely. Booleans/strings also switch discretely.
+
+Explicit C++ style overrides take precedence over automatic CSS presentation.
+Existing Fixed/Content/Fill code contracts retain precedence over all CSS motion.
+Transitions apply over named animation presentation. Moving geometry can refresh
+hover beneath a stationary pointer. Hidden widgets do not request animation frames.
+Paint-only tracks, including transforms and decoration geometry, retain computed
+style, layout, and text shaping caches; widget dimensions, typography and inherited
+color changes still require the relevant style/layout work.
+
+`UiContext::AnimateStyleSheet` continues to interpolate existing widgets between
+complete stylesheets. See [ANIMATIONS.md](ANIMATIONS.md) for that C++ API, explicit
+property groups, endpoint measurement, and lifetime/cancellation contracts.
+The **Rich CSS** demo tab uses [assets/rich-buttons.css](assets/rich-buttons.css).
 
 ## Explicit omissions
 
-No `@` rules, variables, `calc`, sibling/attribute selectors, pseudo-elements,
-`:not`, font family/weight/style, CSS `transition` / `@keyframes` declarations, gradients, image backgrounds,
+This is a documented CSS subset, not a browser. No arbitrary at-rules, custom
+properties/`var`, `calc`, sibling/attribute selectors, `:not`, font family/weight/
+style selection, raster/SVG background images, conic/repeating gradients, filters/
+backdrop blur, 3D/projective transforms, textual generated content, z-index,
 percentage padding, CSS grid, negative margins, browser box formatting, or Qt
-`qproperty-*`/subcontrol syntax. Use the font passed to `Window` for this first
-version. Text alignment affects labels/buttons; the editable line scrolls
-horizontally around its caret. Radius rounds a widget's own background/border;
-child clipping remains rectangular. Opacity is applied per primitive, not to an
-offscreen composited group. These boundaries are intentional and visible through
-parse errors rather than silently ignored properties.
+`qproperty-*`/subcontrol syntax. Use the font passed to `Window`. Text alignment
+affects labels/buttons; editable lines scroll horizontally around their caret.
+Widget `position`/edge offsets do not replace the layout API; those declarations
+are intended for decorative layers. Unsupported declarations fail during parsing
+rather than being silently interpreted as full browser CSS.

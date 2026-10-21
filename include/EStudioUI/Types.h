@@ -137,7 +137,7 @@ struct Modifiers
 //! Pointer information delivered in logical window coordinates.
 struct PointerEvent
 {
-    //! Absolute pointer position.
+    //! Position in window layout coordinates after inverse visual transforms.
     Point m_Position;
 
     //! Keyboard modifier state.
@@ -145,6 +145,9 @@ struct PointerEvent
 
     //! Successive press count, including double and triple clicks.
     int m_Clicks = 1;
+
+    //! Whether the original window point lies inside every transformed ancestor clip.
+    bool m_InsideClip = true;
 };
 
 //! A normalized keyboard event delivered to an embedded scene.

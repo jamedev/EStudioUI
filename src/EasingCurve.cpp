@@ -1,5 +1,6 @@
 #include <EStudioUI/EasingCurve.h>
 
+#include <algorithm>
 #include <cmath>
 #include <numbers>
 #include <stdexcept>
@@ -30,7 +31,7 @@ double Bounce(double time)
 EasingCurve::EasingCurve(Kind kind) : m_Kind(kind)
 {
     if (kind < Kind::Linear || kind >= Kind::CubicBezier)
-        throw std::invalid_argument("Use EasingCurve::CubicBezier for custom curves.");
+        throw std::invalid_argument("Use the CubicBezier or Steps factory for configured curves.");
     if (kind == Kind::Ease)
     {
         m_X1 = 0.25;
@@ -85,10 +86,23 @@ double EasingCurve::EvaluateBezier(double time) const
     return coordinate((lower + upper) * 0.5, m_Y1, m_Y2);
 }
 
+EasingCurve EasingCurve::Steps(unsigned count, bool jumpStart)
+{
+    if (count == 0 || count > 1000000)
+        throw std::invalid_argument("Steps require a count in [1,1000000].");
+    EasingCurve result;
+    result.m_Kind = Kind::Steps;
+    result.m_Steps = count;
+    result.m_JumpStart = jumpStart;
+    return result;
+}
+
 double EasingCurve::Evaluate(double time) const
 {
     if (!std::isfinite(time))
         throw std::invalid_argument("Easing time must be finite.");
+    if (m_Kind == Kind::Steps)
+        return std::clamp((std::floor(time * m_Steps) + (m_JumpStart ? 1 : 0)) / m_Steps, 0.0, 1.0);
     if (time <= 0)
         return 0;
     if (time >= 1)
@@ -98,6 +112,8 @@ double EasingCurve::Evaluate(double time) const
     const double inverse = 1 - time;
     switch (m_Kind)
     {
+    case Kind::Steps:
+        return 0;
     case Kind::Linear:
         return time;
     case Kind::Ease:
