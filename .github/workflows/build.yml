@@ -27,6 +27,7 @@ jobs:
           key: windows-v143-${{ hashFiles('vcpkg.json', 'vcpkg-bootstrap.json', 'vcpkg-configuration.json', 'cmake/triplets/*.cmake') }}-${{ github.sha }}
           restore-keys: |
             windows-v143-${{ hashFiles('vcpkg.json', 'vcpkg-bootstrap.json', 'vcpkg-configuration.json', 'cmake/triplets/*.cmake') }}-
+            windows-v143-
       - name: Install, build, and test Release and Debug
         shell: powershell
         run: |
@@ -53,6 +54,7 @@ jobs:
           key: linux-${{ hashFiles('vcpkg.json', 'vcpkg-bootstrap.json', 'vcpkg-configuration.json') }}-${{ github.sha }}
           restore-keys: |
             linux-${{ hashFiles('vcpkg.json', 'vcpkg-bootstrap.json', 'vcpkg-configuration.json') }}-
+            linux-
       - name: Install system headers and bootstrap vcpkg
         run: |
           sudo apt-get update
