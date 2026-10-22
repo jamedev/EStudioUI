@@ -13,14 +13,14 @@ test 29
 29: Working Directory: /workspace/scratch/e2c95811cd0a/EStudioUI/build/gate-b-release
 29: Test timeout computed to be: 10000000
 29: 120 resize samples: builds 1, incremental updates 119, solves 120, cache hits 120
-29: 100 fixed-height children / 300 user rules / 64 resize samples: CPU Prepare median 0.374575 ms, p95 0.527892 ms, max 0.726016 ms; tableau rebuild delta 0
-29: 100 height-for-width children / 300 user rules / 64 resize samples: CPU Prepare median 0.920033 ms, p95 1.04021 ms, max 2.98365 ms; tableau rebuild delta 0
-29: Constraint layout: 278 checks passed.
-1/1 Test #29: ConstraintLayout .................   Passed    1.29 sec
+29: 100 fixed-height children / 300 user rules / 64 resize samples: CPU Prepare median 0.624946 ms, p95 0.70835 ms, max 0.734779 ms; tableau rebuild delta 0
+29: 100 height-for-width children / 300 user rules / 64 resize samples: CPU Prepare median 1.0002 ms, p95 2.0533 ms, max 3.6086 ms; tableau rebuild delta 0
+29: Constraint layout: 283 checks passed.
+1/1 Test #29: ConstraintLayout .................   Passed    1.94 sec
 
 The following tests passed:
 	ConstraintLayout
 
 100% tests passed out of 1
 
-Total Test time (real) =   1.29 sec
+Total Test time (real) =   1.94 sec

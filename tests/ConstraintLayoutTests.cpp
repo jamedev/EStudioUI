@@ -237,6 +237,37 @@ void Validation()
     Check(failed, "division by zero diagnosed");
 }
 
+void ErrorRecovery(FontFace& font)
+{
+    UiContext ui(font);
+    auto& child = ui.Root().Add<Widget>();
+    child.SetWidth(SizeRule::Fixed(40));
+    child.SetHeight(SizeRule::Fixed(20));
+    const ConstraintItem item(child);
+    ConstraintLayout invalid;
+    invalid.Add(item.Left() == 2e9);
+    ui.Root().SetLayout(std::move(invalid));
+    for (int attempt = 0; attempt < 2; ++attempt)
+    {
+        bool failed = false;
+        try
+        {
+            ui.Prepare(500, 100);
+        }
+        catch (const std::runtime_error&)
+        {
+            failed = true;
+        }
+        Check(failed, "repeated out-of-range solutions are rejected instead of reusing partial solver values");
+        Check(ui.GetPhase() == UiPhase::Idle, "numeric solver failures restore the UI traversal phase");
+    }
+    ConstraintLayout valid;
+    valid.Add(item.Left() == 12);
+    ui.Root().SetLayout(std::move(valid));
+    ui.Prepare(500, 100);
+    Check(Near(child.GetBounds().m_X, 12), "a valid replacement strategy recovers after numeric failure");
+}
+
 class WrappedCell final : public Widget
 {
   protected:
@@ -300,6 +331,7 @@ int main()
         Lifetimes(font);
         WrappingAndRatios(font);
         Validation();
+        ErrorRecovery(font);
         ResizeWork(font, false);
         ResizeWork(font, true);
         std::cout << "Constraint layout: " << s_Checks << " checks passed.\n";

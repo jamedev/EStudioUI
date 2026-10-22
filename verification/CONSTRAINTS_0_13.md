@@ -10,12 +10,16 @@ Recorded 2026-10-22. Public contracts and compiled application:
 | --- | --- |
 | Linux GCC 13 Release | 30/30 CTest suites pass, including actual GPU integration |
 | AddressSanitizer + UndefinedBehaviorSanitizer | 30/30 pass; final demo navigation/framebuffer regression also checked |
-| Constraint-specific checks | 278 checks: anchors, 120 intermediate sizes, priorities, conflicts, exact recovery, lifetime/visibility, wrapping, ratios, scaling and stress cases |
+| Constraint-specific checks | 283 checks: anchors, 120 intermediate sizes, priorities, conflicts, exact recovery, lifetime/visibility, wrapping, ratios, scaling, repeated numeric failures and stress cases |
 | Compiled example | `EStudioUIConstraintExample` builds through the normal project |
 | Actual renderer | GLFW null platform + OSMesa, llvmpipe LLVM 17 / Mesa 24.0.5 |
 
 LeakSanitizer is disabled on this restricted host (`detect_leaks=0`); these runs
-do not establish leak freedom or instrument third-party Mesa libraries. The
+do not establish leak freedom or instrument third-party Mesa libraries. Two
+empty/zero-filled generated test executables failed to launch in the final
+sanitizer run. Relinking the unchanged objects repaired them; both affected
+suites then passed. The constraint and GPU suites passed on the first run;
+all 30 suites have passing coverage. The raw report retains this retry evidence. The
 separate Windows CTest below does not require OpenGL. CI runs the full Linux
 suite plus the existing five isolated CPU TSan checks and MSVC Release/Debug
 through the one-shot PowerShell script. Inspect the Actions checks on the
@@ -37,8 +41,8 @@ arrangement, excluding GPU drawing/readback, graph construction and I/O.
 
 | 100-widget fixture | Median | p95 | Maximum | Tableau rebuilds during 64 resizes |
 | --- | ---: | ---: | ---: | ---: |
-| Fixed height | 0.375 ms | 0.528 ms | 0.726 ms | 0 |
-| Height for width | 0.920 ms | 1.040 ms | 2.984 ms | 0 |
+| Fixed height | 0.625 ms | 0.708 ms | 0.735 ms | 0 |
+| Height for width | 1.000 ms | 2.053 ms | 3.609 ms | 0 |
 
 The earlier row-replacement implementation measured about 33 ms median for the
 fixed-height fixture on this host. Verified edit-variable updates remove that

@@ -124,6 +124,7 @@ struct Tableau
     std::vector<std::size_t> m_Rejected;
     std::vector<double> m_Values;
     bool m_Exact = false;
+    bool m_Valid = false;
 
     void Add(const Row& row, kiwi::Constraint& compiled)
     {
@@ -171,13 +172,15 @@ struct Tableau
 
     void Solve(const std::vector<std::uint64_t>& targets, const std::vector<Row>& rows, ConstraintLayoutStats& stats)
     {
-        if (m_Targets == targets && m_Rows == rows && !m_Variables.empty())
+        if (m_Valid && m_Targets == targets && m_Rows == rows && !m_Variables.empty())
         {
             ++stats.m_CacheHits;
             return;
         }
         ++stats.m_Solves;
-        bool rebuild = m_Targets != targets || m_Rows.size() != rows.size() || !m_Rejected.empty() || m_Exact;
+        bool rebuild =
+            !m_Valid || m_Targets != targets || m_Rows.size() != rows.size() || !m_Rejected.empty() || m_Exact;
+        m_Valid = false;
         if (m_Targets != targets || m_Variables.empty())
         {
             m_Solver.reset();
@@ -242,6 +245,7 @@ struct Tableau
             Build(rows, stats, true);
             read();
         }
+        m_Valid = true;
     }
 };
 

@@ -129,7 +129,9 @@ pixels before exposing a plan. Rejected rules or displaced targets trigger an
 exact rebuild with actual Required rows. An axis-independent vertical pass can
 reuse horizontal results without extra pins, after checking they remain the same.
 Ordinary changed hard bounds remove/replace their rows. Topology changes and
-infeasibility rebuild. Identical row sets reuse solved values. Storage scales
+infeasibility rebuild. Identical row sets reuse solved values. Failed numeric queries never mark a
+cache valid; repeating an invalid query raises the error again and restores the
+UI phase rather than exposing partially read solver values. Storage scales
 with active widgets/rules and tableau density, not resize history. There are
 limits of 10,000 rules and 10,000 terms per rule; these are validation ceilings,
 not a performance claim. Coefficients/constants must be finite within +/-1e12;
