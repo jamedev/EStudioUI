@@ -57,8 +57,17 @@ struct NativeTextInput::Impl : std::enable_shared_from_this<NativeTextInput::Imp
 
     bool CanAccessUi() const
     {
-        return m_Ui && !m_Closed && m_Ui->GetPhase() == UiPhase::Idle && !IsDeliveringInput() &&
-               !StateStore::IsUpdatingOnThisThread();
+        if (!m_Ui || m_Closed || m_Ui->GetPhase() != UiPhase::Idle || IsDeliveringInput())
+            return false;
+        try
+        {
+            m_Ui->VerifyTraversalEntry();
+            return true;
+        }
+        catch (const std::logic_error&)
+        {
+            return false;
+        }
     }
 
     bool RefreshSnapshot()

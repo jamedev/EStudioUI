@@ -251,6 +251,9 @@ class Widget
     //! Retains containing window services across callbacks without retaining this widget.
     std::shared_ptr<void> RetainOwner() const;
 
+    //! Publishes committed accessibility state on the idle owner without invalidating GPU painting.
+    void NotifySemanticsChanged();
+
     //! Returns owned accessibility metadata; this inspection hook must not mutate UI or shared state.
     virtual SemanticInfo DescribeSemantics() const;
 
@@ -371,9 +374,6 @@ class Widget
 
   private:
     friend class CssMotion;
-
-    //! Wakes an existing semantic client without invalidating GPU painting.
-    void NotifySemanticsChanged();
 
     //! Captures the owner before any widget state is initialized.
     ThreadAffinity m_Affinity;

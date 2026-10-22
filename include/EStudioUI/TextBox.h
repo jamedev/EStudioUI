@@ -149,8 +149,8 @@ class TextBox : public Widget, public TextInputClient
     //! Clears local temporary text without sending canonical change notifications.
     void ClearComposition();
 
-    //! Cancels temporary text and expires queued native updates when attached and focused.
-    void EndComposition();
+    //! Cancels temporary text and reports whether a virtual cancellation callback preserved this editor.
+    bool EndComposition();
 
     //! Returns the canonical or composed visual run used for scrolling and painting.
     const TextLayout& DisplayLayout() const;

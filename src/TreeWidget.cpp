@@ -90,6 +90,7 @@ void TreeWidget::SetItemDelegate(std::shared_ptr<const ItemDelegate> delegate)
 {
     VerifyStructuralMutation();
     m_Delegate = delegate ? std::move(delegate) : std::make_shared<const ItemDelegate>();
+    NotifySemanticsChanged();
     RequestRepaint();
 }
 
@@ -98,6 +99,7 @@ void TreeWidget::SelectionChanged()
     const auto next = m_View->GetSelectionModel()->GetCurrent();
     const bool changed = m_Current != next;
     m_Current = next;
+    NotifySemanticsChanged();
     RequestRepaint();
     if (changed)
         m_CurrentChanged.Emit(next);
@@ -108,6 +110,7 @@ void TreeWidget::ModelChanged(const ModelChange& change)
     if (!change.m_Reset && !change.m_Structure && change.m_Fields.empty())
     {
         m_RowMap.UpdateSnapshot(change.m_After);
+        NotifySemanticsChanged();
         return;
     }
 
@@ -305,6 +308,7 @@ void TreeWidget::SetItemText(NodeId item, std::string text)
     if (caption == text)
         return;
     caption = std::move(text);
+    NotifySemanticsChanged();
     RequestRepaint();
 }
 
@@ -431,6 +435,7 @@ void TreeWidget::SetCurrentItem(NodeId item)
     if (m_Current == item)
         return;
     m_Current = item;
+    NotifySemanticsChanged();
     RequestRepaint();
     m_CurrentChanged.Emit(item);
 }

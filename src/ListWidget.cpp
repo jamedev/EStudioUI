@@ -76,6 +76,7 @@ void ListWidget::SetItemDelegate(std::shared_ptr<const ItemDelegate> delegate)
 {
     VerifyStructuralMutation();
     m_Delegate = delegate ? std::move(delegate) : std::make_shared<const ItemDelegate>();
+    NotifySemanticsChanged();
     RequestRepaint();
 }
 
@@ -87,7 +88,7 @@ ItemId ListWidget::GetCurrentItemId() const
 
 void ListWidget::SetCurrentItemId(ItemId item)
 {
-    VerifyAccess();
+    VerifyStructuralMutation();
     if (!m_View)
         throw std::logic_error("Stable ID selection requires a shared list model.");
     const auto selection = m_View->GetSelectionModel();
@@ -102,6 +103,7 @@ void ListWidget::SelectionChanged()
     const int next = position ? static_cast<int>(*position) : -1;
     const bool changed = m_Current != next;
     m_Current = next;
+    NotifySemanticsChanged();
     RequestRepaint();
     if (changed)
         m_CurrentChanged.Emit(next);
@@ -110,7 +112,11 @@ void ListWidget::SelectionChanged()
 void ListWidget::ModelChanged(const ModelChange& change)
 {
     if (!change.m_Reset && !change.m_Structure && change.m_Fields.empty())
+    {
+        // Filtered selected records still have queryable canonical semantic values.
+        NotifySemanticsChanged();
         return;
+    }
 
     const auto lease = RetainOwner();
     m_Hover = m_Pressed = -1;
@@ -264,7 +270,7 @@ int ListWidget::GetItemCount() const
 
 void ListWidget::SetCurrentIndex(int index)
 {
-    VerifyAccess();
+    VerifyStructuralMutation();
     const auto ownerLease = RetainOwner();
     if (index != -1)
         (void)GetItem(index);
@@ -280,6 +286,7 @@ void ListWidget::SetCurrentIndex(int index)
     if (m_Current == index)
         return;
     m_Current = index;
+    NotifySemanticsChanged();
     RequestRepaint();
     m_CurrentChanged.Emit(index);
 }

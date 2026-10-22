@@ -855,6 +855,7 @@ void Widget::SetAccessibleRole(std::optional<SemanticRole> role)
 
 void Widget::NotifySemanticsChanged()
 {
+    VerifyStructuralMutation();
     if (m_Context && m_Context->m_Semantics)
     {
         m_Context->m_Semantics->Changed();

@@ -105,7 +105,7 @@ Point ScrollWidget::GetStoredScrollOffset() const
 
 void ScrollWidget::SetScrollOffset(Point offset)
 {
-    VerifyAccess();
+    VerifyStructuralMutation();
     if (!std::isfinite(offset.m_X) || !std::isfinite(offset.m_Y))
         throw std::invalid_argument("Scroll coordinates must be finite.");
     const auto size = GetVirtualSize();

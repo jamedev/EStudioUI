@@ -105,5 +105,13 @@
   control actions and transformed/DPI bounds. Keep custom metadata hooks pure,
   direct access owner-only, native provider requests dispatcher-bound, and query/event
   work bounded. No per-frame full-tree rebuild or per-collection-row widget expansion.
-  Run actual Windows probes separately from injected services and record remaining
-  composition, virtual semantic children, real AT and mixed-monitor evidence honestly.
+  Run actual Windows probes separately from injected services; record interactive
+  input-method, real AT and mixed-monitor observations honestly. Virtual identities
+  include widget lifetime, record, sub-item and dataset coordinates. Canonical
+  paint-only data/selection/scene changes must publish a narrow semantic revision;
+  ordinary hover and repaint requests must not become semantic scans.
+- TextInputClient preedit stays separate from canonical text, validation and undo.
+  Commit uses one validated edit; focus/owner changes expire native sessions. Cancel
+  hooks may delete their editor or redirect focus, so retain owner lifetime, recheck
+  weak targets and guard cancellation reentrancy. Keep unchanged-turn native
+  snapshots and preedit shaping cached; verify real framebuffer pixels.

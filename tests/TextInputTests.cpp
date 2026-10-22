@@ -4,6 +4,7 @@
 #include <EStudioUI/UiContext.h>
 
 #include <cmath>
+#include <functional>
 #include <iostream>
 #include <stdexcept>
 #include <thread>
@@ -154,6 +155,98 @@ void ValidationAndUnicode(FontFace& font)
     Check(editor.GetText() == "A\xf0\x9f\x98\x80", "commit preserves supplementary-plane UTF-8 under byte budget");
 }
 
+class CancellationEditor final : public TextBox
+{
+  public:
+    explicit CancellationEditor(std::string text = "12345") : TextBox(std::move(text))
+    {
+    }
+
+    bool OnTextComposition(const TextCompositionEvent& event) override
+    {
+        if (event.m_Kind == TextCompositionKind::Cancel && m_OnCancel)
+        {
+            const auto callback = m_OnCancel;
+            callback();
+            return true;
+        }
+        return TextBox::OnTextComposition(event);
+    }
+
+    std::function<void()> m_OnCancel;
+};
+
+void CancellationCallbacks(FontFace& font)
+{
+    const auto deletedBy = [&font](auto operation, const char* message)
+    {
+        UiContext ui(font);
+        auto& editor = ui.Root().Add<CancellationEditor>();
+        editor.SetFloatingBounds({20, 20, 180, 40});
+        ui.Prepare(400, 100);
+        ui.SetFocus(&editor);
+        const WidgetRef lifetime(&editor);
+        editor.m_OnCancel = [&] { ui.Root().RemoveChild(editor); };
+        operation(editor, ui);
+        Check(!lifetime.Get() && !ui.GetFocus(), message);
+    };
+    deletedBy([](CancellationEditor& editor, UiContext&) { editor.SetText(editor.GetText()); },
+              "text replacement stops after a virtual cancellation deletes its editor");
+    deletedBy([](CancellationEditor& editor, UiContext&) { editor.SetValidator(std::make_shared<IntegerValidator>()); },
+              "validator replacement stops after cancellation deletes its editor");
+    deletedBy([](CancellationEditor& editor, UiContext&) { editor.SetSelection(1, 2); },
+              "selection replacement stops after cancellation deletes its editor");
+    deletedBy([](CancellationEditor& editor, UiContext&) { editor.SetReadOnly(true); },
+              "read-only change stops after cancellation deletes its editor");
+    deletedBy([](CancellationEditor& editor, UiContext&) { editor.SetMaxBytes(2); },
+              "byte-limit change stops after cancellation deletes its editor");
+    deletedBy([](CancellationEditor& editor, UiContext&) { editor.SelectAll(); },
+              "selection-all stops after cancellation deletes its editor");
+    deletedBy(
+        [](CancellationEditor& editor, UiContext& ui)
+        {
+            const auto bounds = editor.GetBounds();
+            ui.PointerDown({bounds.m_X + bounds.m_Width * 0.5f, bounds.m_Y + bounds.m_Height * 0.5f});
+        },
+        "pointer positioning stops after cancellation deletes its editor");
+
+    UiContext ui(font);
+    auto& editor = ui.Root().Add<CancellationEditor>(std::string(2048, 'a'));
+    auto& redirected = ui.Root().Add<TextBox>("Redirected");
+    auto& requested = ui.Root().Add<TextBox>("Requested");
+    ui.Prepare(600, 160);
+    ui.SetFocus(&editor);
+    int cancellations = 0;
+    editor.m_OnCancel = [&]
+    {
+        ++cancellations;
+        editor.TextBox::SetText(std::string(4096, 'b'));
+    };
+    const std::string_view borrowed(editor.GetText().data() + 100, 1000);
+    editor.SetText(borrowed);
+    Check(cancellations == 1 && editor.GetText() == std::string(1000, 'a'),
+          "borrowed replacement bytes survive a cancellation hook that replaces the source string");
+    cancellations = 0;
+    editor.m_OnCancel = [&]
+    {
+        ++cancellations;
+        ui.CancelTextComposition();
+        ui.SetFocus(&redirected);
+    };
+    ui.SetFocus(&requested);
+    Check(cancellations == 1 && ui.GetFocus() == &redirected,
+          "a cancellation hook may reenter cancellation and redirect focus without recursion or overwrite");
+    editor.m_OnCancel = {};
+    ui.SetFocus(&editor);
+    editor.m_OnCancel = [] { throw std::runtime_error("Cancellation extension failure"); };
+    Throws([&] { ui.CancelTextComposition(); }, "ordinary cancellation errors remain observable");
+    cancellations = 0;
+    editor.m_OnCancel = [&] { ++cancellations; };
+    ui.CancelTextComposition();
+    Check(cancellations == 1, "cancellation recursion guard restores after extension exceptions");
+    editor.m_OnCancel = {};
+}
+
 class CustomEditor : public Widget, public TextInputClient
 {
   public:
@@ -252,6 +345,7 @@ int main()
         FontFace font(ESTUDIOUI_FONT_PATH);
         Composition(font);
         ValidationAndUnicode(font);
+        CancellationCallbacks(font);
         GeometryAndExtensions(font);
         std::cout << "Text input: " << s_Checks << " checks passed.\n";
         return 0;

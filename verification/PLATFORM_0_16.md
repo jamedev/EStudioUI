@@ -13,8 +13,8 @@ verification are in progress; their results are recorded only after completion.
 | Check | Status |
 | --- | --- |
 | GCC 13 Release and actual renderer integration | 35/35 suites passed; final rebuild has no compiler warnings |
-| Semantic fixture | 169 checks passed, including 100,000-row bounded queries and focus-callback dataset replacement |
-| Portable text input | 36 checks passed |
+| Semantic fixture | 190 checks passed, including 100,000-row bounded queries, focus-callback dataset replacement and targeted event revisions |
+| Portable text input | 47 checks passed, including cancellation-hook deletion, borrowed-input ownership, focus redirection and reentrancy |
 | AddressSanitizer + UndefinedBehaviorSanitizer | Pending |
 | Windows MSVC Release and Debug | Pending |
 | Repeated native cancellation/COM teardown | Pending |

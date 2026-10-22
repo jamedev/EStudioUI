@@ -49,13 +49,21 @@ class Custom : public Widget
 {
   public:
     mutable bool m_TryMutation = false;
+    mutable bool m_TryNotify = false;
     int m_Invocations = 0;
+
+    void PublishSemantics()
+    {
+        NotifySemanticsChanged();
+    }
 
   protected:
     SemanticInfo DescribeSemantics() const override
     {
         if (m_TryMutation)
             const_cast<Custom*>(this)->Add<Widget>();
+        if (m_TryNotify)
+            const_cast<Custom*>(this)->NotifySemanticsChanged();
         SemanticInfo info;
         info.m_Role = SemanticRole::Button;
         info.m_Name = "Custom paint control";
@@ -356,6 +364,145 @@ void FocusRevalidation(FontFace& font)
           "focus revalidation occurs outside input inspection and expires the original virtual identity");
 }
 
+void SemanticRevisions(FontFace& font)
+{
+    UiContext ui(font);
+    auto& list = ui.Root().Add<ListWidget>();
+    list.SetFloatingBounds({0, 0, 240, 180});
+    std::vector<std::string> rows(20, "Row");
+    list.SetItems(rows);
+    auto& hierarchy = ui.Root().Add<TreeWidget>();
+    hierarchy.SetFloatingBounds({250, 0, 240, 180});
+    const auto branch = hierarchy.AddItem(0, "First");
+    hierarchy.AddItem(0, "Second");
+    auto& table = ui.Root().Add<TableWidget>();
+    table.SetFloatingBounds({0, 200, 300, 180});
+    table.SetColumns({{"Name", SizeRule::Fill()}});
+    table.SetRows({{"First"}, {"Second"}});
+    auto& canvas = ui.Root().Add<CanvasWidget>();
+    canvas.SetFloatingBounds({310, 200, 300, 180});
+    const auto shape = canvas.GetScene().Add({CanvasPrimitive::Rectangle, {-20, -20}, {20, 20}});
+    canvas.SceneChanged();
+    auto& custom = ui.Root().Add<Custom>();
+    custom.SetFloatingBounds({650, 200, 100, 100});
+    ui.Prepare(800, 600);
+    auto& semantics = ui.Semantics();
+    auto revision = semantics.GetRevision();
+    list.SetCurrentIndex(0);
+    Check(semantics.GetRevision() > revision,
+          "visible convenience-list selection wakes semantic clients without scrolling");
+    revision = semantics.GetRevision();
+    hierarchy.SetCurrentItem(branch);
+    Check(semantics.GetRevision() > revision, "visible convenience-tree selection publishes semantic revision");
+    revision = semantics.GetRevision();
+    hierarchy.SetItemText(branch, "Renamed");
+    Check(semantics.GetRevision() > revision, "paint-only tree caption changes publish semantic revision");
+    revision = semantics.GetRevision();
+    table.SetCurrentCell(0, 0);
+    Check(semantics.GetRevision() > revision, "visible convenience-table selection publishes semantic revision");
+    revision = semantics.GetRevision();
+    list.SetScrollOffset({0, 40});
+    Check(semantics.GetRevision() > revision,
+          "changed scroll geometry publishes semantic revision through targeted arrangement");
+    ui.Prepare(800, 600);
+    const auto viewport = list.GetViewport();
+    ui.PointerMove({viewport.m_X + 20, viewport.m_Y + 3});
+    ui.Prepare(800, 600);
+    revision = semantics.GetRevision();
+    ui.PointerMove({viewport.m_X + 20, viewport.m_Y + 3 + list.GetStyle().m_RowHeight});
+    Check(semantics.GetRevision() == revision, "ordinary row-hover repaint does not publish semantic changes");
+    revision = semantics.GetRevision();
+    canvas.GetScene().SetSelected(shape, true);
+    canvas.SceneChanged();
+    Check(semantics.GetRevision() > revision, "scene selection publication wakes semantic clients");
+    revision = semantics.GetRevision();
+    canvas.GetScene().Update(shape, {CanvasPrimitive::Rectangle, {-10, -10}, {30, 30}});
+    canvas.SceneChanged();
+    Check(semantics.GetRevision() > revision, "scene geometry publication wakes semantic bounds clients");
+    const auto canvasId = semantics.GetId(canvas);
+    const auto beforeStructure = semantics.GetNode(canvasId)->m_Info.m_StructureRevision;
+    revision = semantics.GetRevision();
+    canvas.GetScene().Add({CanvasPrimitive::Circle, {80, 0}, {}, 10});
+    canvas.SceneChanged();
+    Check(semantics.GetRevision() > revision &&
+              semantics.GetNode(canvasId)->m_Info.m_StructureRevision > beforeStructure,
+          "scene structural publication advances both cheap and structural revisions");
+    revision = semantics.GetRevision();
+    canvas.SetCamera({10, 20}, 2);
+    Check(semantics.GetRevision() > revision, "camera geometry wakes semantic bounds clients without hosted widgets");
+    revision = semantics.GetRevision();
+    canvas.SetCamera({10, 20}, 2);
+    Check(semantics.GetRevision() == revision, "unchanged camera does not publish semantic work");
+    custom.m_TryNotify = true;
+    Throws([&] { semantics.GetNode(semantics.GetId(custom)); },
+           "metadata hooks cannot publish semantic changes while inspected");
+    Check(semantics.GetRevision() == revision && ui.GetPhase() == UiPhase::Idle,
+          "rejected semantic publication preserves revision and restores inspection phase");
+    custom.m_TryNotify = false;
+    bool rejected = false;
+    std::thread worker(
+        [&]
+        {
+            try
+            {
+                custom.PublishSemantics();
+            }
+            catch (const std::logic_error&)
+            {
+                rejected = true;
+            }
+        });
+    worker.join();
+    Check(rejected && semantics.GetRevision() == revision,
+          "semantic publication verifies the owner before touching shared tree state");
+    custom.PublishSemantics();
+    Check(semantics.GetRevision() > revision, "custom controls can explicitly publish committed semantic metadata");
+}
+
+void SharedSemanticRevisions(FontFace& font)
+{
+    for (int family = 0; family < 3; ++family)
+    {
+        UiContext ui(font);
+        ModelBuilder builder({{"Name"}});
+        const auto first = builder.Add({std::string("First")});
+        const auto second = builder.Add({std::string("Second")});
+        auto model = std::make_shared<ItemModel>(ui.States(), std::move(builder).Build());
+        std::shared_ptr<SelectionModel> selection;
+        if (!family)
+        {
+            auto& view = ui.Root().Add<ListWidget>();
+            view.SetModel(model);
+            selection = view.GetSelectionModel();
+        }
+        else if (family == 1)
+        {
+            auto& view = ui.Root().Add<TreeWidget>();
+            view.SetModel(model);
+            selection = view.GetSelectionModel();
+        }
+        else
+        {
+            auto& view = ui.Root().Add<TableWidget>();
+            view.SetModel(model);
+            selection = view.GetSelectionModel();
+        }
+        ui.Prepare(400, 250);
+        auto& semantics = ui.Semantics();
+        selection->SetMode(SelectionMode::Multiple);
+        selection->Select(second);
+        auto revision = semantics.GetRevision();
+        selection->SetItems({first, second}, second);
+        Check(selection->GetCurrent() == second && semantics.GetRevision() > revision,
+              "shared selected-set changes publish semantics even when the current item is unchanged");
+        revision = semantics.GetRevision();
+        const auto before = ui.GetStats();
+        model->SetText(second, 0, "Renamed");
+        Check(semantics.GetRevision() > revision && ui.GetStats().m_LayoutPasses == before.m_LayoutPasses,
+              "paint-only shared model captions publish semantics without a layout pass");
+    }
+}
+
 void Semantics(FontFace& font)
 {
     UiContext ui(font);
@@ -506,6 +653,8 @@ int main()
         VirtualCollections(font);
         StableProjectionIdentity(font);
         FocusRevalidation(font);
+        SemanticRevisions(font);
+        SharedSemanticRevisions(font);
         std::cout << "Semantics: " << s_Checks << " checks passed.\n";
         return 0;
     }

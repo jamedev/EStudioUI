@@ -169,7 +169,7 @@ ItemId TableWidget::GetCurrentItemId() const
 
 void TableWidget::SetCurrentItemId(ItemId item, std::size_t column)
 {
-    VerifyAccess();
+    VerifyStructuralMutation();
     if (!m_View)
         throw std::logic_error("Stable ID selection requires a shared table model.");
     const auto selection = m_View->GetSelectionModel();
@@ -240,6 +240,7 @@ void TableWidget::SelectionChanged()
     const bool changed = row != m_CurrentRow || column != m_CurrentColumn;
     m_CurrentRow = row;
     m_CurrentColumn = column;
+    NotifySemanticsChanged();
     RequestRepaint();
     if (changed)
         m_CurrentCellChanged.Emit(row, column);
@@ -248,7 +249,10 @@ void TableWidget::SelectionChanged()
 void TableWidget::ModelChanged(const ModelChange& change)
 {
     if (!change.m_Reset && !change.m_Structure && change.m_Fields.empty())
+    {
+        NotifySemanticsChanged();
         return;
+    }
 
     const auto lease = RetainOwner();
     if (change.m_Reset || change.m_Structure)
@@ -500,7 +504,7 @@ void TableWidget::SetCell(int row, int column, std::string text)
 
 void TableWidget::SetCurrentCell(int row, int column)
 {
-    VerifyAccess();
+    VerifyStructuralMutation();
     const auto ownerLease = RetainOwner();
     if (row != -1 || column != -1)
         (void)GetCell(row, column);
@@ -524,6 +528,7 @@ void TableWidget::SetCurrentCell(int row, int column)
         return;
     m_CurrentRow = row;
     m_CurrentColumn = column;
+    NotifySemanticsChanged();
     RequestRepaint();
     m_CurrentCellChanged.Emit(row, column);
 }
@@ -599,6 +604,7 @@ void TableWidget::SortByColumn(int column, bool ascending)
     ++m_SemanticStructureRevision;
     m_SortColumn = column;
     m_Ascending = ascending;
+    NotifySemanticsChanged();
     RequestRepaint();
     if (previous != m_CurrentRow)
         m_CurrentCellChanged.Emit(m_CurrentRow, m_CurrentColumn);
@@ -606,10 +612,11 @@ void TableWidget::SortByColumn(int column, bool ascending)
 
 void TableWidget::SetEditable(bool editable)
 {
-    VerifyAccess();
+    VerifyStructuralMutation();
     if (m_Editable == editable && (editable || m_EditRow < 0))
         return;
     m_Editable = editable;
+    NotifySemanticsChanged();
     SetState(ReadOnly, !editable);
     if (!editable)
         CancelEdit();

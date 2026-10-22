@@ -377,6 +377,9 @@ void UiContext::CancelTextComposition()
     ++m_TextInputEpoch;
     ++m_TextInputRevision;
     m_CompositionClient = {};
+    if (m_CancellingComposition)
+        return;
+    const FlagScope cancelling(m_CancellingComposition);
     const auto target = m_Focus;
     if (auto* client = target.Get() ? dynamic_cast<TextInputClient*>(target.Get()) : nullptr)
         client->OnTextComposition({TextCompositionKind::Cancel, {}, 0, target.Get()->m_TargetKey, m_TextInputEpoch});

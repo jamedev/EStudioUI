@@ -67,8 +67,9 @@ void TextBox::SetValidator(std::shared_ptr<const InputValidator> validator)
     if (m_Validator == validator)
         return;
     const auto ownerLease = RetainOwner();
+    if (!EndComposition())
+        return;
     const auto state = validator ? validator->Validate(m_Buffer.GetText()) : ValidationState::Acceptable;
-    EndComposition();
     m_Validator = std::move(validator);
     ++m_EditRevision;
     const bool changed = UpdatePresentationState(state);
@@ -110,9 +111,11 @@ std::size_t TextBox::GetSelectionCaret() const
 void TextBox::SetSelection(std::size_t anchor, std::size_t caret)
 {
     VerifyAccess();
+    const auto ownerLease = RetainOwner();
     if (anchor > m_Buffer.GetText().size() || caret > m_Buffer.GetText().size())
         throw std::out_of_range("Text selection exceeds the committed text.");
-    EndComposition();
+    if (!EndComposition())
+        return;
     m_Buffer.SetSelection(anchor, caret);
     ResetCaret();
 }
@@ -190,12 +193,14 @@ void TextBox::ClearComposition()
     ResetCaret();
 }
 
-void TextBox::EndComposition()
+bool TextBox::EndComposition()
 {
+    const WidgetRef lifetime(this);
     if (auto* context = GetContext(); context && context->GetFocus() == this)
         context->CancelTextComposition();
     else
         ClearComposition();
+    return lifetime.Get() != nullptr;
 }
 
 bool TextBox::OnTextComposition(const TextCompositionEvent& event)
@@ -287,18 +292,20 @@ void TextBox::SetText(std::string_view text)
 {
     VerifyAccess();
     const auto ownerLease = RetainOwner();
+    const std::string replacement(text);
+    if (!EndComposition())
+        return;
     const auto previous = m_Buffer.GetText();
-    EndComposition();
     if (m_Validator)
     {
         auto candidate = m_Buffer;
-        candidate.SetText(text);
+        candidate.SetText(replacement);
         if (m_Validator->Validate(candidate.GetText()) == ValidationState::Invalid)
             throw std::invalid_argument("Text does not satisfy the editor's input validator.");
         m_Buffer = std::move(candidate);
     }
     else
-        m_Buffer.SetText(text);
+        m_Buffer.SetText(replacement);
     AfterEdit(previous != m_Buffer.GetText());
 }
 
@@ -331,7 +338,9 @@ void TextBox::SetReadOnly(bool readOnly)
     VerifyAccess();
     if (m_ReadOnly == readOnly)
         return;
-    EndComposition();
+    const auto ownerLease = RetainOwner();
+    if (!EndComposition())
+        return;
     m_ReadOnly = readOnly;
     SetState(ReadOnly, readOnly);
 }
@@ -340,8 +349,9 @@ void TextBox::SetMaxBytes(std::size_t count)
 {
     VerifyAccess();
     const auto ownerLease = RetainOwner();
+    if (!EndComposition())
+        return;
     const auto previous = m_Buffer.GetText();
-    EndComposition();
     if (m_Validator)
     {
         auto candidate = m_Buffer;
@@ -358,7 +368,9 @@ void TextBox::SetMaxBytes(std::size_t count)
 void TextBox::SelectAll()
 {
     VerifyAccess();
-    EndComposition();
+    const auto ownerLease = RetainOwner();
+    if (!EndComposition())
+        return;
     m_Buffer.SelectAll();
     ResetCaret();
 }
@@ -497,7 +509,9 @@ std::size_t TextBox::PointerOffset(Point position) const
 
 void TextBox::OnPointerDown(const PointerEvent& event)
 {
-    EndComposition();
+    const auto ownerLease = RetainOwner();
+    if (!EndComposition())
+        return;
     const auto offset = PointerOffset(event.m_Position);
     if (event.m_Clicks >= 3)
         m_Buffer.SelectAll();

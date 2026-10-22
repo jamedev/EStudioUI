@@ -20,6 +20,11 @@ namespace EStudioUI
 class CssMotion;
 class SemanticTree;
 
+namespace Detail
+{
+class NativeTextInput;
+}
+
 //! Identifies traversals during which synchronous structural changes are unsafe.
 enum class UiPhase
 {
@@ -332,6 +337,7 @@ class UiContext
     friend class Window;
     friend class AnimationSystem;
     friend class SemanticTree;
+    friend class Detail::NativeTextInput;
 
     //! Associates a containing window without creating a context ownership cycle.
     void SetOwnerLifetime(std::weak_ptr<void> owner);
@@ -582,6 +588,9 @@ class UiContext
 
     //! Observes the editor owning the currently accepted temporary preedit.
     WidgetRef m_CompositionClient;
+
+    //! Allows cancellation hooks to redirect focus without recursively cancelling the same client.
+    bool m_CancellingComposition = false;
 
     //! Observes the widget receiving captured pointer events.
     WidgetRef m_Capture;

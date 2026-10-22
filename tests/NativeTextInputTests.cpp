@@ -194,6 +194,20 @@ void NativeInput(FontFace& font)
     Check(editor.m_Composing, "Native end message remains asynchronous until a safe owner turn");
     adapter.Flush();
     Check(!editor.m_Composing && !adapter.IsComposing(), "Native composition end clears temporary presentation");
+    const int beforeBatch = editor.m_Updates;
+    ui.States().Batch(
+        [&]
+        {
+            SendMessageW(native.m_Window, WM_IME_STARTCOMPOSITION, 0, 0);
+            adapter.Flush();
+            Check(editor.m_Updates == beforeBatch,
+                  "Native composition stays queued while an owner state transaction is staged");
+        });
+    adapter.Flush();
+    Check(editor.m_Updates == beforeBatch + 1 && editor.m_Composing,
+          "Native composition resumes through the shared safe boundary after state publication");
+    SendMessageW(native.m_Window, WM_IME_ENDCOMPOSITION, 0, 0);
+    adapter.Flush();
     SendMessageW(native.m_Window, WM_IME_CHAR, 0x65E5, 0);
     SendMessageW(native.m_Window, WM_IME_CHAR, 0xD83D, 0);
     SendMessageW(native.m_Window, WM_IME_CHAR, 0xDE00, 0);

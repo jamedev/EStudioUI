@@ -154,7 +154,7 @@ class TextRange final : public ITextRangeProvider
             return E_POINTER;
         *result = nullptr;
         return Guard(
-            [&]
+            [&]() -> HRESULT
             {
                 std::lock_guard lock(m_Mutex);
                 NativeTextSnapshot snapshot;
@@ -172,10 +172,10 @@ class TextRange final : public ITextRangeProvider
         if (!other)
             return E_INVALIDARG;
         return Guard(
-            [&]
+            [&]() -> HRESULT
             {
                 return WithPeer(*other,
-                                [&](const NativeTextSnapshot&)
+                                [&](const NativeTextSnapshot&) -> HRESULT
                                 {
                                     *result = m_Start == other->m_Start && m_End == other->m_End ? TRUE : FALSE;
                                     return S_OK;
@@ -193,10 +193,10 @@ class TextRange final : public ITextRangeProvider
         if (!other || !ValidEndpoint(endpoint) || !ValidEndpoint(otherEndpoint))
             return E_INVALIDARG;
         return Guard(
-            [&]
+            [&]() -> HRESULT
             {
                 return WithPeer(*other,
-                                [&](const NativeTextSnapshot&)
+                                [&](const NativeTextSnapshot&) -> HRESULT
                                 {
                                     const auto left = Endpoint(endpoint);
                                     const auto right = other->Endpoint(otherEndpoint);
@@ -211,7 +211,7 @@ class TextRange final : public ITextRangeProvider
         if (!ValidUnit(unit))
             return E_INVALIDARG;
         return Guard(
-            [&]
+            [&]() -> HRESULT
             {
                 std::lock_guard lock(m_Mutex);
                 NativeTextSnapshot snapshot;
@@ -240,7 +240,7 @@ class TextRange final : public ITextRangeProvider
             return E_POINTER;
         *result = nullptr;
         return Guard(
-            [&]
+            [&]() -> HRESULT
             {
                 std::lock_guard lock(m_Mutex);
                 NativeTextSnapshot snapshot;
@@ -262,7 +262,7 @@ class TextRange final : public ITextRangeProvider
         if (!text || !SysStringLen(text))
             return E_INVALIDARG;
         return Guard(
-            [&]
+            [&]() -> HRESULT
             {
                 std::lock_guard lock(m_Mutex);
                 NativeTextSnapshot snapshot;
@@ -307,7 +307,7 @@ class TextRange final : public ITextRangeProvider
             return E_POINTER;
         VariantInit(result);
         return Guard(
-            [&]
+            [&]() -> HRESULT
             {
                 std::lock_guard lock(m_Mutex);
                 NativeTextSnapshot snapshot;
@@ -333,7 +333,7 @@ class TextRange final : public ITextRangeProvider
             return E_POINTER;
         *result = nullptr;
         return Guard(
-            [&]
+            [&]() -> HRESULT
             {
                 std::lock_guard lock(m_Mutex);
                 NativeTextSnapshot snapshot;
@@ -374,7 +374,7 @@ class TextRange final : public ITextRangeProvider
             return E_POINTER;
         *result = nullptr;
         return Guard(
-            [&]
+            [&]() -> HRESULT
             {
                 std::lock_guard lock(m_Mutex);
                 NativeTextSnapshot snapshot;
@@ -391,7 +391,7 @@ class TextRange final : public ITextRangeProvider
         if (maxLength < -1)
             return E_INVALIDARG;
         return Guard(
-            [&]
+            [&]() -> HRESULT
             {
                 std::lock_guard lock(m_Mutex);
                 NativeTextSnapshot snapshot;
@@ -418,7 +418,7 @@ class TextRange final : public ITextRangeProvider
         if (!ValidUnit(unit))
             return E_INVALIDARG;
         return Guard(
-            [&]
+            [&]() -> HRESULT
             {
                 std::lock_guard lock(m_Mutex);
                 NativeTextSnapshot snapshot;
@@ -455,7 +455,7 @@ class TextRange final : public ITextRangeProvider
         if (!ValidUnit(unit) || !ValidEndpoint(endpoint))
             return E_INVALIDARG;
         return Guard(
-            [&]
+            [&]() -> HRESULT
             {
                 std::lock_guard lock(m_Mutex);
                 NativeTextSnapshot snapshot;
@@ -484,10 +484,10 @@ class TextRange final : public ITextRangeProvider
         if (!other || !ValidEndpoint(endpoint) || !ValidEndpoint(otherEndpoint))
             return E_INVALIDARG;
         return Guard(
-            [&]
+            [&]() -> HRESULT
             {
                 return WithPeer(*other,
-                                [&](const NativeTextSnapshot&)
+                                [&](const NativeTextSnapshot&) -> HRESULT
                                 {
                                     Endpoint(endpoint) = other->Endpoint(otherEndpoint);
                                     Normalize(endpoint);
@@ -499,7 +499,7 @@ class TextRange final : public ITextRangeProvider
     HRESULT STDMETHODCALLTYPE Select() override
     {
         return Guard(
-            [&]
+            [&]() -> HRESULT
             {
                 std::lock_guard lock(m_Mutex);
                 NativeTextSnapshot snapshot;
@@ -521,7 +521,7 @@ class TextRange final : public ITextRangeProvider
     HRESULT STDMETHODCALLTYPE ScrollIntoView(BOOL alignTop) override
     {
         return Guard(
-            [&]
+            [&]() -> HRESULT
             {
                 std::lock_guard lock(m_Mutex);
                 NativeTextSnapshot snapshot;
@@ -542,7 +542,7 @@ class TextRange final : public ITextRangeProvider
             return E_POINTER;
         *result = nullptr;
         return Guard(
-            [&]
+            [&]() -> HRESULT
             {
                 std::lock_guard lock(m_Mutex);
                 NativeTextSnapshot snapshot;
@@ -567,7 +567,7 @@ class TextRange final : public ITextRangeProvider
     HRESULT ChangeSelection(bool add)
     {
         return Guard(
-            [&]
+            [&]() -> HRESULT
             {
                 std::lock_guard lock(m_Mutex);
                 NativeTextSnapshot snapshot;
@@ -755,7 +755,7 @@ class TextProvider final : public ITextProvider2
         if (!std::isfinite(point.x) || !std::isfinite(point.y))
             return E_INVALIDARG;
         return Guard(
-            [&]
+            [&]() -> HRESULT
             {
                 NativeTextSnapshot snapshot;
                 auto code = Query(*m_Callbacks, snapshot);
@@ -774,7 +774,7 @@ class TextProvider final : public ITextProvider2
             return E_POINTER;
         *result = nullptr;
         return Guard(
-            [&]
+            [&]() -> HRESULT
             {
                 NativeTextSnapshot snapshot;
                 const auto code = Query(*m_Callbacks, snapshot);
@@ -789,7 +789,7 @@ class TextProvider final : public ITextProvider2
             return E_POINTER;
         *result = SupportedTextSelection_None;
         return Guard(
-            [&]
+            [&]() -> HRESULT
             {
                 NativeTextSnapshot snapshot;
                 const auto code = Query(*m_Callbacks, snapshot);
@@ -814,7 +814,7 @@ class TextProvider final : public ITextProvider2
         *active = FALSE;
         *result = nullptr;
         return Guard(
-            [&]
+            [&]() -> HRESULT
             {
                 NativeTextSnapshot snapshot;
                 const auto code = Query(*m_Callbacks, snapshot);
@@ -830,7 +830,7 @@ class TextProvider final : public ITextProvider2
     HRESULT InvalidRelatedElement()
     {
         return Guard(
-            [&]
+            [&]() -> HRESULT
             {
                 NativeTextSnapshot snapshot;
                 const auto code = Query(*m_Callbacks, snapshot);
@@ -845,7 +845,7 @@ class TextProvider final : public ITextProvider2
             return E_POINTER;
         *result = nullptr;
         return Guard(
-            [&]
+            [&]() -> HRESULT
             {
                 NativeTextSnapshot snapshot;
                 const auto code = Query(*m_Callbacks, snapshot);
@@ -876,7 +876,7 @@ HRESULT CreateNativeTextProvider(NativeTextCallbacks callbacks, IUnknown** resul
         return E_POINTER;
     *result = nullptr;
     return Guard(
-        [&]
+        [&]() -> HRESULT
         {
             if (!callbacks.m_Domain || !callbacks.m_Identity || !callbacks.m_Query || !callbacks.m_Bounds ||
                 !callbacks.m_Select || !callbacks.m_Point || !callbacks.m_Enclosing)

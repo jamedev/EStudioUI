@@ -215,6 +215,8 @@ class ProbeEvents final : public IUIAutomationPropertyChangedEventHandler,
             ++m_Text;
         else if (event == UIA_Text_TextSelectionChangedEventId)
             ++m_Selection;
+        else if (event == UIA_SelectionItem_ElementSelectedEventId)
+            ++m_Items;
         return S_OK;
     }
 
@@ -230,6 +232,7 @@ class ProbeEvents final : public IUIAutomationPropertyChangedEventHandler,
     std::atomic<int> m_Text = 0;
     std::atomic<int> m_Selection = 0;
     std::atomic<int> m_Structure = 0;
+    std::atomic<int> m_Items = 0;
 
   private:
     std::atomic<ULONG> m_References = 1;
@@ -264,6 +267,13 @@ class EventSubscriptions
     {
         Require(m_Automation.AddStructureChangedEventHandler(&list, TreeScope_Element, nullptr, m_Events.Get()),
                 "Subscribe to native virtual-child structure changes");
+    }
+
+    void WatchItem(IUIAutomationElement& item)
+    {
+        Require(m_Automation.AddAutomationEventHandler(UIA_SelectionItem_ElementSelectedEventId, &item,
+                                                       TreeScope_Element, nullptr, m_Events.Get()),
+                "Subscribe to native item-selection changes");
     }
 
     ProbeEvents& Events() const
@@ -337,6 +347,24 @@ void NativeCollections(IUIAutomation& automation, IUIAutomationElement& root, Ev
     Require(last->get_CurrentBoundingRectangle(&bounds), "Read revealed virtual row bounds");
     Check(bounds.bottom > bounds.top && bounds.right > bounds.left,
           "Native scroll reveals actual clipped virtual row geometry");
+    ComPtr<IUIAutomationElement> neighbor;
+    Require(walker->GetPreviousSiblingElement(last.Get(), &neighbor), "Read another already visible virtual row");
+    Check(neighbor != nullptr, "Last virtual row has an already visible neighbor");
+    ComPtr<IUIAutomationSelectionItemPattern> lastSelection, neighborSelection;
+    Require(last->GetCurrentPatternAs(UIA_SelectionItemPatternId, IID_PPV_ARGS(&lastSelection)),
+            "Obtain revealed virtual row selection pattern");
+    Require(neighbor->GetCurrentPatternAs(UIA_SelectionItemPatternId, IID_PPV_ARGS(&neighborSelection)),
+            "Obtain visible neighboring row selection pattern");
+    subscriptions.WatchItem(*last.Get());
+    subscriptions.WatchItem(*neighbor.Get());
+    auto itemEvents = subscriptions.Events().m_Items.load();
+    Require(lastSelection->Select(), "Select the already revealed last virtual row");
+    AwaitEvent(subscriptions.Events().m_Items, itemEvents,
+               "Native client receives the first visible-row selection event");
+    itemEvents = subscriptions.Events().m_Items.load();
+    Require(neighborSelection->Select(), "Select another row without moving the viewport");
+    AwaitEvent(subscriptions.Events().m_Items, itemEvents,
+               "Native client receives a repeated selection event without layout or scrolling");
     auto remove = Find(automation, root, L"remove-row");
     ComPtr<IUIAutomationInvokePattern> removeAction;
     Require(remove->GetCurrentPatternAs(UIA_InvokePatternId, IID_PPV_ARGS(&removeAction)),
@@ -541,6 +569,24 @@ void Accessibility(UiContext& ui, HWND window)
     for (int row = 0; row < 1000; ++row)
         items.push_back("List row " + std::to_string(row));
     list.SetItems(std::move(items));
+    Point lastSelectionScroll;
+    bool sawLastSelection = false;
+    bool sawNeighborSelection = false;
+    bool selectionScrollStable = false;
+    const ScopedConnection selectionConnection(list.CurrentChanged().Connect(
+        [&](int row)
+        {
+            if (row == 999)
+            {
+                lastSelectionScroll = list.GetScrollOffset();
+                sawLastSelection = true;
+            }
+            else if (row == 998 && sawLastSelection)
+            {
+                sawNeighborSelection = true;
+                selectionScrollStable = lastSelectionScroll == list.GetScrollOffset();
+            }
+        }));
     auto& tree = ui.Root().Add<TreeWidget>();
     tree.SetId("tree");
     tree.SetHeight(SizeRule::Fixed(100));
@@ -563,7 +609,7 @@ void Accessibility(UiContext& ui, HWND window)
     lockTable.Clicked().Connect([&table] { table.SetEditable(false); });
     ui.Prepare(800, 600);
     int invocations = 0;
-    button.Clicked().Connect([&] { ++invocations; });
+    const ScopedConnection invocationConnection(button.Clicked().Connect([&] { ++invocations; }));
     Trace("attach UI Automation provider");
     Detail::NativeAccessibility bridge(ui, window);
     std::atomic<bool> done = false;
@@ -690,6 +736,8 @@ void Accessibility(UiContext& ui, HWND window)
           "Real UI Automation client uses canonical control actions");
     Check(list.GetCurrentIndex() == 0 && table.GetCurrentCell() == std::pair{99, 1} && !tree.IsExpanded(branch),
           "Native collection patterns use canonical selection and expansion");
+    Check(sawLastSelection && sawNeighborSelection && selectionScrollStable,
+          "Repeated native selection events were tested with an unchanged visible viewport");
     Check(table.GetCell(99, 1) == "Edited cell Ω", "Rejected native cell edit leaves the canonical model unchanged");
     Check(true, "Retained native value provider expires before HWND teardown");
 }

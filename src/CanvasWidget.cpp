@@ -319,6 +319,7 @@ void CanvasWidget::SceneChanged()
         m_SemanticSceneStructureRevision = structure;
     }
     m_CachedRevision = std::numeric_limits<std::uint64_t>::max();
+    NotifySemanticsChanged();
     RequestRepaint();
 }
 
@@ -352,7 +353,7 @@ double CanvasWidget::GetZoom() const
 
 void CanvasWidget::SetCamera(CanvasPoint center, double zoom)
 {
-    VerifyAccess();
+    VerifyStructuralMutation();
     const auto ownerLease = RetainOwner();
     if (!Finite(center) || !std::isfinite(zoom) || zoom <= 0)
         throw std::invalid_argument("Canvas camera values must be finite and zoom must be positive.");
@@ -368,6 +369,7 @@ void CanvasWidget::SetCamera(CanvasPoint center, double zoom)
     }
     m_CachedRevision = std::numeric_limits<std::uint64_t>::max();
     PlaceHostedWidgets();
+    NotifySemanticsChanged();
     if (m_Hosts.empty())
         RequestRepaint();
     else

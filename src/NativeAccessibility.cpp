@@ -1140,7 +1140,7 @@ class Provider final : public IRawElementProviderSimple,
             NativeTextCallbacks callbacks;
             callbacks.m_Domain = state;
             callbacks.m_Identity = id.m_Widget;
-            callbacks.m_Query = [state, id](NativeTextSnapshot& snapshot)
+            callbacks.m_Query = [state, id](NativeTextSnapshot& snapshot) -> HRESULT
             {
                 std::optional<NativeTextSnapshot> value;
                 const auto status = state->Call(
@@ -1183,7 +1183,7 @@ class Provider final : public IRawElementProviderSimple,
                 snapshot = std::move(*value);
                 return S_OK;
             };
-            callbacks.m_Bounds = [state, id](std::size_t start, std::size_t end, Rect& bounds)
+            callbacks.m_Bounds = [state, id](std::size_t start, std::size_t end, Rect& bounds) -> HRESULT
             {
                 std::optional<Rect> value;
                 const auto status =
@@ -1202,7 +1202,7 @@ class Provider final : public IRawElementProviderSimple,
                 bounds = *value;
                 return S_OK;
             };
-            callbacks.m_Select = [state, id](std::size_t anchor, std::size_t caret)
+            callbacks.m_Select = [state, id](std::size_t anchor, std::size_t caret) -> HRESULT
             {
                 SemanticStatus value = SemanticStatus::Unavailable;
                 const auto status =
@@ -1222,7 +1222,7 @@ class Provider final : public IRawElementProviderSimple,
                                 });
                 return FAILED(status) ? status : StatusCode(value);
             };
-            callbacks.m_Point = [state, id](double x, double y, std::size_t& offset)
+            callbacks.m_Point = [state, id](double x, double y, std::size_t& offset) -> HRESULT
             {
                 std::optional<std::size_t> value;
                 const auto status = state->Call(value,
@@ -1242,7 +1242,7 @@ class Provider final : public IRawElementProviderSimple,
                 offset = *value;
                 return S_OK;
             };
-            callbacks.m_Enclosing = [state, id](IRawElementProviderSimple** enclosing)
+            callbacks.m_Enclosing = [state, id](IRawElementProviderSimple** enclosing) -> HRESULT
             {
                 if (!enclosing)
                     return E_POINTER;
@@ -1257,7 +1257,7 @@ class Provider final : public IRawElementProviderSimple,
                 *enclosing = static_cast<IRawElementProviderSimple*>(provider);
                 return S_OK;
             };
-            callbacks.m_Scroll = [state, id](std::size_t start, std::size_t end, bool)
+            callbacks.m_Scroll = [state, id](std::size_t start, std::size_t end, bool) -> HRESULT
             {
                 SemanticStatus value = SemanticStatus::Unavailable;
                 const auto status = state->Call(value,
