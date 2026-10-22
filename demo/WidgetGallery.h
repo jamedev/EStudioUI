@@ -8,6 +8,7 @@
 #include "WidgetStylesGallery.h"
 #include "FoundationGallery.h"
 #include "StateGallery.h"
+#include "ModelGallery.h"
 
 #include <EStudioUI/ContextMenu.h>
 #include <EStudioUI/ListWidget.h>
@@ -128,5 +129,8 @@ class WidgetGallery
 
     //! Owns typed state, bindings, transactions, and incremental update examples.
     std::unique_ptr<StateGallery> m_State;
+
+    //! Owns shared model, projection, selection, and typed editing examples.
+    std::unique_ptr<ModelGallery> m_Models;
 };
 } // namespace EStudioUI

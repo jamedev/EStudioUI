@@ -12,6 +12,32 @@ current capabilities from proposed work and define delivery prerequisites.
 The [developer experience principles](DEVELOPER_EXPERIENCE.md) make simple,
 safe application code an acceptance requirement for every foundation change.
 
+## Shared collection models (0.11)
+
+One typed model can serve lists, tables, and trees with shared stable-ID selection,
+independent sort/filter mappings, typed editing, and owned worker snapshots. A
+100,000-record **Models** tab demonstrates the actual API, virtual GPU item delegates,
+batched changes, and view-local scrolling/expansion. Content-width policies are
+explicit; shared tables use bounded sampling by default.
+
+```cpp
+auto model = EStudioUI::MakeTableModel(ui.States(), std::move(parts),
+    EStudioUI::Column("Name", &Part::m_Name),
+    EStudioUI::Column("Length", &Part::m_Length));
+auto selection = EStudioUI::SelectionModel::Create(model);
+table.SetModel(model);
+list.SetModel(model);
+table.SetSelectionModel(selection);
+list.SetSelectionModel(selection);
+```
+
+Include `EStudioUI/Models.h` for the model entry points. See [MODELS.md](MODELS.md)
+for complete applications, ownership and transaction contracts, delegate hooks,
+external-provider boundaries, and sizing costs. [0.11 verification](verification/MODELS_0_11.md)
+records actual counters and framebuffer comparisons. The default demo opens Models.
+
+![Shared collection models rendered by EStudioUI](verification/models-foundation.png)
+
 ## Typed state and incremental updates (0.10)
 
 Typed values now support validation, immutable snapshots, and coherent batched

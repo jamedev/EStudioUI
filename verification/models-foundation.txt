@@ -1,0 +1,9 @@
+Shared models, selection and actual GPU integration: PASS
+Records: 100000; views: two tables, list, tree.
+Visible recording raw value/role queries: 208; item queries: 88.
+10000 field edits: one model notification; unaffected projection mapping reused.
+Stable selection survives filtering/sorting; typed text edits, rollback and immutable snapshots passed.
+Worker reload supersession and revision-checked owned publication passed.
+Native window deletion during model notification retires view/model endpoints safely.
+Retained/full framebuffers match byte-for-byte; settled frame submits zero draw calls.
+Software GL establishes correctness and work counts, not hardware throughput.

@@ -2,9 +2,21 @@
 
 #include "ScrollWidget.h"
 #include "TextBox.h"
+#include "CollectionView.h"
+#include "SortFilterModel.h"
+#include "ItemDelegate.h"
 
 namespace EStudioUI
 {
+//! Selects explicit content-column measurement cost.
+enum class ContentMeasurePolicy
+{
+    Hints,
+    Visible,
+    Sample,
+    Exact
+};
+
 //! A caption and explicit sizing contract for one table column.
 struct TableColumn
 {
@@ -22,6 +34,42 @@ class TableWidget final : public ScrollWidget
     //! Creates an empty editable table.
     TableWidget();
 
+    //! Displays shared typed model records; the table must belong to an idle UiContext.
+    void SetModel(std::shared_ptr<ItemModel> model);
+
+    //! Returns the external shared model, or an empty pointer for convenience-owned rows.
+    std::shared_ptr<ItemModel> GetModel() const;
+
+    //! Shares canonical selection with compatible collection views.
+    void SetSelectionModel(std::shared_ptr<SelectionModel> selection);
+
+    //! Returns shared selection when an external model is attached.
+    std::shared_ptr<SelectionModel> GetSelectionModel() const;
+
+    //! Returns the current canonical item ID, including filtered-out selection.
+    ItemId GetCurrentItemId() const;
+
+    //! Selects a canonical identity and schema column.
+    void SetCurrentItemId(ItemId item, std::size_t column = 0);
+
+    //! Selects bounded or exact content-width measurement; shared models default to Sample.
+    void SetContentMeasurePolicy(ContentMeasurePolicy policy, std::size_t sampleCount = 64);
+
+    //! Measures every row once explicitly and retains the resulting width cache until invalidation.
+    void FitColumnsToContents();
+
+    //! Installs an immutable per-column display/paint/editor policy; null restores the default.
+    void SetItemDelegate(std::size_t column, std::shared_ptr<const ItemDelegate> delegate);
+
+    //! Returns the active per-column delegate or the shared default implementation.
+    std::shared_ptr<const ItemDelegate> GetItemDelegate(std::size_t column) const;
+
+    //! Returns the most recent rejected editor commit, or empty text after a successful edit.
+    const std::string& GetEditError() const;
+
+    //! Reports rejected edits after preserving canonical data and the editable input.
+    Signal<const std::string&>& EditRejected();
+
     //! Replaces columns, clears rows, and cancels any active editor.
     void SetColumns(std::vector<TableColumn> columns);
 
@@ -38,7 +86,7 @@ class TableWidget final : public ScrollWidget
     int GetColumnCount() const;
 
     //! Returns a cell's UTF-8 value, throwing for invalid indices.
-    const std::string& GetCell(int row, int column) const;
+    std::string GetCell(int row, int column) const;
 
     //! Changes one value and emits CellChanged after the model is updated.
     void SetCell(int row, int column, std::string text);
@@ -60,6 +108,9 @@ class TableWidget final : public ScrollWidget
 
     //! Overrides one column with a fixed width, including header-drag resizing.
     void SetColumnWidth(int column, float pixels);
+
+    //! Assigns a Fixed/Content/Fill contract without replacing the attached model or its records.
+    void SetColumnSize(int column, SizeRule size);
 
     //! Returns current allocated column widths.
     std::vector<float> GetColumnWidths() const;
@@ -126,6 +177,54 @@ class TableWidget final : public ScrollWidget
     bool OnScroll(Point delta, Modifiers modifiers) override;
 
   private:
+    //! Applies selection modifiers using stable IDs and current view order.
+    void SelectCell(int row, int column, Modifiers modifiers);
+
+    //! Invalidates relevant caches and remaps the active editor by stable identity.
+    void ModelChanged(const ModelChange& change);
+
+    //! Maps shared current identity and column into local coordinates.
+    void SelectionChanged();
+
+    //! Owns shared model/selection subscriptions without owning records per view.
+    std::unique_ptr<CollectionView> m_View;
+
+    //! Owns the table's private sort projection after header sorting is requested.
+    std::shared_ptr<SortFilterModel> m_LocalProjection;
+
+    //! Selects content-width measurement cost.
+    ContentMeasurePolicy m_ContentPolicy = ContentMeasurePolicy::Exact;
+
+    //! Bounds sampled content-column queries.
+    std::size_t m_ContentSampleCount = 64;
+
+    //! Forces one explicit exact width computation without changing the ordinary policy.
+    mutable bool m_FitAll = false;
+
+    //! Records the viewport range used by the Visible width policy.
+    mutable std::size_t m_ContentFirstVisible = 0;
+
+    //! Records the viewport row budget used by the Visible width policy.
+    mutable std::size_t m_ContentVisibleCount = 0;
+
+    //! Stores optional immutable delegates by schema column.
+    std::vector<std::shared_ptr<const ItemDelegate>> m_Delegates;
+
+    //! Holds the canonical record currently being edited.
+    ItemId m_EditItem = 0;
+
+    //! Detects conflicting external changes to the edited field.
+    ModelValue m_EditOriginal;
+
+    //! Prevents focus/model callbacks from recursively committing the same editor.
+    bool m_Committing = false;
+
+    //! Stores an inspectable validation or editing-conflict diagnostic.
+    std::string m_EditError;
+
+    //! Reports user-origin rejected edits without escaping through native event callbacks.
+    Signal<const std::string&> m_EditRejected;
+
     //! Completes editing, optionally committing text and restoring focus.
     void EndEdit(bool commit, bool restoreFocus);
 

@@ -233,7 +233,7 @@ class Demo
             });
         if (!LoadCss(m_CurrentCss))
             throw std::runtime_error("Initial CSS could not be loaded.");
-        m_Tabs->SetCurrentIndex(10);
+        m_Tabs->SetCurrentIndex(11);
     }
 
     ~Demo()
@@ -470,6 +470,7 @@ int main(int argc, char** argv)
         fs::path css = assets / "dark.css";
         fs::path output = "verification";
         WindowOptions options;
+        options.m_Width = 1280;
         bool selfTest = false;
         bool benchmark = false;
         bool profile = false;

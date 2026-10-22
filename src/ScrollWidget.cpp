@@ -97,6 +97,12 @@ Point ScrollWidget::GetScrollOffset() const
             std::clamp(m_Offset.m_Y, 0.0f, std::max(0.0f, size.m_Y - viewport.m_Height))};
 }
 
+Point ScrollWidget::GetStoredScrollOffset() const
+{
+    VerifyAccess();
+    return m_Offset;
+}
+
 void ScrollWidget::SetScrollOffset(Point offset)
 {
     VerifyAccess();
@@ -108,9 +114,8 @@ void ScrollWidget::SetScrollOffset(Point offset)
     offset.m_Y = std::clamp(offset.m_Y, 0.0f, std::max(0.0f, size.m_Y - viewport.m_Height));
     if (m_Offset.m_X == offset.m_X && m_Offset.m_Y == offset.m_Y)
         return;
-    const Point previous{
-        std::clamp(m_Offset.m_X, 0.0f, std::max(0.0f, size.m_X - viewport.m_Width)),
-        std::clamp(m_Offset.m_Y, 0.0f, std::max(0.0f, size.m_Y - viewport.m_Height))};
+    const Point previous{std::clamp(m_Offset.m_X, 0.0f, std::max(0.0f, size.m_X - viewport.m_Width)),
+                         std::clamp(m_Offset.m_Y, 0.0f, std::max(0.0f, size.m_Y - viewport.m_Height))};
     m_Offset = offset;
     if (m_Offset.m_X != previous.m_X || m_Offset.m_Y != previous.m_Y)
     {

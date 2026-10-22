@@ -67,3 +67,5 @@ throughput is unmeasured. See benchmark.txt / benchmark.csv for current samples.
 
 The headless clipboard is an in-memory adapter. Native OS input, clipboard,
 per-monitor DPI changes, and hardware drivers require target-machine validation.
+
+See [MODELS_0_11.md](MODELS_0_11.md) for shared-model, selection, viewport-work, and framebuffer evidence.

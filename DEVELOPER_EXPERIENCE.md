@@ -106,8 +106,9 @@ Before adding a binding/property/model API, demonstrate these scenarios:
   semantics. Receiver/window/request lifetimes end without manual disconnect
   bookkeeping in each callback.
 
-These are acceptance scenarios for future work, not claims that the complete
-binding or external-model systems already exist.
+These scenarios are exercised by the APIs in [STATE.md](STATE.md) and
+[MODELS.md](MODELS.md). The foundation roadmap records remaining framework gates
+and provider/platform work.
 
 ## Review usability with working code
 

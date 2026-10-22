@@ -37,6 +37,9 @@ class ScrollWidget : public Widget
     std::size_t GetTextCacheBytes() const;
 
   protected:
+    //! Returns stored scroll coordinates without recursively querying virtual geometry.
+    Point GetStoredScrollOffset() const;
+
     //! Returns the virtual content dimensions.
     virtual Point GetVirtualSize() const = 0;
 

@@ -1,6 +1,8 @@
 #pragma once
 
 #include "ScrollWidget.h"
+#include "CollectionView.h"
+#include "ItemDelegate.h"
 
 namespace EStudioUI
 {
@@ -10,6 +12,27 @@ class ListWidget final : public ScrollWidget
   public:
     //! Creates an empty, focusable list.
     ListWidget();
+
+    //! Displays a shared model column; the target must already belong to an idle UiContext.
+    void SetModel(std::shared_ptr<ItemModel> model, std::size_t column = 0);
+
+    //! Returns the external shared model, or an empty pointer for convenience-owned items.
+    std::shared_ptr<ItemModel> GetModel() const;
+
+    //! Shares selection with another view of the same canonical model.
+    void SetSelectionModel(std::shared_ptr<SelectionModel> selection);
+
+    //! Returns shared selection, or an empty pointer for convenience-owned items.
+    std::shared_ptr<SelectionModel> GetSelectionModel() const;
+
+    //! Installs an immutable GPU item presentation policy; null restores the default.
+    void SetItemDelegate(std::shared_ptr<const ItemDelegate> delegate);
+
+    //! Returns the current canonical ID, including a selected item hidden by filtering.
+    ItemId GetCurrentItemId() const;
+
+    //! Selects a canonical identity through shared selection.
+    void SetCurrentItemId(ItemId item);
 
     //! Replaces all items and clears the selection and scroll position.
     void SetItems(std::vector<std::string> items);
@@ -21,7 +44,7 @@ class ListWidget final : public ScrollWidget
     void RemoveItem(int index);
 
     //! Returns a caption by index, throwing for invalid indices.
-    const std::string& GetItem(int index) const;
+    std::string GetItem(int index) const;
 
     //! Returns the item count.
     int GetItemCount() const;
@@ -70,6 +93,27 @@ class ListWidget final : public ScrollWidget
     void OnText(std::string_view text) override;
 
   private:
+    //! Applies selection modifiers in this view's visible order.
+    void SelectIndex(int index, Modifiers modifiers);
+
+    //! Updates geometry or painting after a coherent shared-model publication.
+    void ModelChanged(const ModelChange& change);
+
+    //! Refreshes local current-row coordinates after shared selection changes.
+    void SelectionChanged();
+
+    //! Owns lifetime-bound shared data and selection subscriptions when externally modeled.
+    std::unique_ptr<CollectionView> m_View;
+
+    //! Owns immutable custom model presentation without allocating row widgets.
+    std::shared_ptr<const ItemDelegate> m_Delegate = std::make_shared<const ItemDelegate>();
+
+    //! Selects the model field displayed by list rows.
+    std::size_t m_ModelColumn = 0;
+
+    //! Tests semantic row interaction without changing selection.
+    bool ItemEnabled(int index) const;
+
     //! Converts a window-coordinate point into a visible item index.
     int ItemAt(Point position) const;
 

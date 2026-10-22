@@ -1,6 +1,9 @@
 #pragma once
 
 #include "ScrollWidget.h"
+#include "CollectionView.h"
+#include "TreeRowMap.h"
+#include "ItemDelegate.h"
 
 #include <cstdint>
 #include <unordered_map>
@@ -17,6 +20,21 @@ class TreeWidget final : public ScrollWidget
     //! Creates an empty hierarchy.
     TreeWidget();
 
+    //! Displays a shared hierarchical snapshot while retaining view-local expansion.
+    void SetModel(std::shared_ptr<ItemModel> model, std::size_t column = 0);
+
+    //! Returns the external model, or empty for convenience-owned nodes.
+    std::shared_ptr<ItemModel> GetModel() const;
+
+    //! Shares canonical selection with compatible list/table/tree views.
+    void SetSelectionModel(std::shared_ptr<SelectionModel> selection);
+
+    //! Returns canonical selection when externally modeled.
+    std::shared_ptr<SelectionModel> GetSelectionModel() const;
+
+    //! Installs an immutable GPU presentation policy; null restores the default.
+    void SetItemDelegate(std::shared_ptr<const ItemDelegate> delegate);
+
     //! Appends a child of parent; zero appends a top-level item.
     NodeId AddItem(NodeId parent, std::string text);
 
@@ -30,7 +48,7 @@ class TreeWidget final : public ScrollWidget
     void SetItemText(NodeId item, std::string text);
 
     //! Returns a node's caption, throwing for an invalid ID.
-    const std::string& GetItemText(NodeId item) const;
+    std::string GetItemText(NodeId item) const;
 
     //! Expands or collapses a node; hidden selected IDs remain stable.
     void SetExpanded(NodeId item, bool expanded);
@@ -110,6 +128,51 @@ class TreeWidget final : public ScrollWidget
         //! Indentation depth below the invisible root.
         unsigned m_Depth = 0;
     };
+
+    //! Applies pointer/keyboard modifiers using stable IDs and visible order.
+    void SelectItem(NodeId item, Modifiers modifiers);
+
+    //! Updates branch counts and local coordinates after model publication.
+    void ModelChanged(const ModelChange& change);
+
+    //! Refreshes current canonical identity after shared selection commits.
+    void SelectionChanged();
+
+    //! Resolves one visible row through the external prefix map or convenience cache.
+    Row VisibleRow(std::size_t index) const;
+
+    //! Returns a visible record position without scanning external record ranges.
+    std::optional<std::size_t> VisibleIndex(NodeId item) const;
+
+    //! Tests semantic interaction policy without enumerating descendants.
+    bool ItemEnabled(NodeId item) const;
+
+    //! Tests identity existence in the currently displayed model.
+    bool HasItem(NodeId item) const;
+
+    //! Tests immediate child availability without fetching child values.
+    bool HasChildren(NodeId item) const;
+
+    //! Returns one record's parent ID.
+    NodeId ParentOf(NodeId item) const;
+
+    //! Returns the first immediate child.
+    NodeId FirstChild(NodeId item) const;
+
+    //! Owns external model and selection subscriptions.
+    std::unique_ptr<CollectionView> m_View;
+
+    //! Selects the displayed schema column.
+    std::size_t m_ModelColumn = 0;
+
+    //! Stores view-local expansion preferences, including filtered-out records.
+    std::unordered_set<NodeId> m_ExpandedItems;
+
+    //! Maps expanded external branches without flattening all records.
+    mutable TreeRowMap m_RowMap;
+
+    //! Owns immutable optional GPU item presentation.
+    std::shared_ptr<const ItemDelegate> m_Delegate = std::make_shared<const ItemDelegate>();
 
     //! Rebuilds the flattened hierarchy only after structural/expansion changes.
     void EnsureRows() const;

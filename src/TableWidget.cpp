@@ -9,6 +9,41 @@
 
 namespace EStudioUI
 {
+namespace
+{
+class DelegateValidator final : public InputValidator
+{
+  public:
+    DelegateValidator(std::shared_ptr<const ItemDelegate> delegate, std::shared_ptr<ItemModel> model, ItemId item,
+                      std::size_t column)
+        : m_Delegate(std::move(delegate)), m_Model(std::move(model)), m_Item(item), m_Column(column)
+    {
+    }
+
+    ValidationState Validate(std::string_view text) const override
+    {
+        try
+        {
+            const auto model = m_Model.lock();
+            if (!model)
+                return ValidationState::Intermediate;
+            (void)m_Delegate->ParseEdit(model->GetSnapshot(), m_Item, m_Column, text);
+            return ValidationState::Acceptable;
+        }
+        catch (...)
+        {
+            return ValidationState::Intermediate;
+        }
+    }
+
+  private:
+    std::shared_ptr<const ItemDelegate> m_Delegate;
+    std::weak_ptr<ItemModel> m_Model;
+    ItemId m_Item;
+    std::size_t m_Column;
+};
+} // namespace
+
 TableWidget::TableWidget() : ScrollWidget("tablewidget")
 {
     RegisterStylePart("cell", Hover | Pressed | Selected | Alternate,
@@ -57,6 +92,242 @@ TableWidget::TableWidget() : ScrollWidget("tablewidget")
         });
 }
 
+void TableWidget::SetModel(std::shared_ptr<ItemModel> model)
+{
+    VerifyStructuralMutation();
+    const auto lease = RetainOwner();
+    if (!model)
+        throw std::invalid_argument("Table model cannot be empty.");
+    const auto data = model->GetSnapshot();
+    const bool compatible = m_View && m_View->GetModel()->GetRootModel() == model->GetRootModel();
+    auto selection = compatible ? m_View->GetSelectionModel() : std::shared_ptr<SelectionModel>{};
+    auto view = std::make_unique<CollectionView>(
+        *this, model,
+        [](Widget& owner, const ModelChange& change) { static_cast<TableWidget&>(owner).ModelChanged(change); },
+        [](Widget& owner) { static_cast<TableWidget&>(owner).SelectionChanged(); }, std::move(selection));
+    std::vector<TableColumn> columns;
+    for (const auto& column : data.GetColumns())
+        columns.push_back({TextBuffer::Sanitize(column.m_Title), SizeRule::Fill(1, 60)});
+    const WidgetRef self(this);
+    if (!compatible)
+        EndEdit(false, false);
+    if (!self.Get())
+        return;
+    m_View = std::move(view);
+    m_LocalProjection.reset();
+    m_Columns = std::move(columns);
+    if (!compatible || m_Widths.size() != m_Columns.size())
+        m_Widths.assign(m_Columns.size(), std::nullopt);
+    m_Rows.clear();
+    m_ContentPolicy = ContentMeasurePolicy::Sample;
+    m_ContentFontSize = -1;
+    m_HoverRow = m_HoverColumn = m_HoverHeader = -1;
+    m_PressedRow = m_PressedColumn = m_PressedHeader = -1;
+    if (!compatible)
+        SetScrollOffset({});
+    Invalidate(Invalidation::Content);
+    if (m_EditItem)
+    {
+        if (!data.Contains(m_EditItem) || data.GetParent(m_EditItem) || m_EditColumn >= GetColumnCount())
+            EndEdit(false, false);
+        else
+            m_EditRow = static_cast<int>(*data.GetPosition(m_EditItem));
+        if (!self.Get())
+            return;
+    }
+    SelectionChanged();
+}
+
+std::shared_ptr<ItemModel> TableWidget::GetModel() const
+{
+    VerifyAccess();
+    return m_View ? m_View->GetModel() : nullptr;
+}
+
+void TableWidget::SetSelectionModel(std::shared_ptr<SelectionModel> selection)
+{
+    VerifyStructuralMutation();
+    const auto lease = RetainOwner();
+    if (!m_View)
+        throw std::logic_error("Attach a shared table model before assigning shared selection.");
+    m_View->SetSelectionModel(std::move(selection));
+    SelectionChanged();
+}
+
+std::shared_ptr<SelectionModel> TableWidget::GetSelectionModel() const
+{
+    VerifyAccess();
+    return m_View ? m_View->GetSelectionModel() : nullptr;
+}
+
+ItemId TableWidget::GetCurrentItemId() const
+{
+    VerifyAccess();
+    return m_View ? m_View->GetSelectionModel()->GetCurrent() : 0;
+}
+
+void TableWidget::SetCurrentItemId(ItemId item, std::size_t column)
+{
+    VerifyAccess();
+    if (!m_View)
+        throw std::logic_error("Stable ID selection requires a shared table model.");
+    const auto selection = m_View->GetSelectionModel();
+    selection->Select(item, column);
+}
+
+void TableWidget::SetContentMeasurePolicy(ContentMeasurePolicy policy, std::size_t sampleCount)
+{
+    VerifyStructuralMutation();
+    if (!sampleCount)
+        throw std::invalid_argument("Content measurement sample count must be positive.");
+    m_ContentPolicy = policy;
+    m_ContentSampleCount = sampleCount;
+    m_ContentFontSize = -1;
+    Invalidate(Invalidation::Arrange | Invalidation::Paint);
+}
+
+void TableWidget::FitColumnsToContents()
+{
+    VerifyStructuralMutation();
+    m_FitAll = true;
+    m_ContentFontSize = -1;
+    Invalidate(Invalidation::Arrange | Invalidation::Paint);
+}
+
+void TableWidget::SetItemDelegate(std::size_t column, std::shared_ptr<const ItemDelegate> delegate)
+{
+    VerifyStructuralMutation();
+    if (column >= m_Columns.size())
+        throw std::out_of_range("Delegate requires an existing table column.");
+    m_Delegates.resize(m_Columns.size());
+    m_Delegates[column] = std::move(delegate);
+    m_ContentFontSize = -1;
+    Invalidate(Invalidation::Arrange | Invalidation::Paint);
+}
+
+std::shared_ptr<const ItemDelegate> TableWidget::GetItemDelegate(std::size_t column) const
+{
+    VerifyAccess();
+    if (column >= m_Columns.size())
+        throw std::out_of_range("Delegate requires an existing table column.");
+    static const auto standard = std::make_shared<const ItemDelegate>();
+    return column < m_Delegates.size() && m_Delegates[column] ? m_Delegates[column] : standard;
+}
+
+const std::string& TableWidget::GetEditError() const
+{
+    VerifyAccess();
+    return m_EditError;
+}
+
+Signal<const std::string&>& TableWidget::EditRejected()
+{
+    VerifyAccess();
+    return m_EditRejected;
+}
+
+void TableWidget::SelectionChanged()
+{
+    const auto data = m_View->GetModel()->GetSnapshot();
+    const auto selection = m_View->GetSelectionModel();
+    const auto item = selection->GetCurrent();
+    const auto position = data.Contains(item) && !data.GetParent(item) ? data.GetPosition(item) : std::nullopt;
+    const int row = position ? static_cast<int>(*position) : -1;
+    const int column = row < 0 || data.GetColumns().empty()
+                           ? -1
+                           : static_cast<int>(std::min(selection->GetColumn(), data.GetColumns().size() - 1));
+    const bool changed = row != m_CurrentRow || column != m_CurrentColumn;
+    m_CurrentRow = row;
+    m_CurrentColumn = column;
+    RequestRepaint();
+    if (changed)
+        m_CurrentCellChanged.Emit(row, column);
+}
+
+void TableWidget::ModelChanged(const ModelChange& change)
+{
+    if (!change.m_Reset && !change.m_Structure && change.m_Fields.empty())
+        return;
+
+    const auto lease = RetainOwner();
+    const WidgetRef self(this);
+    const auto model = m_View->GetModel();
+    if (change.m_Reset)
+    {
+        for (std::size_t column = 0; column < m_Delegates.size(); ++column)
+            if (column >= change.m_Before.GetColumns().size() || column >= change.m_After.GetColumns().size() ||
+                change.m_Before.GetColumns()[column].m_Title != change.m_After.GetColumns()[column].m_Title ||
+                change.m_Before.GetColumns()[column].m_ValueType != change.m_After.GetColumns()[column].m_ValueType)
+                m_Delegates[column].reset();
+        std::vector<TableColumn> columns;
+        for (std::size_t i = 0; i < change.m_After.GetColumns().size(); ++i)
+            columns.push_back({TextBuffer::Sanitize(change.m_After.GetColumns()[i].m_Title),
+                               i < m_Columns.size() ? m_Columns[i].m_Size : SizeRule::Fill(1, 60)});
+        m_Columns = std::move(columns);
+        m_Widths.resize(m_Columns.size());
+    }
+    if (m_EditItem && !m_Committing)
+    {
+        const auto& data = change.m_After;
+        if (!data.Contains(m_EditItem) || data.GetParent(m_EditItem) || m_EditColumn >= GetColumnCount())
+            EndEdit(false, false);
+        else
+            m_EditRow = static_cast<int>(*data.GetPosition(m_EditItem));
+        if (!self.Get())
+            return;
+    }
+    bool sizing = change.m_Reset || change.m_Structure;
+    for (const auto& field : change.m_Fields)
+        if (field.m_Column < m_Columns.size() && m_Columns[field.m_Column].m_Size.m_Mode == SizeRule::Mode::Content)
+            sizing = true;
+    if (sizing)
+    {
+        m_ContentFontSize = -1;
+        Invalidate(Invalidation::Arrange | Invalidation::HitTest | Invalidation::Paint);
+    }
+    else
+        RequestRepaint();
+    m_HoverRow = m_HoverColumn = m_PressedRow = m_PressedColumn = -1;
+    SelectionChanged();
+    if (!self.Get() || !m_View || m_View->GetModel() != model || !m_CellChanged.HasConnections())
+        return;
+    for (const auto& field : change.m_Fields)
+    {
+        if (field.m_Role != ModelRole::Edit || !change.m_After.Contains(field.m_Item) ||
+            change.m_After.GetParent(field.m_Item) || field.m_Column >= m_Columns.size())
+            continue;
+        const auto position = change.m_After.GetPosition(field.m_Item);
+        if (position)
+            m_CellChanged.Emit(static_cast<int>(*position), static_cast<int>(field.m_Column));
+        if (!self.Get() || !m_View || m_View->GetModel() != model)
+            return;
+    }
+}
+
+void TableWidget::SelectCell(int row, int column, Modifiers modifiers)
+{
+    if (!m_View)
+    {
+        SetCurrentCell(row, column);
+        return;
+    }
+    const auto data = m_View->GetModel()->GetSnapshot();
+    const auto item = data.GetItem(static_cast<std::size_t>(row));
+    const auto enabled = data.GetValue(item, static_cast<std::size_t>(column), ModelRole::Enabled);
+    if (std::holds_alternative<bool>(enabled) && !std::get<bool>(enabled))
+        return;
+    std::vector<ItemId> order;
+    if (modifiers.m_Shift && m_View->GetSelectionModel()->GetMode() == SelectionMode::Multiple)
+        for (std::size_t index = 0; index < data.GetRowCount(); ++index)
+            order.push_back(data.GetItem(index));
+    const auto bounds = GetCellBounds(row, column);
+    const auto viewport = GetViewport();
+    const auto offset = GetScrollOffset();
+    EnsureVisible({bounds.m_X - viewport.m_X + offset.m_X, static_cast<float>(row) * GetStyle().m_RowHeight,
+                   bounds.m_Width, GetStyle().m_RowHeight});
+    m_View->Select(item, static_cast<std::size_t>(column), modifiers, order);
+}
+
 void TableWidget::SetColumns(std::vector<TableColumn> columns)
 {
     VerifyStructuralMutation();
@@ -70,6 +341,9 @@ void TableWidget::SetColumns(std::vector<TableColumn> columns)
     EndEdit(false, false);
     if (!lifetime.Get())
         return;
+    m_View.reset();
+    m_LocalProjection.reset();
+    m_ContentPolicy = ContentMeasurePolicy::Exact;
     m_Columns = std::move(columns);
     m_Widths.assign(m_Columns.size(), std::nullopt);
     m_Rows.clear();
@@ -102,6 +376,9 @@ void TableWidget::SetRows(std::vector<std::vector<std::string>> rows)
     EndEdit(false, false);
     if (!lifetime.Get())
         return;
+    m_View.reset();
+    m_LocalProjection.reset();
+    m_ContentPolicy = ContentMeasurePolicy::Exact;
     m_Rows = std::move(rows);
     m_ContentFontSize = -1;
     m_SortColumn = -1;
@@ -124,6 +401,17 @@ int TableWidget::AddRow(std::vector<std::string> cells)
         throw std::invalid_argument("Every table row must match the column count.");
     for (auto& cell : cells)
         cell = TextBuffer::Sanitize(cell);
+    if (m_View)
+    {
+        const auto model = m_View->GetModel();
+        const auto data = model->GetSnapshot();
+        std::vector<ModelValue> values;
+        for (std::size_t i = 0; i < cells.size(); ++i)
+            values.push_back(ParseModelValue(data.GetColumns()[i], cells[i]));
+        const auto index = static_cast<int>(data.GetRowCount());
+        model->Restructure([values = std::move(values)](ModelBuilder& builder) { builder.Add(values); });
+        return index;
+    }
     m_Rows.push_back(std::move(cells));
     m_ContentFontSize = -1;
     m_SortColumn = -1;
@@ -134,7 +422,7 @@ int TableWidget::AddRow(std::vector<std::string> cells)
 int TableWidget::GetRowCount() const
 {
     VerifyAccess();
-    return static_cast<int>(m_Rows.size());
+    return m_View ? static_cast<int>(m_View->GetModel()->GetSnapshot().GetRowCount()) : static_cast<int>(m_Rows.size());
 }
 
 int TableWidget::GetColumnCount() const
@@ -143,11 +431,18 @@ int TableWidget::GetColumnCount() const
     return static_cast<int>(m_Columns.size());
 }
 
-const std::string& TableWidget::GetCell(int row, int column) const
+std::string TableWidget::GetCell(int row, int column) const
 {
     VerifyAccess();
     if (row < 0 || row >= GetRowCount() || column < 0 || column >= GetColumnCount())
         throw std::out_of_range("Invalid table cell.");
+    if (m_View)
+    {
+        const auto data = m_View->GetModel()->GetSnapshot();
+        return TextBuffer::Sanitize(
+            GetItemDelegate(static_cast<std::size_t>(column))
+                ->GetText(data, data.GetItem(static_cast<std::size_t>(row)), static_cast<std::size_t>(column)));
+    }
     return m_Rows[static_cast<std::size_t>(row)][static_cast<std::size_t>(column)];
 }
 
@@ -157,6 +452,13 @@ void TableWidget::SetCell(int row, int column, std::string text)
     const auto ownerLease = RetainOwner();
     (void)GetCell(row, column);
     text = TextBuffer::Sanitize(text);
+    if (m_View)
+    {
+        const auto model = m_View->GetModel();
+        const auto item = model->GetSnapshot().GetItem(static_cast<std::size_t>(row));
+        model->SetText(item, static_cast<std::size_t>(column), text);
+        return;
+    }
     auto& cell = m_Rows[static_cast<std::size_t>(row)][static_cast<std::size_t>(column)];
     if (cell == text)
         return;
@@ -181,6 +483,14 @@ void TableWidget::SetCurrentCell(int row, int column)
         EnsureVisible({bounds.m_X - viewport.m_X + offset.m_X, static_cast<float>(row) * GetStyle().m_RowHeight,
                        bounds.m_Width, GetStyle().m_RowHeight});
     }
+    if (m_View)
+    {
+        const auto selection = m_View->GetSelectionModel();
+        const auto data = m_View->GetModel()->GetSnapshot();
+        selection->Select(row < 0 ? 0 : data.GetItem(static_cast<std::size_t>(row)),
+                          column < 0 ? 0 : static_cast<std::size_t>(column));
+        return;
+    }
     if (m_CurrentRow == row && m_CurrentColumn == column)
         return;
     m_CurrentRow = row;
@@ -192,6 +502,17 @@ void TableWidget::SetCurrentCell(int row, int column)
 std::pair<int, int> TableWidget::GetCurrentCell() const
 {
     VerifyAccess();
+    if (m_View)
+    {
+        const auto data = m_View->GetModel()->GetSnapshot();
+        const auto selection = m_View->GetSelectionModel();
+        const auto item = selection->GetCurrent();
+        const auto position = data.Contains(item) && !data.GetParent(item) ? data.GetPosition(item) : std::nullopt;
+        if (!position || data.GetColumns().empty())
+            return {-1, -1};
+        return {static_cast<int>(*position),
+                static_cast<int>(std::min(selection->GetColumn(), data.GetColumns().size() - 1))};
+    }
     return {m_CurrentRow, m_CurrentColumn};
 }
 
@@ -201,6 +522,23 @@ void TableWidget::SortByColumn(int column, bool ascending)
     const auto ownerLease = RetainOwner();
     if (column < 0 || column >= GetColumnCount())
         throw std::out_of_range("Invalid table sort column.");
+    if (m_View)
+    {
+        const WidgetRef self(this);
+        if (!m_LocalProjection)
+        {
+            const auto projection = SortFilterModel::Create(m_View->GetModel());
+            SetModel(projection);
+            if (!self.Get())
+                return;
+            m_LocalProjection = projection;
+        }
+        m_SortColumn = column;
+        m_Ascending = ascending;
+        const auto projection = m_LocalProjection;
+        projection->SetSort(static_cast<std::size_t>(column), ascending);
+        return;
+    }
     const WidgetRef lifetime(this);
     EndEdit(false, false);
     if (!lifetime.Get())
@@ -264,6 +602,18 @@ void TableWidget::SetColumnWidth(int column, float pixels)
     Invalidate(Invalidation::Content);
 }
 
+void TableWidget::SetColumnSize(int column, SizeRule size)
+{
+    VerifyStructuralMutation();
+    if (column < 0 || column >= GetColumnCount())
+        throw std::out_of_range("Invalid table column size contract.");
+    size.Validate();
+    m_Columns[static_cast<std::size_t>(column)].m_Size = size;
+    m_Widths[static_cast<std::size_t>(column)].reset();
+    m_ContentFontSize = -1;
+    Invalidate(Invalidation::Arrange | Invalidation::HitTest | Invalidation::Paint);
+}
+
 std::vector<float> TableWidget::GetColumnWidths() const
 {
     VerifyAccess();
@@ -271,9 +621,17 @@ std::vector<float> TableWidget::GetColumnWidths() const
     const auto& header = GetPartStyle("header", 0);
     const float cellInset = cell.m_Padding.m_Left + cell.m_Padding.m_Right + 2 * cell.m_BorderWidth;
     const float headerInset = header.m_Padding.m_Left + header.m_Padding.m_Right + 2 * header.m_BorderWidth;
+    const auto rowHeight = std::max(1.0f, GetStyle().m_RowHeight);
+    const auto viewportHeight = GetViewport().m_Height;
+    const auto verticalExtent = static_cast<float>(GetRowCount()) * rowHeight;
+    const auto offsetY = std::clamp(GetStoredScrollOffset().m_Y, 0.0f, std::max(0.0f, verticalExtent - viewportHeight));
+    const auto visibleFirst = static_cast<std::size_t>(offsetY / rowHeight);
+    const auto visibleCount = static_cast<std::size_t>(std::ceil(viewportHeight / rowHeight)) + 1;
     if (m_ContentFontSize != cell.m_FontSize || m_ContentHeaderFontSize != header.m_FontSize ||
         m_ContentCellInset != cellInset || m_ContentHeaderInset != headerInset ||
-        m_ContentWidths.size() != m_Columns.size())
+        m_ContentWidths.size() != m_Columns.size() ||
+        (m_ContentPolicy == ContentMeasurePolicy::Visible &&
+         (m_ContentFirstVisible != visibleFirst || m_ContentVisibleCount != visibleCount)))
     {
         m_ContentWidths.assign(m_Columns.size(), 0);
         for (std::size_t i = 0; i < m_Columns.size(); ++i)
@@ -284,10 +642,30 @@ std::vector<float> TableWidget::GetColumnWidths() const
             const float sortWidth =
                 std::max(font.Shape(" ↑", header.m_FontSize).m_Width, font.Shape(" ↓", header.m_FontSize).m_Width);
             float width = font.Shape(m_Columns[i].m_Title, header.m_FontSize).m_Width + headerInset + sortWidth;
-            for (const auto& row : m_Rows)
-                width = std::max(width, font.Shape(row[i], cell.m_FontSize).m_Width + cellInset);
+            const auto data = m_View ? m_View->GetModel()->GetSnapshot() : ModelSnapshot{};
+            if (m_View && data.GetColumns()[i].m_WidthHint)
+                width = std::max(width, *data.GetColumns()[i].m_WidthHint + cellInset);
+            const auto policy = m_FitAll ? ContentMeasurePolicy::Exact : m_ContentPolicy;
+            const auto count = static_cast<std::size_t>(GetRowCount());
+            std::size_t first = 0, end = count;
+            if (policy == ContentMeasurePolicy::Hints)
+                end = 0;
+            else if (policy == ContentMeasurePolicy::Sample)
+                end = std::min(count, m_ContentSampleCount);
+            else if (policy == ContentMeasurePolicy::Visible)
+            {
+                first = std::min(count, visibleFirst);
+                end = std::min(count, first + visibleCount);
+            }
+            for (auto row = first; row < end; ++row)
+                width = std::max(
+                    width, font.Shape(GetCell(static_cast<int>(row), static_cast<int>(i)), cell.m_FontSize).m_Width +
+                               cellInset);
             m_ContentWidths[i] = width;
         }
+        m_FitAll = false;
+        m_ContentFirstVisible = visibleFirst;
+        m_ContentVisibleCount = visibleCount;
         m_ContentFontSize = cell.m_FontSize;
         m_ContentHeaderFontSize = header.m_FontSize;
         m_ContentCellInset = cellInset;
@@ -322,22 +700,59 @@ Rect TableWidget::GetCellBounds(int row, int column) const
 
 void TableWidget::BeginEdit(int row, int column)
 {
-    VerifyAccess();
+    VerifyStructuralMutation();
     const auto ownerLease = RetainOwner();
     (void)GetCell(row, column);
     if (!m_Editable || !IsEnabled() || !GetContext())
         return;
+    // Diagnose nested transaction/frame use before changing selection or editor state.
+    GetContext()->Prepare(GetContext()->Root().GetBounds().m_Width, GetContext()->Root().GetBounds().m_Height);
     const WidgetRef self(this);
+    const auto model = m_View ? m_View->GetModel() : nullptr;
+    const auto data = model ? model->GetSnapshot() : ModelSnapshot{};
+    const auto item = model ? data.GetItem(static_cast<std::size_t>(row)) : 0;
+    if (model && !data.GetColumns().at(static_cast<std::size_t>(column)).m_Editable)
+        return;
+    if (model)
+    {
+        const auto enabled = data.GetValue(item, static_cast<std::size_t>(column), ModelRole::Enabled);
+        if (std::holds_alternative<bool>(enabled) && !std::get<bool>(enabled))
+            return;
+    }
     SetCurrentCell(row, column);
     if (!self.Get() || row >= GetRowCount() || column >= GetColumnCount())
         return;
     m_EditRow = row;
     m_EditColumn = column;
-    m_Editor->SetText(GetCell(row, column));
+    m_EditItem = item;
+    m_EditError.clear();
+    std::string text = GetCell(row, column);
+    if (model)
+    {
+        const auto delegate = GetItemDelegate(static_cast<std::size_t>(column));
+        m_EditOriginal = data.GetValue(item, static_cast<std::size_t>(column));
+        text = delegate->GetEditorText(data, item, static_cast<std::size_t>(column));
+        m_Editor->SetValidator(
+            std::make_shared<DelegateValidator>(delegate, model, item, static_cast<std::size_t>(column)));
+    }
+    else
+        m_Editor->SetValidator({});
+    if (!self.Get())
+        return;
+    if (!m_Editor->CanSetText(text))
+    {
+        m_EditRow = m_EditColumn = -1;
+        m_EditItem = 0;
+        m_EditError = "The cell value cannot be represented exactly by the table editor.";
+        const auto error = m_EditError;
+        m_EditRejected.Emit(error);
+        return;
+    }
+    m_Editor->SetText(text);
     if (!self.Get())
         return;
     m_Editor->SetVisible(true);
-    m_Editor->SetFloatingBounds(GetCellBounds(row, column).Intersect(GetViewport()));
+    m_Editor->SetFloatingBounds(GetCellBounds(m_EditRow, m_EditColumn).Intersect(GetViewport()));
     GetContext()->Prepare(GetContext()->Root().GetBounds().m_Width, GetContext()->Root().GetBounds().m_Height);
     GetContext()->SetFocus(m_Editor);
     if (self.Get())
@@ -347,13 +762,55 @@ void TableWidget::BeginEdit(int row, int column)
 void TableWidget::EndEdit(bool commit, bool restoreFocus)
 {
     const auto ownerLease = RetainOwner();
-    if (m_EditRow < 0)
+    if (m_EditRow < 0 || m_Committing)
         return;
     const int row = m_EditRow;
     const int column = m_EditColumn;
     const std::string text = m_Editor->GetText();
-    m_EditRow = m_EditColumn = -1;
     const WidgetRef self(this);
+    const auto model = m_View ? m_View->GetModel() : nullptr;
+    if (commit && model)
+    {
+        m_Committing = true;
+        try
+        {
+            const auto canonical = model->GetRootModel()->GetSnapshot();
+            if (!canonical.Contains(m_EditItem) || static_cast<std::size_t>(column) >= canonical.GetColumns().size())
+                throw std::logic_error("The edited record or column was removed.");
+            const auto delegate = GetItemDelegate(static_cast<std::size_t>(column));
+            auto value = delegate->ParseEdit(canonical, m_EditItem, static_cast<std::size_t>(column), text);
+            const auto current = canonical.GetValue(m_EditItem, static_cast<std::size_t>(column));
+            if (current != m_EditOriginal && current != value)
+                throw std::logic_error("The cell changed externally while editing; cancel and reopen the editor.");
+            model->SetValue(m_EditItem, static_cast<std::size_t>(column), std::move(value));
+        }
+        catch (const std::exception& error)
+        {
+            if (!self.Get())
+                return;
+            m_Committing = false;
+            m_EditError = error.what();
+            const auto message = m_EditError;
+            m_EditRejected.Emit(message);
+            return;
+        }
+        catch (...)
+        {
+            if (!self.Get())
+                return;
+            m_Committing = false;
+            m_EditError = "The model rejected the editor commit.";
+            const auto message = m_EditError;
+            m_EditRejected.Emit(message);
+            return;
+        }
+        if (!self.Get())
+            return;
+        m_Committing = false;
+        m_EditError.clear();
+    }
+    m_EditRow = m_EditColumn = -1;
+    m_EditItem = 0;
     m_Editor->SetVisible(false);
     if (!self.Get())
         return;
@@ -361,8 +818,8 @@ void TableWidget::EndEdit(bool commit, bool restoreFocus)
         GetContext()->SetFocus(this);
     if (!self.Get())
         return;
-    Invalidate(Invalidation::Content);
-    if (commit && row < GetRowCount() && column < GetColumnCount())
+    Invalidate(Invalidation::Arrange | Invalidation::Paint);
+    if (commit && !model && row < GetRowCount() && column < GetColumnCount())
         SetCell(row, column, text);
 }
 
@@ -414,7 +871,7 @@ Point TableWidget::GetVirtualSize() const
 {
     const auto widths = GetColumnWidths();
     return {std::accumulate(widths.begin(), widths.end(), 0.0f),
-            static_cast<float>(m_Rows.size()) * GetStyle().m_RowHeight};
+            static_cast<float>(GetRowCount()) * GetStyle().m_RowHeight};
 }
 
 int TableWidget::ColumnAt(Point point) const
@@ -490,13 +947,25 @@ void TableWidget::Paint(Renderer& renderer, FontFace& font, double time, float o
             if (cell.m_X + cell.m_Width <= viewport.m_X)
                 continue;
             unsigned state = row % 2 ? static_cast<unsigned>(Alternate) : 0u;
-            if (row == m_CurrentRow && static_cast<int>(column) == m_CurrentColumn)
+            const bool selected = m_View
+                                      ? m_View->GetSelectionModel()->IsSelected(
+                                            m_View->GetModel()->GetSnapshot().GetItem(static_cast<std::size_t>(row))) &&
+                                            (m_View->GetSelectionModel()->GetMode() == SelectionMode::Multiple ||
+                                             static_cast<int>(column) == m_CurrentColumn)
+                                      : row == m_CurrentRow && static_cast<int>(column) == m_CurrentColumn;
+            if (selected)
                 state |= Selected;
             if (row == m_HoverRow && static_cast<int>(column) == m_HoverColumn)
                 state |= Hover;
             if (row == m_PressedRow && static_cast<int>(column) == m_PressedColumn)
                 state |= Pressed;
-            const auto& part = GetPartStyle("cell", state);
+            const auto& cssPart = GetPartStyle("cell", state);
+            const auto data = m_View ? m_View->GetModel()->GetSnapshot() : ModelSnapshot{};
+            const auto item = m_View ? data.GetItem(static_cast<std::size_t>(row)) : 0;
+            const auto delegate = m_View ? GetItemDelegate(column) : std::shared_ptr<const ItemDelegate>{};
+            const auto styled =
+                m_View ? delegate->GetStyle(cssPart, data, item, column, (state & Selected) != 0) : Style{};
+            const auto& part = m_View ? styled : cssPart;
             if (!part.m_Displayed || part.m_Opacity <= 0)
                 continue;
             const auto identity = ((static_cast<std::uint64_t>(row) + 1) << 32) | (column + 1);
@@ -506,8 +975,10 @@ void TableWidget::Paint(Renderer& renderer, FontFace& font, double time, float o
             renderer.DrawBox(cell, part, clip, opacity * part.m_Opacity);
             if (part.m_ClipContent)
                 renderer.PushClip(cell, part.m_Radius);
-            DrawRowText(renderer, font, m_Rows[static_cast<std::size_t>(row)][column], cell, part, cell,
-                        opacity * part.m_Opacity);
+            if (!delegate ||
+                !delegate->Paint(renderer, font, data, item, column, cell, part, clip, opacity * part.m_Opacity))
+                DrawRowText(renderer, font, GetCell(row, static_cast<int>(column)), cell, part, cell,
+                            opacity * part.m_Opacity);
             auto grid = part.m_GridColor;
             grid.m_A *= opacity * part.m_Opacity;
             renderer.SetPaintIdentity(reinterpret_cast<std::uintptr_t>(&m_Widths), identity);
@@ -600,11 +1071,19 @@ void TableWidget::OnPointerDown(const PointerEvent& event)
     const int row = RowAt(event.m_Position);
     if (row < 0)
         return;
+    if (m_View)
+    {
+        const auto data = m_View->GetModel()->GetSnapshot();
+        const auto enabled = data.GetValue(data.GetItem(static_cast<std::size_t>(row)),
+                                           static_cast<std::size_t>(column), ModelRole::Enabled);
+        if (std::holds_alternative<bool>(enabled) && !std::get<bool>(enabled))
+            return;
+    }
     m_PressedRow = row;
     m_PressedColumn = column;
     SetState(Pressed, true);
     const WidgetRef self(this);
-    SetCurrentCell(row, column);
+    SelectCell(row, column, event.m_Modifiers);
     if (self.Get() && event.m_Clicks == 2 && row < GetRowCount() && column < GetColumnCount())
         BeginEdit(row, column);
 }
@@ -646,7 +1125,7 @@ void TableWidget::OnCaptureLost()
 
 void TableWidget::OnKey(Key key, bool down, bool, Modifiers modifiers)
 {
-    if (!down || m_Rows.empty() || m_Columns.empty())
+    if (!down || GetRowCount() == 0 || m_Columns.empty())
         return;
     int row = std::max(0, m_CurrentRow);
     int column = std::max(0, m_CurrentColumn);
@@ -686,7 +1165,7 @@ void TableWidget::OnKey(Key key, bool down, bool, Modifiers modifiers)
         row -= std::max(1, static_cast<int>(GetViewport().m_Height / GetStyle().m_RowHeight));
     else
         return;
-    SetCurrentCell(std::clamp(row, 0, GetRowCount() - 1), std::clamp(column, 0, GetColumnCount() - 1));
+    SelectCell(std::clamp(row, 0, GetRowCount() - 1), std::clamp(column, 0, GetColumnCount() - 1), modifiers);
 }
 
 bool TableWidget::OnKeyPreview(Key key, bool down, bool, Modifiers)
@@ -700,8 +1179,9 @@ bool TableWidget::OnKeyPreview(Key key, bool down, bool, Modifiers)
     }
     if (key == Key::Tab)
     {
+        const WidgetRef self(this);
         CommitEdit();
-        return false;
+        return !self.Get() || m_EditRow >= 0;
     }
     return false;
 }

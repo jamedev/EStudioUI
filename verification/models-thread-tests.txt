@@ -1,0 +1,86 @@
+Start testing: Oct 22 12:45 CEST
+----------------------------------------------------------
+1/5 Testing: ThreadDispatch
+1/5 Test: ThreadDispatch
+Command: "/workspace/scratch/e2c95811cd0a/EStudioUI/build/gate-b-thread/EStudioUIThreadDispatchTests"
+Directory: /workspace/scratch/e2c95811cd0a/EStudioUI/build/gate-b-thread
+"ThreadDispatch" start time: Oct 22 12:45 CEST
+Output:
+----------------------------------------------------------
+UI dispatch PASS / 8059 checks
+<end of output>
+Test time =   0.81 sec
+----------------------------------------------------------
+Test Passed.
+"ThreadDispatch" end time: Oct 22 12:45 CEST
+"ThreadDispatch" time elapsed: 00:00:00
+----------------------------------------------------------
+
+2/5 Testing: ThreadQueuedSignal
+2/5 Test: ThreadQueuedSignal
+Command: "/workspace/scratch/e2c95811cd0a/EStudioUI/build/gate-b-thread/EStudioUIThreadQueuedSignalTests"
+Directory: /workspace/scratch/e2c95811cd0a/EStudioUI/build/gate-b-thread
+"ThreadQueuedSignal" start time: Oct 22 12:45 CEST
+Output:
+----------------------------------------------------------
+Queued signals PASS / 39 checks
+<end of output>
+Test time =   0.05 sec
+----------------------------------------------------------
+Test Passed.
+"ThreadQueuedSignal" end time: Oct 22 12:45 CEST
+"ThreadQueuedSignal" time elapsed: 00:00:00
+----------------------------------------------------------
+
+3/5 Testing: ThreadTask
+3/5 Test: ThreadTask
+Command: "/workspace/scratch/e2c95811cd0a/EStudioUI/build/gate-b-thread/EStudioUIThreadTaskTests"
+Directory: /workspace/scratch/e2c95811cd0a/EStudioUI/build/gate-b-thread
+"ThreadTask" start time: Oct 22 12:45 CEST
+Output:
+----------------------------------------------------------
+Background tasks PASS / 45 checks
+<end of output>
+Test time =   2.37 sec
+----------------------------------------------------------
+Test Passed.
+"ThreadTask" end time: Oct 22 12:45 CEST
+"ThreadTask" time elapsed: 00:00:02
+----------------------------------------------------------
+
+4/5 Testing: ThreadState
+4/5 Test: ThreadState
+Command: "/workspace/scratch/e2c95811cd0a/EStudioUI/build/gate-b-thread/EStudioUIThreadStateTests"
+Directory: /workspace/scratch/e2c95811cd0a/EStudioUI/build/gate-b-thread
+"ThreadState" start time: Oct 22 12:45 CEST
+Output:
+----------------------------------------------------------
+Typed state and transaction PASS / 83 checks
+<end of output>
+Test time =   0.02 sec
+----------------------------------------------------------
+Test Passed.
+"ThreadState" end time: Oct 22 12:45 CEST
+"ThreadState" time elapsed: 00:00:00
+----------------------------------------------------------
+
+5/5 Testing: ThreadModel
+5/5 Test: ThreadModel
+Command: "/workspace/scratch/e2c95811cd0a/EStudioUI/build/gate-b-thread/EStudioUIThreadModelTests"
+Directory: /workspace/scratch/e2c95811cd0a/EStudioUI/build/gate-b-thread
+"ThreadModel" start time: Oct 22 12:45 CEST
+Output:
+----------------------------------------------------------
+100000 records: two same-page edits copied 256 records; 10000 edits published one model revision.
+Models PASS / 810 checks
+<end of output>
+Test time =   0.24 sec
+----------------------------------------------------------
+Test Passed.
+"ThreadModel" end time: Oct 22 12:45 CEST
+"ThreadModel" time elapsed: 00:00:00
+----------------------------------------------------------
+
+End testing: Oct 22 12:45 CEST
+
+ThreadSanitizer =   3.48 sec*proc

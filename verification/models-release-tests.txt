@@ -1,0 +1,460 @@
+Start testing: Oct 22 12:49 CEST
+----------------------------------------------------------
+1/28 Testing: Core
+1/28 Test: Core
+Command: "/workspace/scratch/e2c95811cd0a/EStudioUI/build/gate-b-release/EStudioUICoreTests"
+Directory: /workspace/scratch/e2c95811cd0a/EStudioUI/build/gate-b-release
+"Core" start time: Oct 22 12:49 CEST
+Output:
+----------------------------------------------------------
+Core PASS / 78 checks
+<end of output>
+Test time =   0.01 sec
+----------------------------------------------------------
+Test Passed.
+"Core" end time: Oct 22 12:49 CEST
+"Core" time elapsed: 00:00:00
+----------------------------------------------------------
+
+2/28 Testing: WidgetsAndLayout
+2/28 Test: WidgetsAndLayout
+Command: "/workspace/scratch/e2c95811cd0a/EStudioUI/build/gate-b-release/EStudioUIWidgetTests"
+Directory: /workspace/scratch/e2c95811cd0a/EStudioUI/build/gate-b-release
+"WidgetsAndLayout" start time: Oct 22 12:49 CEST
+Output:
+----------------------------------------------------------
+Widgets and layout PASS / 3674 checks
+<end of output>
+Test time =   0.02 sec
+----------------------------------------------------------
+Test Passed.
+"WidgetsAndLayout" end time: Oct 22 12:49 CEST
+"WidgetsAndLayout" time elapsed: 00:00:00
+----------------------------------------------------------
+
+3/28 Testing: Animation
+3/28 Test: Animation
+Command: "/workspace/scratch/e2c95811cd0a/EStudioUI/build/gate-b-release/EStudioUIAnimationTests"
+Directory: /workspace/scratch/e2c95811cd0a/EStudioUI/build/gate-b-release
+"Animation" start time: Oct 22 12:49 CEST
+Output:
+----------------------------------------------------------
+Animation checks passed: 2319
+<end of output>
+Test time =   0.01 sec
+----------------------------------------------------------
+Test Passed.
+"Animation" end time: Oct 22 12:49 CEST
+"Animation" time elapsed: 00:00:00
+----------------------------------------------------------
+
+4/28 Testing: RichCss
+4/28 Test: RichCss
+Command: "/workspace/scratch/e2c95811cd0a/EStudioUI/build/gate-b-release/EStudioUIRichCssTests"
+Directory: /workspace/scratch/e2c95811cd0a/EStudioUI/build/gate-b-release
+"RichCss" start time: Oct 22 12:49 CEST
+Output:
+----------------------------------------------------------
+500-widget CSS clock: 0.197082 ms/tick; 0 style resolutions and 0 layout passes during 240 ticks.
+292 rich CSS checks passed.
+<end of output>
+Test time =   0.06 sec
+----------------------------------------------------------
+Test Passed.
+"RichCss" end time: Oct 22 12:49 CEST
+"RichCss" time elapsed: 00:00:00
+----------------------------------------------------------
+
+5/28 Testing: CanvasScene
+5/28 Test: CanvasScene
+Command: "/workspace/scratch/e2c95811cd0a/EStudioUI/build/gate-b-release/EStudioUICanvasSceneTests"
+Directory: /workspace/scratch/e2c95811cd0a/EStudioUI/build/gate-b-release
+"CanvasScene" start time: Oct 22 12:49 CEST
+Output:
+----------------------------------------------------------
+200000-item BVH: build_ms=81.285 query_mean_us=5.22621 mean_visits=320 max_visits=409
+Canvas scene: 11900 checks passed
+<end of output>
+Test time =   0.18 sec
+----------------------------------------------------------
+Test Passed.
+"CanvasScene" end time: Oct 22 12:49 CEST
+"CanvasScene" time elapsed: 00:00:00
+----------------------------------------------------------
+
+6/28 Testing: CanvasGeometry
+6/28 Test: CanvasGeometry
+Command: "/workspace/scratch/e2c95811cd0a/EStudioUI/build/gate-b-release/EStudioUICanvasGeometryTests"
+Directory: /workspace/scratch/e2c95811cd0a/EStudioUI/build/gate-b-release
+"CanvasGeometry" start time: Oct 22 12:49 CEST
+Output:
+----------------------------------------------------------
+200k group build 0.0911015 s; 1000 bounded queries/hits/translations 0.000500451 s
+Canvas geometry: 4149 checks passed
+<end of output>
+Test time =   0.11 sec
+----------------------------------------------------------
+Test Passed.
+"CanvasGeometry" end time: Oct 22 12:49 CEST
+"CanvasGeometry" time elapsed: 00:00:00
+----------------------------------------------------------
+
+7/28 Testing: SketchDocument
+7/28 Test: SketchDocument
+Command: "/workspace/scratch/e2c95811cd0a/EStudioUI/build/gate-b-release/EStudioUISketchDocumentTests"
+Directory: /workspace/scratch/e2c95811cd0a/EStudioUI/build/gate-b-release
+"SketchDocument" start time: Oct 22 12:49 CEST
+Output:
+----------------------------------------------------------
+Sketch document checks passed: 423
+<end of output>
+Test time =   0.79 sec
+----------------------------------------------------------
+Test Passed.
+"SketchDocument" end time: Oct 22 12:49 CEST
+"SketchDocument" time elapsed: 00:00:00
+----------------------------------------------------------
+
+8/28 Testing: CanvasWidget
+8/28 Test: CanvasWidget
+Command: "/workspace/scratch/e2c95811cd0a/EStudioUI/build/gate-b-release/EStudioUICanvasWidgetTests"
+Directory: /workspace/scratch/e2c95811cd0a/EStudioUI/build/gate-b-release
+"CanvasWidget" start time: Oct 22 12:49 CEST
+Output:
+----------------------------------------------------------
+Canvas widget PASS / 27 checks
+<end of output>
+Test time =   0.01 sec
+----------------------------------------------------------
+Test Passed.
+"CanvasWidget" end time: Oct 22 12:49 CEST
+"CanvasWidget" time elapsed: 00:00:00
+----------------------------------------------------------
+
+9/28 Testing: InputControls
+9/28 Test: InputControls
+Command: "/workspace/scratch/e2c95811cd0a/EStudioUI/build/gate-b-release/EStudioUIInputControlsTests"
+Directory: /workspace/scratch/e2c95811cd0a/EStudioUI/build/gate-b-release
+"InputControls" start time: Oct 22 12:49 CEST
+Output:
+----------------------------------------------------------
+Input controls PASS / 100 checks
+<end of output>
+Test time =   0.01 sec
+----------------------------------------------------------
+Test Passed.
+"InputControls" end time: Oct 22 12:49 CEST
+"InputControls" time elapsed: 00:00:00
+----------------------------------------------------------
+
+10/28 Testing: SplitToolButton
+10/28 Test: SplitToolButton
+Command: "/workspace/scratch/e2c95811cd0a/EStudioUI/build/gate-b-release/EStudioUISplitToolButtonTests"
+Directory: /workspace/scratch/e2c95811cd0a/EStudioUI/build/gate-b-release
+"SplitToolButton" start time: Oct 22 12:49 CEST
+Output:
+----------------------------------------------------------
+Split tool button PASS / 41 checks
+<end of output>
+Test time =   0.01 sec
+----------------------------------------------------------
+Test Passed.
+"SplitToolButton" end time: Oct 22 12:49 CEST
+"SplitToolButton" time elapsed: 00:00:00
+----------------------------------------------------------
+
+11/28 Testing: Painter
+11/28 Test: Painter
+Command: "/workspace/scratch/e2c95811cd0a/EStudioUI/build/gate-b-release/EStudioUIPainterTests"
+Directory: /workspace/scratch/e2c95811cd0a/EStudioUI/build/gate-b-release
+"Painter" start time: Oct 22 12:49 CEST
+Output:
+----------------------------------------------------------
+Painter paths PASS / 27 checks
+<end of output>
+Test time =   0.01 sec
+----------------------------------------------------------
+Test Passed.
+"Painter" end time: Oct 22 12:49 CEST
+"Painter" time elapsed: 00:00:00
+----------------------------------------------------------
+
+12/28 Testing: StyleParts
+12/28 Test: StyleParts
+Command: "/workspace/scratch/e2c95811cd0a/EStudioUI/build/gate-b-release/EStudioUIStylePartsTests"
+Directory: /workspace/scratch/e2c95811cd0a/EStudioUI/build/gate-b-release
+"StyleParts" start time: Oct 22 12:49 CEST
+Output:
+----------------------------------------------------------
+62 style part checks passed.
+<end of output>
+Test time =   0.07 sec
+----------------------------------------------------------
+Test Passed.
+"StyleParts" end time: Oct 22 12:49 CEST
+"StyleParts" time elapsed: 00:00:00
+----------------------------------------------------------
+
+13/28 Testing: StyledCollections
+13/28 Test: StyledCollections
+Command: "/workspace/scratch/e2c95811cd0a/EStudioUI/build/gate-b-release/EStudioUIStyledCollectionsTests"
+Directory: /workspace/scratch/e2c95811cd0a/EStudioUI/build/gate-b-release
+"StyledCollections" start time: Oct 22 12:49 CEST
+Output:
+----------------------------------------------------------
+Styled collections PASS / 34 checks
+<end of output>
+Test time =   0.02 sec
+----------------------------------------------------------
+Test Passed.
+"StyledCollections" end time: Oct 22 12:49 CEST
+"StyledCollections" time elapsed: 00:00:00
+----------------------------------------------------------
+
+14/28 Testing: StyledScroll
+14/28 Test: StyledScroll
+Command: "/workspace/scratch/e2c95811cd0a/EStudioUI/build/gate-b-release/EStudioUIStyledScrollTests"
+Directory: /workspace/scratch/e2c95811cd0a/EStudioUI/build/gate-b-release
+"StyledScroll" start time: Oct 22 12:49 CEST
+Output:
+----------------------------------------------------------
+Styled scrollbars PASS / 51 checks
+<end of output>
+Test time =   0.23 sec
+----------------------------------------------------------
+Test Passed.
+"StyledScroll" end time: Oct 22 12:49 CEST
+"StyledScroll" time elapsed: 00:00:00
+----------------------------------------------------------
+
+15/28 Testing: CompositeStyle
+15/28 Test: CompositeStyle
+Command: "/workspace/scratch/e2c95811cd0a/EStudioUI/build/gate-b-release/EStudioUICompositeStyleTests"
+Directory: /workspace/scratch/e2c95811cd0a/EStudioUI/build/gate-b-release
+"CompositeStyle" start time: Oct 22 12:49 CEST
+Output:
+----------------------------------------------------------
+Composite styles PASS / 22 checks
+<end of output>
+Test time =   0.01 sec
+----------------------------------------------------------
+Test Passed.
+"CompositeStyle" end time: Oct 22 12:49 CEST
+"CompositeStyle" time elapsed: 00:00:00
+----------------------------------------------------------
+
+16/28 Testing: Dispatch
+16/28 Test: Dispatch
+Command: "/workspace/scratch/e2c95811cd0a/EStudioUI/build/gate-b-release/EStudioUIDispatchTests"
+Directory: /workspace/scratch/e2c95811cd0a/EStudioUI/build/gate-b-release
+"Dispatch" start time: Oct 22 12:49 CEST
+Output:
+----------------------------------------------------------
+UI dispatch PASS / 8059 checks
+<end of output>
+Test time =   0.05 sec
+----------------------------------------------------------
+Test Passed.
+"Dispatch" end time: Oct 22 12:49 CEST
+"Dispatch" time elapsed: 00:00:00
+----------------------------------------------------------
+
+17/28 Testing: ThreadAffinity
+17/28 Test: ThreadAffinity
+Command: "/workspace/scratch/e2c95811cd0a/EStudioUI/build/gate-b-release/EStudioUIThreadAffinityTests"
+Directory: /workspace/scratch/e2c95811cd0a/EStudioUI/build/gate-b-release
+"ThreadAffinity" start time: Oct 22 12:49 CEST
+Output:
+----------------------------------------------------------
+Thread affinity and UI lifetime PASS / 37 checks
+<end of output>
+Test time =   0.01 sec
+----------------------------------------------------------
+Test Passed.
+"ThreadAffinity" end time: Oct 22 12:49 CEST
+"ThreadAffinity" time elapsed: 00:00:00
+----------------------------------------------------------
+
+18/28 Testing: Task
+18/28 Test: Task
+Command: "/workspace/scratch/e2c95811cd0a/EStudioUI/build/gate-b-release/EStudioUITaskTests"
+Directory: /workspace/scratch/e2c95811cd0a/EStudioUI/build/gate-b-release
+"Task" start time: Oct 22 12:49 CEST
+Output:
+----------------------------------------------------------
+Background tasks PASS / 45 checks
+<end of output>
+Test time =   0.06 sec
+----------------------------------------------------------
+Test Passed.
+"Task" end time: Oct 22 12:49 CEST
+"Task" time elapsed: 00:00:00
+----------------------------------------------------------
+
+19/28 Testing: QueuedSignal
+19/28 Test: QueuedSignal
+Command: "/workspace/scratch/e2c95811cd0a/EStudioUI/build/gate-b-release/EStudioUIQueuedSignalTests"
+Directory: /workspace/scratch/e2c95811cd0a/EStudioUI/build/gate-b-release
+"QueuedSignal" start time: Oct 22 12:49 CEST
+Output:
+----------------------------------------------------------
+Queued signals PASS / 39 checks
+<end of output>
+Test time =   0.00 sec
+----------------------------------------------------------
+Test Passed.
+"QueuedSignal" end time: Oct 22 12:49 CEST
+"QueuedSignal" time elapsed: 00:00:00
+----------------------------------------------------------
+
+20/28 Testing: ControlAffinity
+20/28 Test: ControlAffinity
+Command: "/workspace/scratch/e2c95811cd0a/EStudioUI/build/gate-b-release/EStudioUIControlAffinityTests"
+Directory: /workspace/scratch/e2c95811cd0a/EStudioUI/build/gate-b-release
+"ControlAffinity" start time: Oct 22 12:49 CEST
+Output:
+----------------------------------------------------------
+Control affinity PASS / 72 checks
+<end of output>
+Test time =   0.01 sec
+----------------------------------------------------------
+Test Passed.
+"ControlAffinity" end time: Oct 22 12:49 CEST
+"ControlAffinity" time elapsed: 00:00:00
+----------------------------------------------------------
+
+21/28 Testing: ServiceAffinity
+21/28 Test: ServiceAffinity
+Command: "/workspace/scratch/e2c95811cd0a/EStudioUI/build/gate-b-release/EStudioUIServiceAffinityTests"
+Directory: /workspace/scratch/e2c95811cd0a/EStudioUI/build/gate-b-release
+"ServiceAffinity" start time: Oct 22 12:49 CEST
+Output:
+----------------------------------------------------------
+Service affinity PASS / 7 checks
+<end of output>
+Test time =   0.01 sec
+----------------------------------------------------------
+Test Passed.
+"ServiceAffinity" end time: Oct 22 12:49 CEST
+"ServiceAffinity" time elapsed: 00:00:00
+----------------------------------------------------------
+
+22/28 Testing: State
+22/28 Test: State
+Command: "/workspace/scratch/e2c95811cd0a/EStudioUI/build/gate-b-release/EStudioUIStateTests"
+Directory: /workspace/scratch/e2c95811cd0a/EStudioUI/build/gate-b-release
+"State" start time: Oct 22 12:49 CEST
+Output:
+----------------------------------------------------------
+Typed state and transaction PASS / 83 checks
+<end of output>
+Test time =   0.00 sec
+----------------------------------------------------------
+Test Passed.
+"State" end time: Oct 22 12:49 CEST
+"State" time elapsed: 00:00:00
+----------------------------------------------------------
+
+23/28 Testing: Binding
+23/28 Test: Binding
+Command: "/workspace/scratch/e2c95811cd0a/EStudioUI/build/gate-b-release/EStudioUIBindingTests"
+Directory: /workspace/scratch/e2c95811cd0a/EStudioUI/build/gate-b-release
+"Binding" start time: Oct 22 12:49 CEST
+Output:
+----------------------------------------------------------
+Bindings PASS / 52 checks
+<end of output>
+Test time =   0.01 sec
+----------------------------------------------------------
+Test Passed.
+"Binding" end time: Oct 22 12:49 CEST
+"Binding" time elapsed: 00:00:00
+----------------------------------------------------------
+
+24/28 Testing: Invalidation
+24/28 Test: Invalidation
+Command: "/workspace/scratch/e2c95811cd0a/EStudioUI/build/gate-b-release/EStudioUIInvalidationTests"
+Directory: /workspace/scratch/e2c95811cd0a/EStudioUI/build/gate-b-release
+"Invalidation" start time: Oct 22 12:49 CEST
+Output:
+----------------------------------------------------------
+10,000 widgets: paint delta style/measure/arrange = 0/0/0; content delta style/intrinsic/aggregate/arrange = 0/1/3/102
+Invalidation PASS / 47 checks
+<end of output>
+Test time =   0.10 sec
+----------------------------------------------------------
+Test Passed.
+"Invalidation" end time: Oct 22 12:49 CEST
+"Invalidation" time elapsed: 00:00:00
+----------------------------------------------------------
+
+25/28 Testing: ControlUpdate
+25/28 Test: ControlUpdate
+Command: "/workspace/scratch/e2c95811cd0a/EStudioUI/build/gate-b-release/EStudioUIControlUpdateTests"
+Directory: /workspace/scratch/e2c95811cd0a/EStudioUI/build/gate-b-release
+"ControlUpdate" start time: Oct 22 12:49 CEST
+Output:
+----------------------------------------------------------
+Control updates PASS / 26 checks
+<end of output>
+Test time =   0.01 sec
+----------------------------------------------------------
+Test Passed.
+"ControlUpdate" end time: Oct 22 12:49 CEST
+"ControlUpdate" time elapsed: 00:00:00
+----------------------------------------------------------
+
+26/28 Testing: Model
+26/28 Test: Model
+Command: "/workspace/scratch/e2c95811cd0a/EStudioUI/build/gate-b-release/EStudioUIModelTests"
+Directory: /workspace/scratch/e2c95811cd0a/EStudioUI/build/gate-b-release
+"Model" start time: Oct 22 12:49 CEST
+Output:
+----------------------------------------------------------
+100000 records: two same-page edits copied 256 records; 10000 edits published one model revision.
+Models PASS / 810 checks
+<end of output>
+Test time =   0.03 sec
+----------------------------------------------------------
+Test Passed.
+"Model" end time: Oct 22 12:49 CEST
+"Model" time elapsed: 00:00:00
+----------------------------------------------------------
+
+27/28 Testing: ModelView
+27/28 Test: ModelView
+Command: "/workspace/scratch/e2c95811cd0a/EStudioUI/build/gate-b-release/EStudioUIModelViewTests"
+Directory: /workspace/scratch/e2c95811cd0a/EStudioUI/build/gate-b-release
+"ModelView" start time: Oct 22 12:49 CEST
+Output:
+----------------------------------------------------------
+Shared edit work: styles=0; measurements=0; arrangements=0
+100000-record view preparation: values=32; item reads=33.
+Model views PASS / 33 checks
+<end of output>
+Test time =   0.03 sec
+----------------------------------------------------------
+Test Passed.
+"ModelView" end time: Oct 22 12:49 CEST
+"ModelView" time elapsed: 00:00:00
+----------------------------------------------------------
+
+28/28 Testing: GpuIntegration
+28/28 Test: GpuIntegration
+Command: "/workspace/scratch/e2c95811cd0a/EStudioUI/build/gate-b-release/EStudioUIDemo" "--headless" "--self-test" "--output" "/workspace/scratch/e2c95811cd0a/EStudioUI/build/gate-b-release/verification"
+Directory: /workspace/scratch/e2c95811cd0a/EStudioUI/build/gate-b-release
+"GpuIntegration" start time: Oct 22 12:49 CEST
+Output:
+----------------------------------------------------------
+Cannot read theme, animation-start.css, rich-buttons.css, or rich-widgets.css.
+GPU integration PASS / llvmpipe (LLVM 17.0.6, 256 bits) | 4.5 (Core Profile) Mesa 24.0.5-1ubuntu1
+Demo: 1 draw call / 855 glyphs / 85984 outline bytes
+<end of output>
+Test time =   8.36 sec
+----------------------------------------------------------
+Test Passed.
+"GpuIntegration" end time: Oct 22 12:49 CEST
+"GpuIntegration" time elapsed: 00:00:08
+----------------------------------------------------------
+
+End testing: Oct 22 12:49 CEST

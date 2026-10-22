@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.24)
-project(EStudioUI VERSION 0.10.0 LANGUAGES C CXX)
+project(EStudioUI VERSION 0.11.0 LANGUAGES C CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -37,8 +37,10 @@ if(ESTUDIOUI_BUILD_THREAD_TESTS)
     endif()
 
     add_library(EStudioUIThreadRuntime STATIC
-        src/DispatchReceipt.cpp src/UiDispatcher.cpp src/UiHandle.cpp
-        src/Task.cpp src/BackgroundTasks.cpp src/StateStore.cpp src/State.cpp)
+        src/DispatchReceipt.cpp src/UiDispatcher.cpp src/UiHandle.cpp src/ThreadAffinity.cpp
+        src/Task.cpp src/BackgroundTasks.cpp src/StateStore.cpp src/State.cpp
+        src/ModelValue.cpp src/ModelSnapshot.cpp src/RecordModel.cpp src/ModelBuilder.cpp
+        src/ItemModel.cpp src/SelectionModel.cpp src/SortFilterModel.cpp src/TreeRowMap.cpp)
     target_include_directories(EStudioUIThreadRuntime PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/include")
     target_link_libraries(EStudioUIThreadRuntime PUBLIC Threads::Threads)
     target_compile_options(EStudioUIThreadRuntime PUBLIC -fsanitize=thread -fno-omit-frame-pointer -O1 -g1)
@@ -46,7 +48,7 @@ if(ESTUDIOUI_BUILD_THREAD_TESTS)
     target_compile_options(EStudioUIThreadRuntime PRIVATE -Wall -Wextra -Wpedantic -Wconversion -Wshadow)
 
     enable_testing()
-    foreach(suite Dispatch QueuedSignal Task State)
+    foreach(suite Dispatch QueuedSignal Task State Model)
         add_executable(EStudioUIThread${suite}Tests tests/${suite}Tests.cpp)
         target_link_libraries(EStudioUIThread${suite}Tests PRIVATE EStudioUIThreadRuntime)
         add_test(NAME Thread${suite} COMMAND EStudioUIThread${suite}Tests)
@@ -88,6 +90,8 @@ add_library(EStudioUI STATIC
     src/ThreadAffinity.cpp src/DispatchReceipt.cpp src/UiDispatcher.cpp src/UiHandle.cpp
     src/Task.cpp src/BackgroundTasks.cpp src/Application.cpp
     src/StateStore.cpp src/State.cpp src/Bindings.cpp src/Invalidation.cpp
+    src/ModelValue.cpp src/ModelSnapshot.cpp src/RecordModel.cpp src/ModelBuilder.cpp src/Models.cpp
+    src/ItemModel.cpp src/SelectionModel.cpp src/SortFilterModel.cpp src/CollectionView.cpp src/ItemDelegate.cpp src/TreeRowMap.cpp
 )
 add_library(EStudioUI::EStudioUI ALIAS EStudioUI)
 target_compile_features(EStudioUI PUBLIC cxx_std_20)
@@ -110,7 +114,7 @@ if(ESTUDIOUI_BUILD_DEMO)
         demo/SketchGallery.cpp demo/CanvasPrimitiveProbe.cpp demo/CanvasProbe.cpp demo/CanvasCurvesProbe.cpp
         demo/CustomWidgetGallery.cpp demo/PainterProbe.cpp demo/InputControlsProbe.cpp
         demo/WidgetStylesGallery.cpp demo/WidgetStylesProbe.cpp demo/ApplicationProbe.cpp demo/FoundationGallery.cpp
-        demo/StateGallery.cpp)
+        demo/StateGallery.cpp demo/ModelGallery.cpp)
     target_link_libraries(EStudioUIDemo PRIVATE EStudioUI::EStudioUI EStudioUIGl glfw)
     if(MSVC)
         target_compile_options(EStudioUIDemo PRIVATE /utf-8)
@@ -182,7 +186,7 @@ if(ESTUDIOUI_BUILD_TESTS)
     foreach(suite CanvasScene CanvasGeometry SketchDocument CanvasWidget InputControls SplitToolButton Painter
                   StyleParts StyledCollections StyledScroll CompositeStyle
                   Dispatch ThreadAffinity Task QueuedSignal ControlAffinity ServiceAffinity
-                  State Binding Invalidation ControlUpdate)
+                  State Binding Invalidation ControlUpdate Model ModelView)
         add_executable(EStudioUI${suite}Tests tests/${suite}Tests.cpp)
         target_link_libraries(EStudioUI${suite}Tests PRIVATE EStudioUI::EStudioUI)
         target_compile_definitions(EStudioUI${suite}Tests PRIVATE

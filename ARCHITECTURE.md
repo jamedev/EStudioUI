@@ -21,7 +21,9 @@ without exposing third-party types in its public widget headers.
 | `CssMotion`, `VisualStyle` | Compiled CSS timelines, decorative paint layers, gradients, affine transforms |
 | `StyleProperty` | Typed computed-style access, valid-range clamping, paint-only invalidation classification |
 | `TabWidget`, `ToolBar`, `ToolButton`, `ContextMenu` | Owned pages, commands/toggles, popup layer |
-| `ScrollWidget`, `ListWidget`, `TreeWidget`, `TableWidget` | Cached viewport text, virtualized rows, selection/editing |
+| `ScrollWidget`, `ListWidget`, `TreeWidget`, `TableWidget` | Cached viewport text, shared external models/selection, typed editing and GPU delegates |
+| `ItemModel`, `ModelSnapshot`, `SelectionModel` | Coherent revisioned collections, paged immutable records, stable-ID shared selection |
+| `SortFilterModel`, `TreeRowMap` | Shared identity projections and expanded-branch viewport indexing |
 | `OpenGLWidget` | Separate shared scene context, depth FBO, synchronized texture composition |
 | `TextBuffer` | Valid UTF-8, grapheme/word navigation, selection, bounded undo/redo |
 | `FontFace` | HarfBuzz shaping, FreeType outline decoding, CPU geometry cache |
@@ -267,6 +269,32 @@ false change notifications. Window resources remain leased through active calls.
 Nested UI frame/event-loop processing and context-owned dispatcher drains are
 rejected during state updates. See [STATE.md](STATE.md) for the exact read,
 reentrancy, error, and teardown contracts.
+
+## Shared collection models (0.11)
+
+Canonical ItemModel data and SelectionModel values use StateStore transactions.
+ModelSnapshot owns immutable ModelData; RecordData adapters retain C++ records in
+256-record copy-on-write pages with shared identity/hierarchy indexes. Field edits
+copy the page directory and touched pages; large Apply batches prepare pages once.
+Structural builders perform explicit linear rebuilding while retaining typed
+records and semantic-role adapters. Selection is an owned ordered set; individual
+edits cost proportional to selected count, and bulk replacement is explicit.
+
+SortFilterModel owns mappings and shared source snapshots. Typed sort/filter
+preparation can scan full sources; declared filter field dependencies retain
+unaffected mappings. Pure derived candidates are prepared before changes to any
+upstream model or rule publish. Adapter changes notify in subsequent coherent
+state rounds, with rendering excluded through the complete notification drain.
+Selection remains canonical; scroll and expansion are view-local.
+
+CollectionView composes weak widget subscriptions and precommit target phase
+guards over canonical data, projections, and selection. ItemDelegate supplies
+semantic style, cached-text customization, typed editing, and optional direct GPU
+paint hooks without child widgets per record. TreeRowMap stores expanded-branch
+prefixes rather than flattening a complete external hierarchy. Shared tables
+sample content widths by default, with explicit hints/visible/exact policies.
+External ModelData queries are nonblocking immutable provider contracts; built-in
+network/database page scheduling remains future work. See [MODELS.md](MODELS.md).
 
 ## Validation and future work
 

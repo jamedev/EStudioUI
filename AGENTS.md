@@ -12,6 +12,10 @@
   final-candidate validation, coherent commit/rollback, owned snapshots, bounded
   reentrant notifications, and receiver-bound teardown. State reads are valid
   during painting; mutations during traversal and nested UI frame/event-loop/queue processing are diagnosed.
+- Use ItemModel/ModelSnapshot and canonical SelectionModel for shared collections.
+  Preserve stable IDs, final-candidate validation, typed values, immutable worker
+  ownership, prevalidated adapter chains, and coherent deletion/selection updates.
+  Keep viewport access bounded; document complete scans and selected-set copying.
 - Declare built-in changes with the narrowest correct Invalidation impacts.
   Keep selector/inheritance dependencies correct and preserve unrelated intrinsic
   measurements. Verify work counters and actual pixels when changing cache behavior.

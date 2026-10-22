@@ -10,7 +10,7 @@ The goal is a dependable C++ GUI foundation for the applications described in
 input, layout, text, and resource contracts before many controls depend on
 different local solutions. Retain the working GPU renderer and existing tests.
 
-## Implementation status: 0.10 and the first Gate B slice
+## Implementation status: 0.11 and shared model foundations
 
 **Gate A is implemented.** F01-F04 now have public APIs, lifetime/phase/error
 contracts, concurrency tests, and actual multiwindow/framebuffer probes.
@@ -33,7 +33,8 @@ and its remaining platform limits.
 | F07 | First slice implemented: explicit style/measure/arrange/hit-test/paint impacts, intrinsic/aggregate measurement caches, dependency-aware arrangement, and work counters; verified by the 10,000-widget work fixture and actual framebuffer checks |
 | F13 | Gate A baseline implemented: owner checks, traversal phase guards, deferred mutation, receipt/task failures, queue counters; visual inspector remains planned |
 | F15 | Gate A concurrency/lifetime/framebuffer coverage implemented; native hardware and broader platform coverage remain open |
-| F06, F08, F09, F11, F14 | Remaining Gate B work: external models/selection, constrained layout strategies, input/focus/commands, semantic/platform interfaces, and install/export consumer integration |
+| F06 | Core implemented: typed external snapshot models, stable IDs, batched edits/structural changes, shared selection, prevalidated sort/filter chains, delegates, worker publication, bounded content sizing, and expanded-branch row maps; integration evidence recorded with 0.11 |
+| F08, F09, F11, F14 | Remaining Gate B work: constrained layout strategies, input/focus/commands, semantic/platform interfaces, and install/export consumer integration |
 | F10, F12, F16 | Planned, with the existing baseline capabilities described below |
 
 Ease of use is a standing acceptance criterion, not a separate polish phase.
@@ -41,13 +42,16 @@ Ease of use is a standing acceptance criterion, not a separate polish phase.
 concise common paths, safe lifetime defaults, clear errors, and explicit advanced
 control. No runtime dependency was added for Gate A or the first F05/F07 slice.
 
-**Next: continue Gate B with shared models and selection (F06).** Build on the
-coherent state and invalidation contracts with stable model identities, shared
-selection, and viewport-only access. F06/F08/F09/F11/F14 remain open; shared scalar
-state does not establish external collection models, constrained
-wrapping/baselines, nested popup/focus
-contracts, semantic interfaces, or installed SDK consumer support. Broad widget
-expansion remains gated.
+**The F06 core is implemented in 0.11.** [MODELS.md](MODELS.md) documents the
+actual model/view, selection, delegate, transaction, and provider contracts.
+[verification/MODELS_0_11.md](verification/MODELS_0_11.md) records verification
+and scope limits, including future asynchronous provider paging/cache services.
+No runtime dependency was added.
+
+**Next: constrained measurement and layout strategies (F08).** Build on the
+retained layout caches with available-size measurement, height-for-width,
+baselines, predictable overflow, and shared grid/form/flow allocation strategies.
+F08/F09/F11/F14 remain open. Broad widget expansion remains gated.
 
 ## Original assessment of the 0.8 implementation
 
