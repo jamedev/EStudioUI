@@ -36,6 +36,11 @@ jobs:
           $checkout = Join-Path $env:RUNNER_TEMP 'estudioui-vcpkg'
           ./Build.ps1 -VcpkgRoot $checkout -Configuration Release -SkipGpuTest
           ./Build.ps1 -VcpkgRoot $checkout -Configuration Debug -SkipGpuTest
+          # Recheck native STA cancellation/COM teardown in Debug to catch timing-sensitive failures.
+          for ($attempt = 1; $attempt -le 3; $attempt++) {
+            ./build/windows-vcpkg/Debug/EStudioUINativePlatformTests.exe
+            if ($LASTEXITCODE -ne 0) { throw "Native Debug repetition $attempt failed with exit code $LASTEXITCODE." }
+          }
         # Hosted Windows runners do not expose a guaranteed OpenGL 3.3 GPU.
         # The same script runs the native GPU test by default on developer PCs.
 

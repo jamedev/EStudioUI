@@ -16,9 +16,12 @@
 
 #include <atomic>
 #include <chrono>
+#include <condition_variable>
+#include <cstdio>
 #include <cstdlib>
 #include <cstring>
 #include <iostream>
+#include <mutex>
 #include <stdexcept>
 #include <thread>
 
@@ -27,6 +30,36 @@ namespace
 using namespace EStudioUI;
 using Microsoft::WRL::ComPtr;
 int s_Checks = 0;
+
+void Trace(const char* message)
+{
+    std::cout << "Native probe: " << message << std::endl;
+}
+
+class ProbeDeadline
+{
+  public:
+    ProbeDeadline()
+        : m_Thread(
+              [this](std::stop_token stop)
+              {
+                  std::unique_lock lock(m_Mutex);
+                  m_Changed.wait_for(lock, stop, std::chrono::seconds(70), [] { return false; });
+                  if (!stop.stop_requested())
+                  {
+                      std::fputs("Native probe exceeded 70 seconds; see the last completed stage.\n", stderr);
+                      std::fflush(stderr);
+                      TerminateProcess(GetCurrentProcess(), 2);
+                  }
+              })
+    {
+    }
+
+  private:
+    std::mutex m_Mutex;
+    std::condition_variable_any m_Changed;
+    std::jthread m_Thread;
+};
 
 void Check(bool value, const char* message)
 {
@@ -141,6 +174,7 @@ void Accessibility(UiContext& ui, HWND window)
     ui.Prepare(800, 600);
     int invocations = 0;
     button.Clicked().Connect([&] { ++invocations; });
+    Trace("attach UI Automation provider");
     Detail::NativeAccessibility bridge(ui, window);
     std::atomic<bool> done = false;
     std::atomic<bool> readyToClose = false;
@@ -160,6 +194,7 @@ void Accessibility(UiContext& ui, HWND window)
                     "Create real Windows automation client");
                 ComPtr<IUIAutomationElement> root;
                 Require(automation->ElementFromHandle(window, &root), "Obtain native HWND automation root");
+                Trace("UI Automation root connected");
                 auto invokeElement = Find(*automation.Get(), *root.Get(), L"invoke");
                 BSTR name = nullptr;
                 Require(invokeElement->get_CurrentName(&name), "Read native accessible name");
@@ -171,6 +206,7 @@ void Accessibility(UiContext& ui, HWND window)
                 Require(invokeElement->GetCurrentPatternAs(UIA_InvokePatternId, IID_PPV_ARGS(&invoke)),
                         "Obtain invoke pattern");
                 Require(invoke->Invoke(), "Native invoke action");
+                Trace("UI Automation invoke requested");
                 auto valueElement = Find(*automation.Get(), *root.Get(), L"value");
                 ComPtr<IUIAutomationValuePattern> value;
                 Require(valueElement->GetCurrentPatternAs(UIA_ValuePatternId, IID_PPV_ARGS(&value)),
@@ -187,6 +223,7 @@ void Accessibility(UiContext& ui, HWND window)
                 SysFreeString(contents);
                 if (!edited)
                     throw std::runtime_error("Native value edit did not commit");
+                Trace("UI Automation value committed");
                 auto rangeElement = Find(*automation.Get(), *root.Get(), L"range");
                 ComPtr<IUIAutomationRangeValuePattern> range;
                 Require(rangeElement->GetCurrentPatternAs(UIA_RangeValuePatternId, IID_PPV_ARGS(&range)),
@@ -194,6 +231,7 @@ void Accessibility(UiContext& ui, HWND window)
                 Require(range->SetValue(12.5), "Native range edit");
                 if (SUCCEEDED(range->SetValue(100)))
                     throw std::runtime_error("Out of range native value was accepted");
+                Trace("UI Automation range committed");
                 auto toggleElement = Find(*automation.Get(), *root.Get(), L"toggle");
                 ComPtr<IUIAutomationTogglePattern> toggler;
                 Require(toggleElement->GetCurrentPatternAs(UIA_TogglePatternId, IID_PPV_ARGS(&toggler)),
@@ -203,6 +241,7 @@ void Accessibility(UiContext& ui, HWND window)
                 Require(toggler->get_CurrentToggleState(&checked), "Read native toggle state");
                 if (checked != ToggleState_On)
                     throw std::runtime_error("Native toggle did not commit");
+                Trace("UI Automation patterns committed");
                 readyToClose = true;
                 while (!closed)
                     SwitchToThread();
@@ -213,22 +252,33 @@ void Accessibility(UiContext& ui, HWND window)
                 SysFreeString(denied);
                 if (SUCCEEDED(expired))
                     throw std::runtime_error("Retained native provider accepted an edit after bridge closure");
+                Trace("UI Automation retained edit rejected");
             }
             catch (...)
             {
                 error = std::current_exception();
             }
+            Trace("UI Automation client releases COM");
             if (SUCCEEDED(initialized))
                 CoUninitialize();
             done = true;
+            Trace("UI Automation client stopped");
         });
     const bool connected = Until(ui, [&] { return done.load() || readyToClose.load(); }, 20000);
+    Trace("flush UI Automation events");
     bridge.Flush();
+    Trace("disconnect UI Automation provider");
     bridge.Close();
+    Trace("provider disconnected");
     closed = true;
-    const bool completed = connected && Until(ui, [&] { return done.load(); }, 5000);
+    // COM teardown may still call the owner's STA. Keep messages and the queue
+    // moving until the client has actually stopped; the process watchdog bounds failure.
+    const bool promptlyStopped = Until(ui, [&] { return done.load(); }, 10000);
+    while (!done)
+        Pump(ui);
     client.join();
-    Check(completed, "Native automation client timed out");
+    Check(connected, "Native automation client timed out");
+    Check(promptlyStopped, "Native automation client cleanup exceeded ten seconds");
     if (error)
         std::rethrow_exception(error);
     Check(invocations == 1 && text.GetText() == "After Ω" && slider.GetValue() == 12.5 && toggle.IsChecked(),
@@ -256,8 +306,9 @@ void PublishNativeBytes(UINT format, const void* bytes, std::size_t count)
     }
 }
 
-void Clipboard(UiContext& ui)
+void Clipboard(UiContext& ui, HWND window)
 {
+    Trace("native clipboard formats");
     auto& services = ui.Platform();
     ClipboardData data;
     data.m_Text = "Windows Ω\nsecond line";
@@ -299,14 +350,16 @@ void Clipboard(UiContext& ui)
     lock.join();
     Check(locked && busy == PlatformStatus::Busy,
           "Busy native clipboard is explicit and does not wait on the UI owner");
-    Check(OpenClipboard(nullptr) != FALSE, "Open native clipboard for malformed format probe");
+    Trace("malformed external clipboard format");
+    Check(OpenClipboard(window) != FALSE, "Open native clipboard for malformed format probe");
     EmptyClipboard();
     const auto malformed = GlobalAlloc(GMEM_MOVEABLE | GMEM_ZEROINIT, 32);
     SetClipboardData(RegisterClipboardFormatW(L"HTML Format"), malformed);
     CloseClipboard();
     Check(services.ReadClipboard().m_Result.m_Status == PlatformStatus::Failed,
           "Malformed external HTML is bounded and diagnosed");
-    Check(OpenClipboard(nullptr) != FALSE, "Open native clipboard for aggregate budget probe");
+    Trace("aggregate external clipboard budget");
+    Check(OpenClipboard(window) != FALSE, "Open native clipboard for aggregate budget probe");
     EmptyClipboard();
     {
         const std::wstring text(5 * 1024 * 1024, L'x');
@@ -318,6 +371,7 @@ void Clipboard(UiContext& ui)
     Check(services.ReadClipboard().m_Result.m_Status == PlatformStatus::Failed,
           "Combined external formats obey the aggregate native payload budget");
     services.SetClipboardText("");
+    Trace("native clipboard checks complete");
 }
 
 BOOL CALLBACK FindPicker(HWND window, LPARAM data)
@@ -335,6 +389,9 @@ void Pickers(UiContext& ui, HWND window)
 {
     for (const auto kind : {FileDialogKind::OpenFile, FileDialogKind::SaveFile, FileDialogKind::SelectFolder})
     {
+        Trace(kind == FileDialogKind::OpenFile   ? "open native file picker"
+              : kind == FileDialogKind::SaveFile ? "open native save picker"
+                                                 : "open native folder picker");
         FileDialogOptions options;
         options.m_Kind = kind;
         options.m_Title = "EStudioUI automatic cancellation probe";
@@ -347,6 +404,8 @@ void Pickers(UiContext& ui, HWND window)
             options.m_Filters = {{"Text", "*.txt"}};
         const auto begin = std::chrono::steady_clock::now();
         auto session = ui.Platform().ShowFileDialog(options);
+        int completions = 0;
+        session.OnFinished([&](const FileDialogResult&) { ++completions; });
         Check(std::chrono::steady_clock::now() - begin < std::chrono::milliseconds(500),
               "Native picker opens asynchronously");
         HWND windows[2] = {window, nullptr};
@@ -357,23 +416,49 @@ void Pickers(UiContext& ui, HWND window)
                                      return windows[1] || !session.IsPending();
                                  });
         const bool actual = shown && windows[1];
-        session.Cancel();
+        Trace("cancel native picker");
+        Check(session.Cancel() && !session.Cancel(), "Native picker cancellation settles only once");
         Check(Until(ui, [&] { return !ui.HasPendingPlatformWork(); }),
               "Cancelled native STA unwinds while owner messages continue");
         Check(actual, "Actual native IFileDialog was shown before cancellation");
-        Check(session.GetResult()->m_Status == FileDialogStatus::Cancelled, "Native cancellation completes once");
+        Check(session.GetResult()->m_Status == FileDialogStatus::Cancelled && completions == 1,
+              "Native cancellation delivers exactly one result after the STA unwinds");
     }
+    Trace("retire native picker adapter");
     auto session = ui.Platform().ShowFileDialog({});
+    int completions = 0;
+    session.OnFinished([&](const FileDialogResult&) { ++completions; });
+    HWND windows[2] = {window, nullptr};
+    const bool shown = Until(ui,
+                             [&]
+                             {
+                                 EnumWindows(FindPicker, reinterpret_cast<LPARAM>(windows));
+                                 return windows[1] || !session.IsPending();
+                             });
+    Check(shown && windows[1], "Native picker is visible before its adapter is retired");
     ui.SetPlatformServices(std::make_unique<MemoryPlatformServices>(ui.GetDispatcher()));
-    Check(session.GetResult()->m_Status == FileDialogStatus::OwnerClosed,
+    Check(session.GetResult()->m_Status == FileDialogStatus::OwnerClosed && completions == 1,
           "Replacing native adapter settles its pending picker");
     Check(Until(ui, [&] { return !ui.HasPendingPlatformWork(); }),
           "Replaced native adapter is retired without blocking UI teardown");
+    Check(completions == 1 && IsWindow(window),
+          "Late native completion cannot redeliver a result or destroy its retained owner");
+    Trace("cancel native picker during startup");
+    ui.SetPlatformServices(Detail::CreateNativePlatformServices(Host(ui, window)));
+    session = ui.Platform().ShowFileDialog({});
+    Check(session.Cancel(), "Native picker can be cancelled before showing its window");
+    Check(Until(ui, [&] { return !ui.HasPendingPlatformWork(); }),
+          "Startup cancellation unwinds the native STA without a visible-dialog requirement");
+    Check(session.GetResult()->m_Status == FileDialogStatus::Cancelled,
+          "Late native startup cannot replace the cancelled session result");
 }
 } // namespace
 
 int main()
 {
+    ProbeDeadline deadline;
+    std::cout << std::unitbuf;
+    Trace("initialize owner STA");
     const auto initialized = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
     int result = 0;
     try
@@ -390,7 +475,7 @@ int main()
         wchar_t nativeFlag[2]{};
         if (GetEnvironmentVariableW(L"ESTUDIOUI_NATIVE_PLATFORM_TESTS", nativeFlag, 2) == 1 && nativeFlag[0] == L'1')
         {
-            Clipboard(ui);
+            Clipboard(ui, native.m_Window);
             Pickers(ui, native.m_Window);
         }
         else
@@ -402,7 +487,9 @@ int main()
         std::cerr << error.what() << '\n';
         result = 1;
     }
+    Trace("release owner COM");
     if (SUCCEEDED(initialized))
         CoUninitialize();
+    Trace("native probe finished");
     return result;
 }
