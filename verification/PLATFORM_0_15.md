@@ -51,14 +51,18 @@ and retains a replaced adapter until its STA unwinds. These are real native
 integrations; the ordinary developer test run omits the clipboard-changing and
 visible-picker sections unless explicitly opted in.
 
-Native CI outcomes are recorded after those runs complete. The source includes
-these native checks; their presence alone is not a passing result.
+The follow-up diagnostic run at `2648c9af82e397c76e3a4b00d26a4e742a0ce378`
+([CI 39855143350](https://github.com/jamedev/EStudioUI/actions/runs/39855143350))
+completed the UI Automation and clipboard stages, and cancelled the Open and Save
+pickers, then timed out during Folder cancellation. It therefore did not pass the
+complete native suite. The cancellation fix and final 0.16 results are recorded
+in [PLATFORM_0_16.md](PLATFORM_0_16.md); this historical result stays unchanged.
 
 ## Remaining acceptance work
 
-- IME/composition and caret/input geometry integrated with F10a font/text work.
-- Virtualized list/tree/table/canvas semantic children, selection/grid/scroll and
-  text patterns; complete structure/bounds/event notification coverage.
+- The 0.16 implementation adds composition/caret geometry and virtual collection
+  patterns; see [its evidence and limits](PLATFORM_0_16.md). Full font fallback and
+  complete script/direction behavior remain F10a work.
 - Real Narrator and other assistive-technology sessions for representative apps.
 - Native multi-monitor DPI migration, desktop focus/ownership scenarios and
   developer-PC Windows GPU checks through normal Build.ps1.

@@ -42,7 +42,7 @@ adapter, `ShowFileDialog(options).OnFinished(...)` returns an asynchronous resul
 and capabilities/errors stay explicit. Use weak widget observers or typed handles
 for result callbacks. Accessible names are one ordinary setter; built-in semantics
 reuse canonical control behavior. The compiled [platform example](examples/PlatformServices.cpp)
-and [PLATFORM.md](PLATFORM.md) cover this initial F11 API; applications do not
+and [PLATFORM.md](PLATFORM.md) cover native services, composition and semantics; applications do not
 configure COM apartments or join picker workers.
 
 For example, the foundation API supports this small, complete function:

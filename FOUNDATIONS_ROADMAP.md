@@ -35,7 +35,7 @@ command history, geometry, and persistence; these are not promised modules or
 current standalone SDKs. Public API usability and supported extension points
 remain acceptance criteria throughout.
 
-## Implementation status: 0.15, initial platform and semantic services
+## Implementation status: 0.16, composition and virtual semantics
 
 The 0.14.1 maintenance increment fixes retained native window closure, stable
 GPU capture after presentation, and MSVC conversion warnings before the initial F11 increment.
@@ -66,7 +66,7 @@ and its remaining platform limits.
 | F06 | Core implemented: typed external snapshot models, stable IDs, batched edits/structural changes, shared selection, prevalidated sort/filter chains, delegates, worker publication, bounded content sizing, and expanded-branch row maps; integration evidence recorded with 0.11 |
 | F08 | Implemented in 0.12: width-first constrained measurement, baselines and composition sources, shared box/grid/form/flow strategies, bounded caches, percentage-cycle fallback, owned child/track diagnostics; verification recorded below |
 | F09 | Implemented in 0.14: owning input payloads, rich native metadata, transactional shared actions and worker handles, scoped/ambiguity-safe shortcuts, local focus scopes, nested popup/modal sessions, menu nesting and phase/lifetime guards |
-| F11 | 0.16 implementation extends 0.15 native services with shared composition, Windows IMM, GPU preedit, stable virtual list/tree/table/canvas semantics and native collection/text/event patterns; final Windows verification and interactive IME/AT/mixed-DPI acceptance remain open |
+| F11 | 0.16 implementation extends 0.15 native services with shared composition, Windows IMM, GPU preedit, stable virtual list/tree/table/canvas semantics and native collection/text/event patterns; automated Windows Release/Debug/native repetitions pass; interactive IME/AT/mixed-DPI acceptance remains open |
 | F10a | Remaining Gate B work: font resolution/fallback, complete script/direction/caret behavior and text-resource budgets; reuse the 0.16 F11 composition protocol |
 | F10b, F12, F16 | Planned: later document editing, feature-driven resource hardening, and reusable history/workspace services |
 | F14 | Deferred until broad widget/workspace use informs reusable module extraction and SDK packaging; not a Gate B prerequisite |
@@ -126,8 +126,10 @@ Windows UI Automation adds collection and single-line Text/Text2 patterns with
 bounded change observation. No new third-party runtime dependency was added.
 [0.16 verification](verification/PLATFORM_0_16.md) records tested results and
 [interactive acceptance](verification/PLATFORM_ACCEPTANCE.md) records the remaining
-input-method/assistive-technology/mixed-monitor checks. Final native acceptance is
-still open; do not infer application readiness from protocol tests. Gate B remains
+input-method/assistive-technology/mixed-monitor checks. Windows Release and Debug
+each pass 37/37 suites, followed by three 80-check native Debug repetitions.
+Implementation and automated acceptance are complete. Interactive acceptance
+remains open, so protocol tests alone do not establish application readiness. Gate B remains
 open for F10a and the relevant integration evidence.
 
 ## Original assessment of the 0.8 implementation
@@ -506,8 +508,9 @@ and keep a second window interactive. This validates developer ergonomics and
 the actual failure paths before they spread into new widgets.
 
 Gate A, the F05/F07 first slice, F06 core, F08, the optional constraint-layout
-increment, and F09 are now delivered as recorded above. Next verify the completed F11
-composition/virtual semantic implementation and finish F10a, with relevant F12/F13/F15 work.
+increment, and F09 are now delivered as recorded above. F11 composition/virtual
+semantics and automated native verification are complete; retain its interactive
+acceptance checklist. Next finish F10a, with relevant F12/F13/F15 work.
 Review Gate B integration, then expand the widget catalog and application
 workspaces. Keep the document-editor track F10b later and develop F16 with the
 workspaces that need it. Schedule F14 module extraction/package integration once

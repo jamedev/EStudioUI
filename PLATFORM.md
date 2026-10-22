@@ -248,6 +248,12 @@ through the synchronous owner path. Closed queues/windows expire live provider a
 clients may retain copied/cached property values after disconnect; that data does
 not grant access to the UI.
 
+Focusing a virtual list row also makes it current and selects it through the
+canonical list behavior. Windows UI Automation clients normally focus targets
+before pattern actions. Clients testing a selection action independently can
+disable [AutoSetFocus](https://learn.microsoft.com/en-us/windows/win32/api/uiautomationclient/nf-uiautomationclient-iuiautomation2-get_autosetfocus)
+on IUIAutomation2; the native probe tests both behaviors.
+
 The bridge tracks a bounded set of at most 64 previously queried nodes for
 property, structure, selection, text and focus changes. It checks cheap semantic
 and host-state revisions and performs no semantic scan when no clients listen.

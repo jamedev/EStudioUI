@@ -1,0 +1,323 @@
+Source: 12a482b66222852f0b5a9fb7a707bede87eb3db8
+CI: https://github.com/jamedev/EStudioUI/actions/runs/39863506352
+Windows job: 120119831314, windows-2022, MSVC 2022, x64-windows-estudioui
+Extracted CTest and native-probe output; original timestamps retained.
+Release 37/37; Debug 37/37; three additional Debug native repetitions each 80 checks.
+Full job log contains no warning lines. Hosted native OpenGL 3.3 test explicitly skipped.
+
+2026-10-22T22:22:40.2235220Z Test project D:/a/EStudioUI/EStudioUI/build/windows-vcpkg
+2026-10-22T22:22:40.2538222Z       Start  1: Core
+2026-10-22T22:22:40.2890081Z  1/37 Test  #1: Core .............................   Passed    0.03 sec
+2026-10-22T22:22:40.2902653Z       Start  2: WidgetsAndLayout
+2026-10-22T22:22:40.3373331Z  2/37 Test  #2: WidgetsAndLayout .................   Passed    0.05 sec
+2026-10-22T22:22:40.3376072Z       Start  3: Animation
+2026-10-22T22:22:40.3687301Z  3/37 Test  #3: Animation ........................   Passed    0.03 sec
+2026-10-22T22:22:40.3689962Z       Start  4: RichCss
+2026-10-22T22:22:40.5512381Z  4/37 Test  #4: RichCss ..........................   Passed    0.18 sec
+2026-10-22T22:22:40.5515548Z       Start  5: CanvasScene
+2026-10-22T22:22:40.8882046Z  5/37 Test  #5: CanvasScene ......................   Passed    0.34 sec
+2026-10-22T22:22:40.8885056Z       Start  6: CanvasGeometry
+2026-10-22T22:22:41.0292837Z  6/37 Test  #6: CanvasGeometry ...................   Passed    0.14 sec
+2026-10-22T22:22:41.0296068Z       Start  7: SketchDocument
+2026-10-22T22:22:43.0210720Z  7/37 Test  #7: SketchDocument ...................   Passed    1.99 sec
+2026-10-22T22:22:43.0213667Z       Start  8: CanvasWidget
+2026-10-22T22:22:43.0466701Z  8/37 Test  #8: CanvasWidget .....................   Passed    0.03 sec
+2026-10-22T22:22:43.0469603Z       Start  9: InputControls
+2026-10-22T22:22:43.0737927Z  9/37 Test  #9: InputControls ....................   Passed    0.03 sec
+2026-10-22T22:22:43.0740499Z       Start 10: SplitToolButton
+2026-10-22T22:22:43.1015167Z 10/37 Test #10: SplitToolButton ..................   Passed    0.03 sec
+2026-10-22T22:22:43.1017984Z       Start 11: Painter
+2026-10-22T22:22:43.1140153Z 11/37 Test #11: Painter ..........................   Passed    0.01 sec
+2026-10-22T22:22:43.1142747Z       Start 12: StyleParts
+2026-10-22T22:22:43.2737088Z 12/37 Test #12: StyleParts .......................   Passed    0.16 sec
+2026-10-22T22:22:43.2740518Z       Start 13: StyledCollections
+2026-10-22T22:22:43.3278832Z 13/37 Test #13: StyledCollections ................   Passed    0.05 sec
+2026-10-22T22:22:43.3281592Z       Start 14: StyledScroll
+2026-10-22T22:22:43.5812096Z 14/37 Test #14: StyledScroll .....................   Passed    0.25 sec
+2026-10-22T22:22:43.5814956Z       Start 15: CompositeStyle
+2026-10-22T22:22:43.6074691Z 15/37 Test #15: CompositeStyle ...................   Passed    0.03 sec
+2026-10-22T22:22:43.6077194Z       Start 16: Dispatch
+2026-10-22T22:22:43.6856994Z 16/37 Test #16: Dispatch .........................   Passed    0.08 sec
+2026-10-22T22:22:43.6859917Z       Start 17: ThreadAffinity
+2026-10-22T22:22:43.7115192Z 17/37 Test #17: ThreadAffinity ...................   Passed    0.03 sec
+2026-10-22T22:22:43.7117553Z       Start 18: Task
+2026-10-22T22:22:43.8247893Z 18/37 Test #18: Task .............................   Passed    0.11 sec
+2026-10-22T22:22:43.8250722Z       Start 19: QueuedSignal
+2026-10-22T22:22:43.8372628Z 19/37 Test #19: QueuedSignal .....................   Passed    0.01 sec
+2026-10-22T22:22:43.8375108Z       Start 20: ControlAffinity
+2026-10-22T22:22:43.8735398Z 20/37 Test #20: ControlAffinity ..................   Passed    0.04 sec
+2026-10-22T22:22:43.8738090Z       Start 21: ServiceAffinity
+2026-10-22T22:22:43.8980120Z 21/37 Test #21: ServiceAffinity ..................   Passed    0.02 sec
+2026-10-22T22:22:43.8982696Z       Start 22: State
+2026-10-22T22:22:43.9088583Z 22/37 Test #22: State ............................   Passed    0.01 sec
+2026-10-22T22:22:43.9091097Z       Start 23: Binding
+2026-10-22T22:22:43.9345001Z 23/37 Test #23: Binding ..........................   Passed    0.03 sec
+2026-10-22T22:22:43.9347500Z       Start 24: Invalidation
+2026-10-22T22:22:44.0654432Z 24/37 Test #24: Invalidation .....................   Passed    0.13 sec
+2026-10-22T22:22:44.0657317Z       Start 25: ControlUpdate
+2026-10-22T22:22:44.0918596Z 25/37 Test #25: ControlUpdate ....................   Passed    0.03 sec
+2026-10-22T22:22:44.0921768Z       Start 26: Model
+2026-10-22T22:22:44.1469547Z 26/37 Test #26: Model ............................   Passed    0.05 sec
+2026-10-22T22:22:44.1472547Z       Start 27: ModelView
+2026-10-22T22:22:44.2115446Z 27/37 Test #27: ModelView ........................   Passed    0.06 sec
+2026-10-22T22:22:44.2117147Z       Start 28: Layout
+2026-10-22T22:22:44.2399813Z 28/37 Test #28: Layout ...........................   Passed    0.03 sec
+2026-10-22T22:22:44.2402336Z       Start 29: ConstraintLayout
+2026-10-22T22:22:45.5623623Z 29/37 Test #29: ConstraintLayout .................   Passed    1.32 sec
+2026-10-22T22:22:45.5626570Z       Start 30: InputFoundation
+2026-10-22T22:22:45.6890689Z 30/37 Test #30: InputFoundation ..................   Passed    0.13 sec
+2026-10-22T22:22:45.6893506Z       Start 31: ActionDomain
+2026-10-22T22:22:45.6986933Z 31/37 Test #31: ActionDomain .....................   Passed    0.01 sec
+2026-10-22T22:22:45.6989475Z       Start 32: Platform
+2026-10-22T22:22:45.7231784Z 32/37 Test #32: Platform .........................   Passed    0.02 sec
+2026-10-22T22:22:45.7234267Z       Start 33: Semantic
+2026-10-22T22:22:45.7547080Z 33/37 Test #33: Semantic .........................   Passed    0.03 sec
+2026-10-22T22:22:45.7549744Z       Start 34: TextInput
+2026-10-22T22:22:45.7822152Z 34/37 Test #34: TextInput ........................   Passed    0.03 sec
+2026-10-22T22:22:45.7825573Z       Start 35: NativeTextInput
+2026-10-22T22:22:45.8469686Z 35/37 Test #35: NativeTextInput ..................   Passed    0.06 sec
+2026-10-22T22:22:45.8472449Z       Start 36: NativePlatform
+2026-10-22T22:22:47.6564903Z 36/37 Test #36: NativePlatform ...................   Passed    1.81 sec
+2026-10-22T22:22:47.6567860Z       Start 37: NativeResize
+2026-10-22T22:22:47.9855625Z 37/37 Test #37: NativeResize .....................   Passed    0.33 sec
+2026-10-22T22:22:47.9864373Z 100% tests passed, 0 tests failed out of 37
+2026-10-22T22:22:47.9866714Z Total Test time (real) =   7.76 sec
+2026-10-22T22:22:48.0093633Z Native GPU self-test skipped by -SkipGpuTest; core tests passed.
+2026-10-22T22:28:10.7042830Z Test project D:/a/EStudioUI/EStudioUI/build/windows-vcpkg
+2026-10-22T22:28:10.7077270Z       Start  1: Core
+2026-10-22T22:28:11.2201161Z  1/37 Test  #1: Core .............................   Passed    0.51 sec
+2026-10-22T22:28:11.2207445Z       Start  2: WidgetsAndLayout
+2026-10-22T22:28:11.7990205Z  2/37 Test  #2: WidgetsAndLayout .................   Passed    0.58 sec
+2026-10-22T22:28:11.7993526Z       Start  3: Animation
+2026-10-22T22:28:12.0223387Z  3/37 Test  #3: Animation ........................   Passed    0.22 sec
+2026-10-22T22:28:12.0226320Z       Start  4: RichCss
+2026-10-22T22:28:14.4773121Z  4/37 Test  #4: RichCss ..........................   Passed    2.45 sec
+2026-10-22T22:28:14.4776566Z       Start  5: CanvasScene
+2026-10-22T22:28:15.9973924Z  5/37 Test  #5: CanvasScene ......................   Passed    1.52 sec
+2026-10-22T22:28:15.9976933Z       Start  6: CanvasGeometry
+2026-10-22T22:28:16.8107544Z  6/37 Test  #6: CanvasGeometry ...................   Passed    0.81 sec
+2026-10-22T22:28:16.8110925Z       Start  7: SketchDocument
+2026-10-22T22:28:30.2010545Z  7/37 Test  #7: SketchDocument ...................   Passed   13.39 sec
+2026-10-22T22:28:30.2013794Z       Start  8: CanvasWidget
+2026-10-22T22:28:30.3878500Z  8/37 Test  #8: CanvasWidget .....................   Passed    0.19 sec
+2026-10-22T22:28:30.3881734Z       Start  9: InputControls
+2026-10-22T22:28:30.6075379Z  9/37 Test  #9: InputControls ....................   Passed    0.22 sec
+2026-10-22T22:28:30.6078512Z       Start 10: SplitToolButton
+2026-10-22T22:28:30.8537765Z 10/37 Test #10: SplitToolButton ..................   Passed    0.25 sec
+2026-10-22T22:28:30.8540906Z       Start 11: Painter
+2026-10-22T22:28:30.8798457Z 11/37 Test #11: Painter ..........................   Passed    0.03 sec
+2026-10-22T22:28:30.8801383Z       Start 12: StyleParts
+2026-10-22T22:28:33.4515286Z 12/37 Test #12: StyleParts .......................   Passed    2.57 sec
+2026-10-22T22:28:33.4518948Z       Start 13: StyledCollections
+2026-10-22T22:28:33.9282469Z 13/37 Test #13: StyledCollections ................   Passed    0.48 sec
+2026-10-22T22:28:33.9285987Z       Start 14: StyledScroll
+2026-10-22T22:28:37.4315445Z 14/37 Test #14: StyledScroll .....................   Passed    3.50 sec
+2026-10-22T22:28:37.4318074Z       Start 15: CompositeStyle
+2026-10-22T22:28:37.6184420Z 15/37 Test #15: CompositeStyle ...................   Passed    0.19 sec
+2026-10-22T22:28:37.6187243Z       Start 16: Dispatch
+2026-10-22T22:28:38.7635571Z 16/37 Test #16: Dispatch .........................   Passed    1.14 sec
+2026-10-22T22:28:38.7638979Z       Start 17: ThreadAffinity
+2026-10-22T22:28:38.9306160Z 17/37 Test #17: ThreadAffinity ...................   Passed    0.17 sec
+2026-10-22T22:28:38.9309459Z       Start 18: Task
+2026-10-22T22:28:40.5461568Z 18/37 Test #18: Task .............................   Passed    1.61 sec
+2026-10-22T22:28:40.5465055Z       Start 19: QueuedSignal
+2026-10-22T22:28:40.5756419Z 19/37 Test #19: QueuedSignal .....................   Passed    0.03 sec
+2026-10-22T22:28:40.5759142Z       Start 20: ControlAffinity
+2026-10-22T22:28:40.7717158Z 20/37 Test #20: ControlAffinity ..................   Passed    0.20 sec
+2026-10-22T22:28:40.7720581Z       Start 21: ServiceAffinity
+2026-10-22T22:28:40.9420285Z 21/37 Test #21: ServiceAffinity ..................   Passed    0.17 sec
+2026-10-22T22:28:40.9423422Z       Start 22: State
+2026-10-22T22:28:40.9588227Z 22/37 Test #22: State ............................   Passed    0.02 sec
+2026-10-22T22:28:40.9591007Z       Start 23: Binding
+2026-10-22T22:28:41.1452150Z 23/37 Test #23: Binding ..........................   Passed    0.19 sec
+2026-10-22T22:28:41.1455144Z       Start 24: Invalidation
+2026-10-22T22:28:43.0852685Z 24/37 Test #24: Invalidation .....................   Passed    1.94 sec
+2026-10-22T22:28:43.0856058Z       Start 25: ControlUpdate
+2026-10-22T22:28:43.2857977Z 25/37 Test #25: ControlUpdate ....................   Passed    0.20 sec
+2026-10-22T22:28:43.2861631Z       Start 26: Model
+2026-10-22T22:28:44.0165317Z 26/37 Test #26: Model ............................   Passed    0.73 sec
+2026-10-22T22:28:44.0168469Z       Start 27: ModelView
+2026-10-22T22:28:44.9579461Z 27/37 Test #27: ModelView ........................   Passed    0.94 sec
+2026-10-22T22:28:44.9583451Z       Start 28: Layout
+2026-10-22T22:28:45.1634832Z 28/37 Test #28: Layout ...........................   Passed    0.20 sec
+2026-10-22T22:28:45.1638093Z       Start 29: ConstraintLayout
+2026-10-22T22:29:49.2867966Z 29/37 Test #29: ConstraintLayout .................   Passed   64.12 sec
+2026-10-22T22:29:49.2871545Z       Start 30: InputFoundation
+2026-10-22T22:29:51.2996061Z 30/37 Test #30: InputFoundation ..................   Passed    2.01 sec
+2026-10-22T22:29:51.3000081Z       Start 31: ActionDomain
+2026-10-22T22:29:51.3148611Z 31/37 Test #31: ActionDomain .....................   Passed    0.01 sec
+2026-10-22T22:29:51.3151677Z       Start 32: Platform
+2026-10-22T22:29:51.4906101Z 32/37 Test #32: Platform .........................   Passed    0.18 sec
+2026-10-22T22:29:51.4909975Z       Start 33: Semantic
+2026-10-22T22:29:51.7467960Z 33/37 Test #33: Semantic .........................   Passed    0.26 sec
+2026-10-22T22:29:51.7471311Z       Start 34: TextInput
+2026-10-22T22:29:51.9586026Z 34/37 Test #34: TextInput ........................   Passed    0.21 sec
+2026-10-22T22:29:51.9589482Z       Start 35: NativeTextInput
+2026-10-22T22:29:52.1460119Z 35/37 Test #35: NativeTextInput ..................   Passed    0.19 sec
+2026-10-22T22:29:52.1464435Z       Start 36: NativePlatform
+2026-10-22T22:29:53.6785108Z 36/37 Test #36: NativePlatform ...................   Passed    1.53 sec
+2026-10-22T22:29:53.6789970Z       Start 37: NativeResize
+2026-10-22T22:29:53.9633721Z 37/37 Test #37: NativeResize .....................   Passed    0.28 sec
+2026-10-22T22:29:53.9644905Z 100% tests passed, 0 tests failed out of 37
+2026-10-22T22:29:53.9646346Z Total Test time (real) = 103.26 sec
+2026-10-22T22:29:53.9711965Z Native GPU self-test skipped by -SkipGpuTest; core tests passed.
+2026-10-22T22:29:53.9838514Z Native probe: initialize owner STA
+2026-10-22T22:29:54.1612009Z Native probe: attach UI Automation provider
+2026-10-22T22:29:54.1740232Z Native probe: UI Automation root connected
+2026-10-22T22:29:54.1923355Z Native probe: UI Automation invoke requested
+2026-10-22T22:29:54.2184070Z Native probe: UI Automation value committed
+2026-10-22T22:29:54.2292990Z Native probe: UI Automation range committed
+2026-10-22T22:29:54.2381482Z Native probe: UI Automation default automatic focus
+2026-10-22T22:29:54.2508156Z Native selection: Select id=7/9/0/1009 selected=1 count=1 query=00000000 result=00000000
+2026-10-22T22:29:54.2553792Z Native selection: Add id=7/10/0/1009 selected=1 count=1 query=00000000 result=00000000
+2026-10-22T22:29:54.2578790Z Native selection with default automatic focus: first=0 second=1 count=1 matchesFirst=0 matchesSecond=1 canonicalCurrent=1
+2026-10-22T22:29:54.2580030Z Native probe: UI Automation virtual list
+2026-10-22T22:29:54.2671222Z Native element first list row name=List row 0 runtime=42,983100,4,7,0,9,0,0,0,1009,0,
+2026-10-22T22:29:54.2677478Z Native element second list row name=List row 1 runtime=42,983100,4,7,0,10,0,0,0,1009,0,
+2026-10-22T22:29:54.2726982Z Native selection: Select id=7/9/0/1009 selected=1 count=1 query=00000000 result=00000000
+2026-10-22T22:29:54.2767755Z Native selection: Select id=7/10/0/1009 selected=1 count=1 query=00000000 result=00000000
+2026-10-22T22:29:54.2802883Z Native selection after Select(second): first=0 second=1 count=1 matchesFirst=0 matchesSecond=1 canonicalCurrent=1
+2026-10-22T22:29:54.2841572Z Native selection: Remove id=7/10/0/1009 selected=0 count=0 query=00000000 result=00000000
+2026-10-22T22:29:54.2856491Z Native selection after Remove(second): first=0 second=0 count=0 matchesFirst=0 matchesSecond=0 canonicalCurrent=-1
+2026-10-22T22:29:54.2896215Z Native selection: Add id=7/9/0/1009 selected=1 count=1 query=00000000 result=00000000
+2026-10-22T22:29:54.2918490Z Native selection after Add(first): first=1 second=0 count=1 matchesFirst=1 matchesSecond=0 canonicalCurrent=0
+2026-10-22T22:29:54.2947462Z Native selection: Add id=7/10/0/1009 selected=0 count=1 query=00000000 result=80131509
+2026-10-22T22:29:54.2952305Z Native Add(second) HRESULT=-2146233079
+2026-10-22T22:29:54.2975371Z Native selection after Add(second): first=1 second=0 count=1 matchesFirst=1 matchesSecond=0 canonicalCurrent=0
+2026-10-22T22:29:54.3116050Z Native selection: Select id=7/1008/0/1009 selected=1 count=1 query=00000000 result=00000000
+2026-10-22T22:29:54.3273321Z Native selection: Select id=7/1007/0/1009 selected=1 count=1 query=00000000 result=00000000
+2026-10-22T22:29:54.3432982Z Native selection: Select id=7/9/0/1009 selected=0 count=0 query=00000000 result=80040201
+2026-10-22T22:29:54.3479460Z Native selection: Select id=7/10/0/1009 selected=1 count=1 query=00000000 result=00000000
+2026-10-22T22:29:54.3480842Z Native probe: UI Automation virtual tree
+2026-10-22T22:29:54.3646623Z Native probe: UI Automation virtual grid
+2026-10-22T22:29:54.3807307Z Native selection: Select id=1012/1115/2/1116 selected=1 count=1 query=00000000 result=00000000
+2026-10-22T22:29:54.3992656Z Native probe: UI Automation text ranges
+2026-10-22T22:29:54.4535341Z Native probe: UI Automation patterns committed
+2026-10-22T22:29:54.4681639Z Native probe: flush UI Automation events
+2026-10-22T22:29:54.4682403Z Native probe: disconnect UI Automation provider
+2026-10-22T22:29:54.4684785Z Native probe: provider disconnected
+2026-10-22T22:29:54.4689706Z Native probe: UI Automation retained edit rejected
+2026-10-22T22:29:54.4694664Z Native probe: UI Automation client releases COM
+2026-10-22T22:29:54.4695907Z Native probe: UI Automation client stopped
+2026-10-22T22:29:54.4838910Z Native probe: native clipboard formats
+2026-10-22T22:29:54.4852460Z Native probe: malformed external clipboard format
+2026-10-22T22:29:54.4857138Z Native probe: aggregate external clipboard budget
+2026-10-22T22:29:54.6809979Z Native probe: native clipboard checks complete
+2026-10-22T22:29:54.6811053Z Native probe: open native file picker
+2026-10-22T22:29:54.8755838Z Native probe: cancel native picker
+2026-10-22T22:29:54.9386417Z Native probe: open native save picker
+2026-10-22T22:29:55.0478546Z Native probe: cancel native picker
+2026-10-22T22:29:55.1211274Z Native probe: open native folder picker
+2026-10-22T22:29:55.2193757Z Native probe: cancel native picker
+2026-10-22T22:29:55.2780249Z Native probe: retire native picker adapter
+2026-10-22T22:29:55.4546234Z Native probe: cancel native picker during startup
+2026-10-22T22:29:55.4589195Z Native platform: 80 checks passed.
+2026-10-22T22:29:55.4715399Z Native probe: release owner COM
+2026-10-22T22:29:55.4732413Z Native probe: native probe finished
+2026-10-22T22:29:55.4942504Z Native probe: initialize owner STA
+2026-10-22T22:29:55.6724429Z Native probe: attach UI Automation provider
+2026-10-22T22:29:55.6856193Z Native probe: UI Automation root connected
+2026-10-22T22:29:55.7037809Z Native probe: UI Automation invoke requested
+2026-10-22T22:29:55.7358245Z Native probe: UI Automation value committed
+2026-10-22T22:29:55.7467517Z Native probe: UI Automation range committed
+2026-10-22T22:29:55.7554476Z Native probe: UI Automation default automatic focus
+2026-10-22T22:29:55.7678186Z Native selection: Select id=7/9/0/1009 selected=1 count=1 query=00000000 result=00000000
+2026-10-22T22:29:55.7724263Z Native selection: Add id=7/10/0/1009 selected=1 count=1 query=00000000 result=00000000
+2026-10-22T22:29:55.7747766Z Native selection with default automatic focus: first=0 second=1 count=1 matchesFirst=0 matchesSecond=1 canonicalCurrent=1
+2026-10-22T22:29:55.7749321Z Native probe: UI Automation virtual list
+2026-10-22T22:29:55.7839096Z Native element first list row name=List row 0 runtime=42,852602,4,7,0,9,0,0,0,1009,0,
+2026-10-22T22:29:55.7844706Z Native element second list row name=List row 1 runtime=42,852602,4,7,0,10,0,0,0,1009,0,
+2026-10-22T22:29:55.7892390Z Native selection: Select id=7/9/0/1009 selected=1 count=1 query=00000000 result=00000000
+2026-10-22T22:29:55.7931466Z Native selection: Select id=7/10/0/1009 selected=1 count=1 query=00000000 result=00000000
+2026-10-22T22:29:55.7965387Z Native selection after Select(second): first=0 second=1 count=1 matchesFirst=0 matchesSecond=1 canonicalCurrent=1
+2026-10-22T22:29:55.8007076Z Native selection: Remove id=7/10/0/1009 selected=0 count=0 query=00000000 result=00000000
+2026-10-22T22:29:55.8022205Z Native selection after Remove(second): first=0 second=0 count=0 matchesFirst=0 matchesSecond=0 canonicalCurrent=-1
+2026-10-22T22:29:55.8061817Z Native selection: Add id=7/9/0/1009 selected=1 count=1 query=00000000 result=00000000
+2026-10-22T22:29:55.8083885Z Native selection after Add(first): first=1 second=0 count=1 matchesFirst=1 matchesSecond=0 canonicalCurrent=0
+2026-10-22T22:29:55.8112629Z Native selection: Add id=7/10/0/1009 selected=0 count=1 query=00000000 result=80131509
+2026-10-22T22:29:55.8117548Z Native Add(second) HRESULT=-2146233079
+2026-10-22T22:29:55.8143843Z Native selection after Add(second): first=1 second=0 count=1 matchesFirst=1 matchesSecond=0 canonicalCurrent=0
+2026-10-22T22:29:55.8290436Z Native selection: Select id=7/1008/0/1009 selected=1 count=1 query=00000000 result=00000000
+2026-10-22T22:29:55.8447008Z Native selection: Select id=7/1007/0/1009 selected=1 count=1 query=00000000 result=00000000
+2026-10-22T22:29:55.8605444Z Native selection: Select id=7/9/0/1009 selected=0 count=0 query=00000000 result=80040201
+2026-10-22T22:29:55.8649766Z Native selection: Select id=7/10/0/1009 selected=1 count=1 query=00000000 result=00000000
+2026-10-22T22:29:55.8650990Z Native probe: UI Automation virtual tree
+2026-10-22T22:29:55.8815689Z Native probe: UI Automation virtual grid
+2026-10-22T22:29:55.8972667Z Native selection: Select id=1012/1115/2/1116 selected=1 count=1 query=00000000 result=00000000
+2026-10-22T22:29:55.9162827Z Native probe: UI Automation text ranges
+2026-10-22T22:29:55.9709435Z Native probe: UI Automation patterns committed
+2026-10-22T22:29:55.9849079Z Native probe: flush UI Automation events
+2026-10-22T22:29:55.9849756Z Native probe: disconnect UI Automation provider
+2026-10-22T22:29:55.9851229Z Native probe: provider disconnected
+2026-10-22T22:29:55.9857569Z Native probe: UI Automation retained edit rejected
+2026-10-22T22:29:55.9862084Z Native probe: UI Automation client releases COM
+2026-10-22T22:29:55.9862720Z Native probe: UI Automation client stopped
+2026-10-22T22:29:56.0006552Z Native probe: native clipboard formats
+2026-10-22T22:29:56.0020897Z Native probe: malformed external clipboard format
+2026-10-22T22:29:56.0025298Z Native probe: aggregate external clipboard budget
+2026-10-22T22:29:56.1975307Z Native probe: native clipboard checks complete
+2026-10-22T22:29:56.1976105Z Native probe: open native file picker
+2026-10-22T22:29:56.3767926Z Native probe: cancel native picker
+2026-10-22T22:29:56.4533229Z Native probe: open native save picker
+2026-10-22T22:29:56.5645158Z Native probe: cancel native picker
+2026-10-22T22:29:56.6386498Z Native probe: open native folder picker
+2026-10-22T22:29:56.7362844Z Native probe: cancel native picker
+2026-10-22T22:29:56.8031854Z Native probe: retire native picker adapter
+2026-10-22T22:29:56.9830215Z Native probe: cancel native picker during startup
+2026-10-22T22:29:56.9878197Z Native platform: 80 checks passed.
+2026-10-22T22:29:56.9988491Z Native probe: release owner COM
+2026-10-22T22:29:57.0006516Z Native probe: native probe finished
+2026-10-22T22:29:57.0219593Z Native probe: initialize owner STA
+2026-10-22T22:29:57.1996138Z Native probe: attach UI Automation provider
+2026-10-22T22:29:57.2221026Z Native probe: UI Automation root connected
+2026-10-22T22:29:57.2402926Z Native probe: UI Automation invoke requested
+2026-10-22T22:29:57.2681008Z Native probe: UI Automation value committed
+2026-10-22T22:29:57.2789733Z Native probe: UI Automation range committed
+2026-10-22T22:29:57.2880350Z Native probe: UI Automation default automatic focus
+2026-10-22T22:29:57.3006638Z Native selection: Select id=7/9/0/1009 selected=1 count=1 query=00000000 result=00000000
+2026-10-22T22:29:57.3052213Z Native selection: Add id=7/10/0/1009 selected=1 count=1 query=00000000 result=00000000
+2026-10-22T22:29:57.3076137Z Native selection with default automatic focus: first=0 second=1 count=1 matchesFirst=0 matchesSecond=1 canonicalCurrent=1
+2026-10-22T22:29:57.3077445Z Native probe: UI Automation virtual list
+2026-10-22T22:29:57.3168663Z Native element first list row name=List row 0 runtime=42,918126,4,7,0,9,0,0,0,1009,0,
+2026-10-22T22:29:57.3175017Z Native element second list row name=List row 1 runtime=42,918126,4,7,0,10,0,0,0,1009,0,
+2026-10-22T22:29:57.3222446Z Native selection: Select id=7/9/0/1009 selected=1 count=1 query=00000000 result=00000000
+2026-10-22T22:29:57.3262495Z Native selection: Select id=7/10/0/1009 selected=1 count=1 query=00000000 result=00000000
+2026-10-22T22:29:57.3297988Z Native selection after Select(second): first=0 second=1 count=1 matchesFirst=0 matchesSecond=1 canonicalCurrent=1
+2026-10-22T22:29:57.3337669Z Native selection: Remove id=7/10/0/1009 selected=0 count=0 query=00000000 result=00000000
+2026-10-22T22:29:57.3352636Z Native selection after Remove(second): first=0 second=0 count=0 matchesFirst=0 matchesSecond=0 canonicalCurrent=-1
+2026-10-22T22:29:57.3392687Z Native selection: Add id=7/9/0/1009 selected=1 count=1 query=00000000 result=00000000
+2026-10-22T22:29:57.3415459Z Native selection after Add(first): first=1 second=0 count=1 matchesFirst=1 matchesSecond=0 canonicalCurrent=0
+2026-10-22T22:29:57.3443173Z Native selection: Add id=7/10/0/1009 selected=0 count=1 query=00000000 result=80131509
+2026-10-22T22:29:57.3448024Z Native Add(second) HRESULT=-2146233079
+2026-10-22T22:29:57.3469958Z Native selection after Add(second): first=1 second=0 count=1 matchesFirst=1 matchesSecond=0 canonicalCurrent=0
+2026-10-22T22:29:57.3613554Z Native selection: Select id=7/1008/0/1009 selected=1 count=1 query=00000000 result=00000000
+2026-10-22T22:29:57.3769690Z Native selection: Select id=7/1007/0/1009 selected=1 count=1 query=00000000 result=00000000
+2026-10-22T22:29:57.3930753Z Native selection: Select id=7/9/0/1009 selected=0 count=0 query=00000000 result=80040201
+2026-10-22T22:29:57.3975687Z Native selection: Select id=7/10/0/1009 selected=1 count=1 query=00000000 result=00000000
+2026-10-22T22:29:57.3976614Z Native probe: UI Automation virtual tree
+2026-10-22T22:29:57.4141733Z Native probe: UI Automation virtual grid
+2026-10-22T22:29:57.4299739Z Native selection: Select id=1012/1115/2/1116 selected=1 count=1 query=00000000 result=00000000
+2026-10-22T22:29:57.4488148Z Native probe: UI Automation text ranges
+2026-10-22T22:29:57.5032991Z Native probe: UI Automation patterns committed
+2026-10-22T22:29:57.5172843Z Native probe: flush UI Automation events
+2026-10-22T22:29:57.5173417Z Native probe: disconnect UI Automation provider
+2026-10-22T22:29:57.5175744Z Native probe: provider disconnected
+2026-10-22T22:29:57.5181405Z Native probe: UI Automation retained edit rejected
+2026-10-22T22:29:57.5185589Z Native probe: UI Automation client releases COM
+2026-10-22T22:29:57.5186182Z Native probe: UI Automation client stopped
+2026-10-22T22:29:57.5331278Z Native probe: native clipboard formats
+2026-10-22T22:29:57.5345095Z Native probe: malformed external clipboard format
+2026-10-22T22:29:57.5348514Z Native probe: aggregate external clipboard budget
+2026-10-22T22:29:57.7291185Z Native probe: native clipboard checks complete
+2026-10-22T22:29:57.7292524Z Native probe: open native file picker
+2026-10-22T22:29:57.9085792Z Native probe: cancel native picker
+2026-10-22T22:29:57.9854708Z Native probe: open native save picker
+2026-10-22T22:29:58.0960189Z Native probe: cancel native picker
+2026-10-22T22:29:58.1745659Z Native probe: open native folder picker
+2026-10-22T22:29:58.2680545Z Native probe: cancel native picker
+2026-10-22T22:29:58.3370671Z Native probe: retire native picker adapter
+2026-10-22T22:29:58.5132727Z Native probe: cancel native picker during startup
+2026-10-22T22:29:58.5174760Z Native platform: 80 checks passed.
+2026-10-22T22:29:58.5295020Z Native probe: release owner COM
+2026-10-22T22:29:58.5310223Z Native probe: native probe finished
+
