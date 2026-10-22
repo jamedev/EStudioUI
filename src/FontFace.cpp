@@ -1,162 +1,156 @@
 #include <EStudioUI/FontFace.h>
-#include <EStudioUI/TextBuffer.h>
-
-#include <exception>
-#include <ft2build.h>
-#include FT_FREETYPE_H
-#include FT_OUTLINE_H
-#include <hb.h>
-#include <hb-ot.h>
+#include <EStudioUI/Style.h>
+#include <EStudioUI/UiContext.h>
+#include "FontResource.h"
 
 #include <algorithm>
 #include <cmath>
-#include <fstream>
-#include <iterator>
-#include <limits>
+#include <exception>
+#include <list>
 #include <stdexcept>
 #include <unordered_map>
 
 namespace EStudioUI
 {
-struct FontFace::Impl
+namespace
 {
-    FT_Library m_Library = nullptr;
-    FT_Face m_Face = nullptr;
-    hb_blob_t* m_Blob = nullptr;
-    hb_face_t* m_HbFace = nullptr;
-    hb_font_t* m_Font = nullptr;
-    std::vector<char> m_Bytes;
-    std::unordered_map<std::uint32_t, GlyphGeometry> m_Glyphs;
+struct ShapeKey
+{
+    std::string m_Text;
+    FontSelection m_Font;
+    bool m_Editable = false;
+    bool operator==(const ShapeKey&) const = default;
+};
 
-    ~Impl()
+struct ShapeLookup
+{
+    std::string_view m_Text;
+    const FontSelection& m_Font;
+    bool m_Editable = false;
+};
+
+struct ShapeHash
+{
+    using is_transparent = void;
+
+    std::size_t operator()(const ShapeLookup& key) const
     {
-        if (m_Font)
-            hb_font_destroy(m_Font);
-        if (m_HbFace)
-            hb_face_destroy(m_HbFace);
-        if (m_Blob)
-            hb_blob_destroy(m_Blob);
-        if (m_Face)
-            FT_Done_Face(m_Face);
-        if (m_Library)
-            FT_Done_FreeType(m_Library);
+        auto result = std::hash<std::string_view>{}(key.m_Text);
+        const auto add = [&](std::size_t value) { result ^= value + 0x9e3779b9U + (result << 6) + (result >> 2); };
+        add(std::hash<std::string>{}(key.m_Font.m_Family));
+        add(std::hash<std::string>{}(key.m_Font.m_Style));
+        add(std::hash<std::string>{}(key.m_Font.m_Direction));
+        add(std::hash<std::string>{}(key.m_Font.m_Language));
+        add(std::hash<float>{}(key.m_Font.m_Size));
+        add(std::hash<float>{}(key.m_Font.m_Weight));
+        add(key.m_Editable ? 1 : 0);
+        return result;
+    }
+
+    std::size_t operator()(const ShapeKey& key) const
+    {
+        return (*this)(ShapeLookup{key.m_Text, key.m_Font, key.m_Editable});
     }
 };
 
-namespace
+struct ShapeEqual
 {
-Point Mid(Point a, Point b)
-{
-    return {(a.m_X + b.m_X) * 0.5f, (a.m_Y + b.m_Y) * 0.5f};
-}
+    using is_transparent = void;
 
-struct OutlineBuilder
-{
-    GlyphGeometry& m_Glyph;
-    float m_Scale;
-    Point m_Current;
-    Point m_Start;
-    bool m_Open = false;
-
-    Point Convert(const FT_Vector* value) const
+    bool operator()(const ShapeKey& a, const ShapeKey& b) const
     {
-        return {static_cast<float>(value->x) * m_Scale, static_cast<float>(value->y) * m_Scale};
+        return a == b;
     }
 
-    void Line(Point end)
+    bool operator()(const ShapeKey& a, const ShapeLookup& b) const
     {
-        if (m_Current.m_X != end.m_X || m_Current.m_Y != end.m_Y)
-            m_Glyph.m_Curves.push_back({m_Current, end, end});
-        m_Current = end;
+        return a.m_Text == b.m_Text && a.m_Font == b.m_Font && a.m_Editable == b.m_Editable;
     }
 
-    void Close()
+    bool operator()(const ShapeLookup& a, const ShapeKey& b) const
     {
-        if (m_Open)
-            Line(m_Start);
-    }
-
-    void Cubic(Point p0, Point p1, Point p2, Point p3, int depth)
-    {
-        const Point control{(3 * (p1.m_X + p2.m_X) - p0.m_X - p3.m_X) * 0.25f,
-                            (3 * (p1.m_Y + p2.m_Y) - p0.m_Y - p3.m_Y) * 0.25f};
-        const Point c1{(p0.m_X + 2 * control.m_X) / 3, (p0.m_Y + 2 * control.m_Y) / 3};
-        const Point c2{(p3.m_X + 2 * control.m_X) / 3, (p3.m_Y + 2 * control.m_Y) / 3};
-        const float error =
-            std::max(std::hypot(c1.m_X - p1.m_X, c1.m_Y - p1.m_Y), std::hypot(c2.m_X - p2.m_X, c2.m_Y - p2.m_Y));
-        if (error <= 0.00005f || depth == 12)
-            m_Glyph.m_Curves.push_back({p0, control, p3});
-        else
-        {
-            const auto p01 = Mid(p0, p1);
-            const auto p12 = Mid(p1, p2);
-            const auto p23 = Mid(p2, p3);
-            const auto p012 = Mid(p01, p12);
-            const auto p123 = Mid(p12, p23);
-            const auto center = Mid(p012, p123);
-            Cubic(p0, p01, p012, center, depth + 1);
-            Cubic(center, p123, p23, p3, depth + 1);
-        }
-    }
-
-    static int MoveTo(const FT_Vector* point, void* user)
-    {
-        auto& self = *static_cast<OutlineBuilder*>(user);
-        self.Close();
-        self.m_Current = self.Convert(point);
-        self.m_Start = self.m_Current;
-        self.m_Open = true;
-        return 0;
-    }
-
-    static int LineTo(const FT_Vector* point, void* user)
-    {
-        auto& self = *static_cast<OutlineBuilder*>(user);
-        self.Line(self.Convert(point));
-        return 0;
-    }
-
-    static int ConicTo(const FT_Vector* control, const FT_Vector* point, void* user)
-    {
-        auto& self = *static_cast<OutlineBuilder*>(user);
-        const auto end = self.Convert(point);
-        self.m_Glyph.m_Curves.push_back({self.m_Current, self.Convert(control), end});
-        self.m_Current = end;
-        return 0;
-    }
-
-    static int CubicTo(const FT_Vector* c1, const FT_Vector* c2, const FT_Vector* point, void* user)
-    {
-        auto& self = *static_cast<OutlineBuilder*>(user);
-        const auto end = self.Convert(point);
-        self.Cubic(self.m_Current, self.Convert(c1), self.Convert(c2), end, 0);
-        self.m_Current = end;
-        return 0;
+        return (*this)(b, a);
     }
 };
 } // namespace
 
-FontFace::FontFace(const std::filesystem::path& path) : m_Impl(std::make_unique<Impl>())
+struct FontFace::Impl
 {
-    std::ifstream input(path, std::ios::binary);
-    if (!input)
-        throw std::runtime_error("Cannot read font: " + path.string());
-    m_Impl->m_Bytes.assign(std::istreambuf_iterator<char>(input), {});
-    if (m_Impl->m_Bytes.empty() || m_Impl->m_Bytes.size() > 67108864)
-        throw std::runtime_error("Font size must be between 1 byte and 64 MiB.");
-    if (FT_Init_FreeType(&m_Impl->m_Library) != 0 ||
-        FT_New_Memory_Face(m_Impl->m_Library, reinterpret_cast<const FT_Byte*>(m_Impl->m_Bytes.data()),
-                           static_cast<FT_Long>(m_Impl->m_Bytes.size()), 0, &m_Impl->m_Face) != 0)
-        throw std::runtime_error("FreeType could not load the font.");
-    if (m_Impl->m_Face->units_per_EM == 0)
-        throw std::runtime_error("An outline font with a valid em square is required.");
-    m_Impl->m_Blob = hb_blob_create(m_Impl->m_Bytes.data(), static_cast<unsigned>(m_Impl->m_Bytes.size()),
-                                    HB_MEMORY_MODE_READONLY, nullptr, nullptr);
-    m_Impl->m_HbFace = hb_face_create(m_Impl->m_Blob, 0);
-    m_Impl->m_Font = hb_font_create(m_Impl->m_HbFace);
-    hb_ot_font_set_funcs(m_Impl->m_Font);
-    const auto units = m_Impl->m_Face->units_per_EM;
-    hb_font_set_scale(m_Impl->m_Font, units, units);
+    std::shared_ptr<Detail::FontBudget> m_Budget;
+    std::vector<std::shared_ptr<Detail::FontResource>> m_Faces;
+    std::uint64_t m_Revision = 1;
+    std::vector<UiContext*> m_Hosts;
+
+    struct Entry
+    {
+        TextLayout m_Layout;
+        std::size_t m_Bytes = 0;
+        std::list<ShapeKey>::iterator m_Recency;
+    };
+
+    mutable std::unordered_map<ShapeKey, Entry, ShapeHash, ShapeEqual> m_Cache;
+    mutable std::list<ShapeKey> m_Recency;
+    mutable std::size_t m_ShapeBytes = 0;
+    mutable std::size_t m_Shapes = 0;
+    mutable std::size_t m_CacheHits = 0;
+
+    void ClearShapes()
+    {
+        m_Cache.clear();
+        m_Recency.clear();
+        m_ShapeBytes = 0;
+    }
+
+    TextLayout Shape(std::string_view text, const FontSelection& selection, bool editable) const
+    {
+        if (!std::isfinite(selection.m_Size) || !std::isfinite(selection.m_Weight))
+            throw std::invalid_argument("Font size and weight must be finite.");
+        const ShapeLookup lookup{text, selection, editable};
+        if (auto entry = m_Cache.find(lookup); entry != m_Cache.end())
+        {
+            ++m_CacheHits;
+            m_Recency.splice(m_Recency.begin(), m_Recency, entry->second.m_Recency);
+            return entry->second.m_Layout;
+        }
+        auto result =
+            Detail::ShapeControlText(text, selection, editable, Detail::ResolveFonts(m_Faces, selection)).front();
+        result.m_Service = m_Faces.front()->m_Id;
+        result.m_Revision = m_Revision;
+        ++m_Shapes;
+        const auto bytes = result.StorageBytes() + text.size() * 2 + 2 * sizeof(ShapeKey) + sizeof(Entry) + 256;
+        const auto& limits = m_Budget->m_Limits;
+        if (bytes > limits.m_MaxShapeBytes || !limits.m_MaxShapeEntries)
+            return result;
+        while (!m_Cache.empty() &&
+               (m_Cache.size() >= limits.m_MaxShapeEntries || m_ShapeBytes + bytes > limits.m_MaxShapeBytes))
+        {
+            const auto& oldest = m_Recency.back();
+            m_ShapeBytes -= m_Cache.at(oldest).m_Bytes;
+            m_Cache.erase(oldest);
+            m_Recency.pop_back();
+        }
+        m_Recency.push_front({std::string(text), selection, editable});
+        try
+        {
+            m_Cache.emplace(m_Recency.front(), Entry{result, bytes, m_Recency.begin()});
+            m_ShapeBytes += bytes;
+        }
+        catch (...)
+        {
+            m_Recency.pop_front();
+            throw;
+        }
+        return result;
+    }
+};
+
+FontFace::FontFace(const std::filesystem::path& path, FontLimits limits) : m_Impl(std::make_unique<Impl>())
+{
+    if (!limits.m_MaxFaces || !limits.m_MaxFontBytes || !limits.m_MaxGeometryBytes)
+        throw std::invalid_argument("Font face, file and outline budgets must be nonzero.");
+    m_Impl->m_Budget = std::make_shared<Detail::FontBudget>();
+    m_Impl->m_Budget->m_Limits = limits;
+    AddFont({path, {}, 400, false, 0});
 }
 
 FontFace::~FontFace()
@@ -167,110 +161,151 @@ FontFace::~FontFace()
 
 TextLayout FontFace::Shape(std::string_view text, float size, bool editable) const
 {
-    m_Affinity.VerifyAccess("FontFace::Shape");
-    if (!std::isfinite(size) || size < 0 || text.size() > static_cast<std::size_t>(std::numeric_limits<int>::max()))
-        throw std::invalid_argument("Invalid font size or text run length.");
-    TextLayout layout;
-    layout.m_FontSize = size;
-    const float scale = size / static_cast<float>(m_Impl->m_Face->units_per_EM);
-    layout.m_Ascender = static_cast<float>(m_Impl->m_Face->ascender) * scale;
-    layout.m_Descender = -static_cast<float>(m_Impl->m_Face->descender) * scale;
-    layout.m_Offsets = TextBuffer::Graphemes(text);
-    layout.m_Carets.resize(layout.m_Offsets.size(), 0);
-    if (text.empty())
-        return layout;
+    VerifyAccess();
+    FontSelection selection;
+    selection.m_Size = size;
+    return m_Impl->Shape(text, selection, editable);
+}
 
-    std::unique_ptr<hb_buffer_t, decltype(&hb_buffer_destroy)> buffer(hb_buffer_create(), hb_buffer_destroy);
-    hb_buffer_add_utf8(buffer.get(), text.data(), static_cast<int>(text.size()), 0, static_cast<int>(text.size()));
-    hb_buffer_set_direction(buffer.get(), HB_DIRECTION_LTR);
-    hb_buffer_set_cluster_level(buffer.get(), HB_BUFFER_CLUSTER_LEVEL_MONOTONE_GRAPHEMES);
-    hb_buffer_guess_segment_properties(buffer.get());
-    hb_feature_t features[2]{};
-    hb_feature_from_string("liga=0", -1, &features[0]);
-    hb_feature_from_string("clig=0", -1, &features[1]);
-    hb_shape(m_Impl->m_Font, buffer.get(), editable ? features : nullptr, editable ? 2u : 0u);
-    unsigned count = 0;
-    const auto* info = hb_buffer_get_glyph_infos(buffer.get(), &count);
-    const auto* positions = hb_buffer_get_glyph_positions(buffer.get(), &count);
-    std::vector<std::pair<std::size_t, float>> clusters;
-    for (unsigned i = 0; i < count; ++i)
+TextLayout FontFace::Shape(std::string_view text, const Style& style, bool editable) const
+{
+    return Shape(text, style.m_FontSize, style, editable);
+}
+
+TextLayout FontFace::Shape(std::string_view text, float size, const Style& style, bool editable) const
+{
+    VerifyAccess();
+    return m_Impl->Shape(text, Detail::SelectFont(style, size), editable);
+}
+
+std::vector<TextLayout> FontFace::Wrap(std::string_view text, const Style& style, float width) const
+{
+    VerifyAccess();
+    const auto selection = Detail::SelectFont(style, style.m_FontSize);
+    auto lines =
+        Detail::ShapeControlText(text, selection, false, Detail::ResolveFonts(m_Impl->m_Faces, selection), width);
+    for (auto& line : lines)
     {
-        if (clusters.empty() || clusters.back().first != info[i].cluster)
-            clusters.emplace_back(info[i].cluster, layout.m_Width);
-        layout.m_Glyphs.push_back({info[i].codepoint,
-                                   layout.m_Width + static_cast<float>(positions[i].x_offset) * scale,
-                                   static_cast<float>(positions[i].y_offset) * scale});
-        layout.m_Width += static_cast<float>(positions[i].x_advance) * scale;
+        line.m_Service = GetIdentity();
+        line.m_Revision = GetRevision();
     }
-    clusters.emplace_back(text.size(), layout.m_Width);
-    std::size_t cluster = 0;
-    for (std::size_t i = 0; i < layout.m_Offsets.size(); ++i)
-    {
-        const auto offset = layout.m_Offsets[i];
-        while (cluster + 1 < clusters.size() && clusters[cluster + 1].first <= offset)
-            ++cluster;
-        float x = clusters[cluster].second;
-        if (cluster + 1 < clusters.size() && offset > clusters[cluster].first)
-        {
-            const auto first =
-                std::lower_bound(layout.m_Offsets.begin(), layout.m_Offsets.end(), clusters[cluster].first);
-            const auto last =
-                std::lower_bound(layout.m_Offsets.begin(), layout.m_Offsets.end(), clusters[cluster + 1].first);
-            const float fraction =
-                static_cast<float>(static_cast<std::ptrdiff_t>(i) - (first - layout.m_Offsets.begin())) /
-                static_cast<float>(std::max<std::ptrdiff_t>(1, last - first));
-            x += (clusters[cluster + 1].second - x) * fraction;
-        }
-        layout.m_Carets[i] = x;
-    }
-    return layout;
+    m_Impl->m_Shapes += lines.size();
+    return lines;
+}
+
+bool FontFace::Matches(const TextLayout& layout, const Style& style) const
+{
+    VerifyAccess();
+    const auto& selection = layout.m_Selection;
+    return layout.m_Service == GetIdentity() && layout.m_Revision == GetRevision() &&
+           selection.m_Size == style.m_FontSize && selection.m_Weight == style.m_FontWeight &&
+           selection.m_Family == style.m_FontFamily && selection.m_Style == style.m_FontStyle &&
+           selection.m_Direction == style.m_TextDirection && selection.m_Language == style.m_Language;
+}
+
+std::uint64_t FontFace::AddFont(FontSource source)
+{
+    VerifyMutation();
+    auto& self = *m_Impl;
+    auto resource = std::make_shared<Detail::FontResource>(std::move(source), self.m_Budget);
+    const auto identity = resource->m_Id;
+    std::erase_if(self.m_Budget->m_Resources, [](const auto& weak) { return weak.expired(); });
+    self.m_Budget->m_Resources.push_back(resource);
+    self.m_Faces.push_back(std::move(resource));
+    ++self.m_Revision;
+    self.ClearShapes();
+    NotifyHosts();
+    return identity;
+}
+
+bool FontFace::RemoveFont(std::uint64_t identity)
+{
+    VerifyMutation();
+    auto& self = *m_Impl;
+    if (identity == GetIdentity())
+        throw std::invalid_argument("The primary font remains registered for the lifetime of its font service.");
+    const auto removed = std::erase_if(self.m_Faces, [&](const auto& resource) { return resource->m_Id == identity; });
+    if (!removed)
+        return false;
+    ++self.m_Revision;
+    self.ClearShapes();
+    NotifyHosts();
+    return true;
+}
+
+std::vector<std::string> FontFace::GetFamilies() const
+{
+    VerifyAccess();
+    std::vector<std::string> result;
+    for (const auto& face : m_Impl->m_Faces)
+        if (std::find(result.begin(), result.end(), face->m_Source.m_Family) == result.end())
+            result.push_back(face->m_Source.m_Family);
+    return result;
+}
+
+std::uint64_t FontFace::GetIdentity() const
+{
+    VerifyAccess();
+    return m_Impl->m_Faces.front()->m_Id;
+}
+
+std::uint64_t FontFace::GetRevision() const
+{
+    VerifyAccess();
+    return m_Impl->m_Revision;
+}
+
+FontStats FontFace::GetStats() const
+{
+    VerifyAccess();
+    const auto& self = *m_Impl;
+    return {self.m_Faces.size(),
+            self.m_Budget->m_Faces.load(),
+            self.m_Budget->m_FontBytes.load(),
+            self.m_Budget->m_GeometryBytes.load(),
+            self.m_ShapeBytes,
+            self.m_Cache.size(),
+            self.m_Shapes,
+            self.m_CacheHits};
+}
+
+void FontFace::ClearCaches()
+{
+    VerifyMutation();
+    m_Impl->ClearShapes();
+    for (const auto& weak : m_Impl->m_Budget->m_Resources)
+        if (const auto face = weak.lock())
+            face->ClearGeometry();
 }
 
 const GlyphGeometry& FontFace::GetGlyph(std::uint32_t id)
 {
-    m_Affinity.VerifyAccess("FontFace::GetGlyph");
-    if (const auto found = m_Impl->m_Glyphs.find(id); found != m_Impl->m_Glyphs.end())
-        return found->second;
-    GlyphGeometry geometry;
-    if (FT_Load_Glyph(m_Impl->m_Face, id, FT_LOAD_NO_SCALE | FT_LOAD_NO_HINTING | FT_LOAD_NO_BITMAP) != 0)
-        throw std::runtime_error("Cannot load glyph " + std::to_string(id));
-    const auto slot = m_Impl->m_Face->glyph;
-    if (slot->format == FT_GLYPH_FORMAT_OUTLINE)
-    {
-        const float scale = 1.0f / static_cast<float>(m_Impl->m_Face->units_per_EM);
-        FT_BBox bounds{};
-        FT_Outline_Get_CBox(&slot->outline, &bounds);
-        geometry.m_MinX = static_cast<float>(bounds.xMin) * scale;
-        geometry.m_MinY = static_cast<float>(bounds.yMin) * scale;
-        geometry.m_MaxX = static_cast<float>(bounds.xMax) * scale;
-        geometry.m_MaxY = static_cast<float>(bounds.yMax) * scale;
-        OutlineBuilder builder{geometry, scale, {}, {}, false};
-        const FT_Outline_Funcs functions{
-            OutlineBuilder::MoveTo, OutlineBuilder::LineTo, OutlineBuilder::ConicTo, OutlineBuilder::CubicTo, 0, 0};
-        if (FT_Outline_Decompose(&slot->outline, &functions, &builder) != 0)
-            throw std::runtime_error("Invalid glyph outline.");
-        builder.Close();
-    }
-    return m_Impl->m_Glyphs.emplace(id, std::move(geometry)).first->second;
+    VerifyAccess();
+    return m_Impl->m_Faces.front()->Glyph(id);
 }
 
-std::size_t TextLayout::HitTest(float x) const
+void FontFace::AttachHost(UiContext& context)
 {
-    if (m_Carets.empty())
-        return 0;
-    for (std::size_t i = 1; i < m_Carets.size(); ++i)
-        if (x < (m_Carets[i - 1] + m_Carets[i]) * 0.5f)
-            return m_Offsets[i - 1];
-    return m_Offsets.back();
+    VerifyAccess();
+    m_Impl->m_Hosts.push_back(&context);
 }
 
-float TextLayout::CaretPosition(std::size_t offset) const
+void FontFace::DetachHost(UiContext& context) noexcept
 {
-    if (m_Carets.empty())
-        return 0;
-    const auto end = std::upper_bound(m_Offsets.begin(), m_Offsets.end(), offset);
-    const auto index = end == m_Offsets.begin() ? 0 : static_cast<std::size_t>(std::prev(end) - m_Offsets.begin());
-    return m_Carets[index];
+    std::erase(m_Impl->m_Hosts, &context);
+}
+
+void FontFace::VerifyMutation() const
+{
+    VerifyAccess();
+    for (const auto* host : m_Impl->m_Hosts)
+        host->VerifyStructuralMutation();
+}
+
+void FontFace::NotifyHosts()
+{
+    for (auto* host : m_Impl->m_Hosts)
+        host->FontsChanged();
 }
 
 void FontFace::VerifyAccess() const

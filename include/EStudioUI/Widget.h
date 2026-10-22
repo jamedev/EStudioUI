@@ -293,6 +293,9 @@ class Widget
     //! Returns the logical focused item while the containing actual widget owns keyboard focus.
     virtual std::optional<SemanticKey> GetSemanticFocus() const;
 
+    //! Retires cached text after font registration changes; keep this hook allocation-free.
+    virtual void OnFontsChanged() noexcept;
+
     //! Returns intrinsic content size before padding, border, and explicit CSS.
     virtual Point Measure(FontFace& font) const;
 

@@ -32,8 +32,10 @@ UiContext::UiContext(FontFace& font)
     : m_Font(font), m_Animations(*this), m_CssMotion(std::make_unique<CssMotion>(*this))
 {
     m_Font.VerifyAccess();
+    m_FontRevision = m_Font.GetRevision();
     m_Root.Attach(this, nullptr);
     m_Dispatcher.SetDrainGuard([this] { VerifyTraversalEntry(); });
+    m_Font.AttachHost(*this);
 }
 
 UiContext::~UiContext()
@@ -57,6 +59,7 @@ UiContext::~UiContext()
     m_Dispatcher.Close();
     m_States.reset();
     m_Root.Attach(nullptr, nullptr);
+    m_Font.DetachHost(*this);
 }
 
 void UiContext::VerifyAccess() const
@@ -353,7 +356,7 @@ void UiContext::RequestRepaint()
 bool UiContext::NeedsRepaint() const
 {
     VerifyAccess();
-    return m_Repaint;
+    return m_Repaint || m_FontRevision != m_Font.GetRevision();
 }
 
 FontFace& UiContext::GetFont() const
@@ -715,6 +718,11 @@ void UiContext::Restyle(Widget& widget, const Style* parent, bool force)
                     const unsigned state = part.m_States[variant] | common;
                     part.m_Assignments[variant] = m_StyleSheet.CompilePart(widget.m_Node, part.m_Name, state);
                     auto style = part.m_Defaults(widget.m_Style, state);
+                    style.m_FontFamily = widget.m_Style.m_FontFamily;
+                    style.m_FontWeight = widget.m_Style.m_FontWeight;
+                    style.m_FontStyle = widget.m_Style.m_FontStyle;
+                    style.m_TextDirection = widget.m_Style.m_TextDirection;
+                    style.m_Language = widget.m_Style.m_Language;
                     part.m_Assignments[variant](style);
                     if (!part.m_Animated)
                     {
@@ -1144,12 +1152,34 @@ void UiContext::Layout(Widget& widget, Rect bounds, Rect clip, bool definiteWidt
     widget.m_ArrangeDirty = !widget.m_MeasureValid;
 }
 
+void UiContext::FontsChanged()
+{
+    VerifyStructuralMutation();
+    const PhaseScope phase(*this, UiPhase::Measure);
+    const auto reset = [&](auto&& visit, Widget& widget) -> void
+    {
+        widget.OnFontsChanged();
+        widget.m_IntrinsicValid = widget.m_MeasureValid = false;
+        widget.m_ArrangeDirty = true;
+        for (auto& child : widget.m_Children)
+            visit(visit, *child);
+    };
+    reset(reset, m_Root);
+    m_FontRevision = m_Font.GetRevision();
+    m_Dirty = m_Repaint = m_HitTestDirty = true;
+    ++m_TextInputRevision;
+    if (m_Semantics)
+        m_Semantics->Changed();
+}
+
 void UiContext::Prepare(float width, float height)
 {
     const auto ownerLifetime = RetainOwner();
     VerifyAccess();
     VerifyTraversalEntry(true);
     PruneOwnedPopups();
+    if (m_FontRevision != m_Font.GetRevision())
+        FontsChanged();
     width = std::max(1.0f, width);
     height = std::max(1.0f, height);
     if (width != m_Width || height != m_Height)

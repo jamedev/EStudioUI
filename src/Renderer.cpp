@@ -926,7 +926,27 @@ struct Renderer::Impl
     std::size_t m_GlyphCount = 0;
     std::vector<Float4> m_Curves{{0, 0, 0, 0}};
     std::vector<UInt2> m_Bands{{0, 0}};
-    std::unordered_map<std::uint32_t, GpuGlyph> m_GlyphCache;
+
+    struct GlyphKey
+    {
+        std::uint64_t m_Font = 0;
+        std::uint32_t m_Glyph = 0;
+        bool operator==(const GlyphKey&) const = default;
+    };
+
+    struct GlyphHash
+    {
+        std::size_t operator()(const GlyphKey& key) const
+        {
+            auto hash = std::hash<std::uint64_t>{}(key.m_Font);
+            return hash ^ (std::hash<std::uint32_t>{}(key.m_Glyph) + 0x9e3779b9U + (hash << 6) + (hash >> 2));
+        }
+    };
+
+    std::unordered_map<GlyphKey, GpuGlyph, GlyphHash> m_GlyphCache;
+    std::size_t m_FontCacheLimit = 32 * 1024 * 1024;
+    std::uint64_t m_FontRevision = 0;
+    bool m_Recording = false;
     RenderStats m_Stats;
 
     explicit Impl(FontFace& font) : m_Font(font)
@@ -969,11 +989,16 @@ struct Renderer::Impl
         Record({Values(bounds), params, color, border, Values(scissor), {}, {0, 0, 0, kind}, effects});
     }
 
-    const GpuGlyph& Glyph(std::uint32_t id)
+    const GpuGlyph& Glyph(const TextLayout& layout, const PositionedGlyph& positioned)
     {
+        const GlyphKey id{layout.m_Fonts.empty() ? m_Font.GetIdentity() : layout.GetFontIdentity(positioned.m_FontSlot),
+                          positioned.m_Id};
         if (const auto found = m_GlyphCache.find(id); found != m_GlyphCache.end())
             return found->second;
-        const auto& geometry = m_Font.GetGlyph(id);
+        if (m_GlyphCache.size() >= 65536)
+            throw std::length_error("GPU glyph cache is limited to 65,536 actual font/glyph pairs.");
+        const auto& geometry = layout.m_Fonts.empty() ? m_Font.GetGlyph(positioned.m_Id) : layout.GetGlyph(positioned);
+        const auto oldCurves = m_Curves.size(), oldBands = m_Bands.size();
         GpuGlyph glyph;
         glyph.m_Bounds.m_MinX = geometry.m_MinX;
         glyph.m_Bounds.m_MinY = geometry.m_MinY;
@@ -1031,6 +1056,14 @@ struct Renderer::Impl
                     m_Bands.push_back({locations[index], 0});
             }
         }
+        if (m_Curves.size() * sizeof(Float4) + m_Bands.size() * sizeof(UInt2) > m_FontCacheLimit ||
+            m_GlyphCache.size() >= 65536)
+        {
+            m_Curves.resize(oldCurves);
+            m_Bands.resize(oldBands);
+            throw std::length_error(
+                "GPU glyph cache budget reached; retire unused text layouts and clear the font cache between frames.");
+        }
         m_FontDirty = true;
         return m_GlyphCache.emplace(id, std::move(glyph)).first->second;
     }
@@ -1078,11 +1111,45 @@ Renderer::~Renderer()
         std::terminate();
 }
 
+void Renderer::ClearFontCache()
+{
+    m_Affinity.VerifyAccess("Renderer::ClearFontCache");
+    auto& self = *m_Impl;
+    if (self.m_Recording)
+        throw std::logic_error("Font cache retirement requires a frame boundary.");
+    self.m_GlyphCache.clear();
+    self.m_GlyphCache.rehash(0);
+    std::vector<Float4>{{0, 0, 0, 0}}.swap(self.m_Curves);
+    std::vector<UInt2>{{0, 0}}.swap(self.m_Bands);
+    self.m_FontDirty = true;
+    self.m_HistoryValid = false;
+    glBindBuffer(GL_TEXTURE_BUFFER, self.m_CurveBuffer);
+    glBufferData(GL_TEXTURE_BUFFER, static_cast<GLsizeiptr>(sizeof(Float4)), self.m_Curves.data(), GL_DYNAMIC_DRAW);
+    glBindBuffer(GL_TEXTURE_BUFFER, self.m_BandBuffer);
+    glBufferData(GL_TEXTURE_BUFFER, static_cast<GLsizeiptr>(sizeof(UInt2)), self.m_Bands.data(), GL_DYNAMIC_DRAW);
+}
+
+void Renderer::SetFontCacheLimit(std::size_t bytes)
+{
+    m_Affinity.VerifyAccess("Renderer::SetFontCacheLimit");
+    if (bytes < 1024 || bytes > 256 * 1024 * 1024)
+        throw std::invalid_argument("GPU font cache limits must be between 1 KiB and 256 MiB.");
+    ClearFontCache();
+    m_Impl->m_FontCacheLimit = bytes;
+}
+
 void Renderer::BeginFrame(float width, float height, int framebufferWidth, int framebufferHeight, Color clear)
 {
     m_Affinity.VerifyAccess("Renderer::BeginFrame");
     auto& self = *m_Impl;
     self.PollTimers();
+    self.m_Recording = false;
+    if (self.m_FontRevision != self.m_Font.GetRevision())
+    {
+        ClearFontCache();
+        self.m_FontRevision = self.m_Font.GetRevision();
+    }
+    self.m_Recording = true;
     self.m_Clear = clear;
     self.m_Width = std::max(1.0f, width);
     self.m_Height = std::max(1.0f, height);
@@ -1351,7 +1418,7 @@ void Renderer::DrawText(const TextLayout& layout, Point baseline, Color color, R
     const float size = layout.m_FontSize;
     for (const auto& positioned : layout.m_Glyphs)
     {
-        const auto& glyph = self.Glyph(positioned.m_Id);
+        const auto& glyph = self.Glyph(layout, positioned);
         const auto& bounds = glyph.m_Bounds;
         if (bounds.m_MaxX <= bounds.m_MinX || bounds.m_MaxY <= bounds.m_MinY)
             continue;
@@ -1417,6 +1484,7 @@ void Renderer::EndFrame()
     m_Affinity.VerifyAccess("Renderer::EndFrame");
     auto& self = *m_Impl;
     self.m_FrameReady = false;
+    self.m_Recording = false;
     self.EnsureRetainedTarget();
     self.BuildDamage();
     self.BuildBatches();

@@ -857,7 +857,9 @@ Window::Window(const WindowOptions& options, const std::filesystem::path& fontPa
         throw std::runtime_error("Could not load OpenGL entry points.");
     glfwSwapInterval(1);
     glfwSetWindowUserPointer(self.m_Window, &self);
-    self.m_Font = std::make_unique<FontFace>(fontPath);
+    self.m_Font = std::make_unique<FontFace>(fontPath, options.m_FontLimits);
+    for (const auto& source : options.m_Fonts)
+        self.m_Font->AddFont(source);
     self.m_Ui = std::make_unique<UiContext>(*self.m_Font);
     self.m_Ui->SetOwnerLifetime(m_Impl);
     self.m_Ui->Root().SetAccessibleName(options.m_Title);

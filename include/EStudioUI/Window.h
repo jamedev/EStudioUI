@@ -33,6 +33,12 @@ struct WindowOptions
     //! Optional native/logical owner; closing it also closes this window without transferring C++ ownership.
     Window* m_Owner = nullptr;
 
+    //! Additional CSS faces and ordered fallbacks registered before UI construction.
+    std::vector<FontSource> m_Fonts;
+
+    //! Admission limits for fonts and retained text resources.
+    FontLimits m_FontLimits;
+
     //! Optional uniquely owned service adapter factory; ordinary applications use the platform default.
     std::function<std::unique_ptr<PlatformServices>(PlatformHost)> m_PlatformFactory;
 };

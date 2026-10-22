@@ -125,6 +125,9 @@ class CanvasWidget : public Widget
     bool IsFocusable() const override;
 
   protected:
+    //! Retires cached shaping when registered font resources change.
+    void OnFontsChanged() noexcept override;
+
     //! Describes selection and logical structure without materializing row widgets.
     SemanticInfo DescribeSemantics() const override;
 

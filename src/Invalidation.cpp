@@ -12,7 +12,10 @@ Invalidation GetStylePropertyInvalidation(StyleProperty property)
                    : Invalidation::Paint;
     if (property == StyleProperty::Color || property == StyleProperty::TextAlign)
         return Invalidation::InheritedStyle | Invalidation::Paint;
-    if (property == StyleProperty::FontSize || property == StyleProperty::WordWrap)
+    if (property == StyleProperty::FontSize || property == StyleProperty::WordWrap ||
+        property == StyleProperty::FontFamily || property == StyleProperty::FontWeight ||
+        property == StyleProperty::FontStyle || property == StyleProperty::TextDirection ||
+        property == StyleProperty::Language)
         return Invalidation::InheritedStyle | Invalidation::Content;
     return Invalidation::Content;
 }

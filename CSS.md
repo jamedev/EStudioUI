@@ -55,6 +55,8 @@ sizes include padding and borders: the model is **border-box**.
 | `inset`, `top/right/bottom/left` | Decorative offsets: signed pixels, percentages, or `auto` |
 | `border` | `2px solid #abcdef`, `none`, or `0` |
 | `border-color`, `border-width`, `border-radius` | A color or nonnegative pixel length |
+| `font-family`, `font-weight`, `font-style` | Ordered registered family names; normal/bold or numeric 1..1000; normal/italic |
+| `direction`, `language` | auto/ltr/rtl; shaping language tag; inherited with typography |
 | `font-size` | Pixel size clamped to 0..512; zero hides text |
 | `text-align` | `left`, `center`, `right` |
 | `opacity` | Nonnegative number, clamped to 0..1 |
@@ -340,3 +342,5 @@ An unresolved percentage inside a content-derived parent dimension uses Content
 sizing and a named diagnostic. SizeRule contracts retain precedence throughout
 resizing and style animation. See [LAYOUT.md](LAYOUT.md) for the exact rules,
 extension API, allocation reports and costs.
+
+Font resolution, fallback, visual editing and resource limits are documented in [TEXT.md](TEXT.md).

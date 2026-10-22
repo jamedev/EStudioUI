@@ -3,16 +3,32 @@
 #include <EStudioUI/Renderer.h>
 
 #include <algorithm>
+#include <stdexcept>
 
 namespace EStudioUI
 {
-Label::Label(std::string text, std::string type) : Widget(std::move(type)), m_Text(std::move(text))
+void Label::OnFontsChanged() noexcept
 {
+    m_Lines.clear();
+    m_Paragraphs.clear();
+    for (auto& wrapped : m_Wrapped)
+    {
+        wrapped.m_Lines.clear();
+        wrapped.m_Width = -1;
+    }
+    m_LayoutSize = -1;
+}
+
+Label::Label(std::string text, std::string type) : Widget(std::move(type))
+{
+    SetText(std::move(text));
 }
 
 void Label::SetText(std::string text)
 {
     VerifyAccess();
+    if (text.size() > 1048576)
+        throw std::length_error("A display label is limited to 1 MiB of UTF-8.");
     if (text == m_Text)
         return;
     m_Text = std::move(text);
@@ -28,23 +44,48 @@ const std::string& Label::GetText() const
 
 void Label::EnsureLayout(FontFace& font) const
 {
-    if (m_LayoutSize == GetStyle().m_FontSize)
+    if (m_LayoutSize == GetStyle().m_FontSize && !m_Lines.empty() && font.Matches(m_Lines.front(), GetStyle()))
         return;
     m_Lines.clear();
     m_Paragraphs.clear();
     for (auto& entry : m_Wrapped)
         entry.m_Width = -1;
+    std::string display;
+    display.reserve(m_Text.size());
+    for (std::size_t i = 0; i < m_Text.size(); ++i)
+    {
+        if (m_Text[i] == '\r')
+        {
+            display += '\n';
+            if (i + 1 < m_Text.size() && m_Text[i + 1] == '\n')
+                ++i;
+        }
+        else if (m_Text.compare(i, 2, "\xC2\x85") == 0)
+        {
+            display += '\n';
+            ++i;
+        }
+        else if (m_Text.compare(i, 3, "\xE2\x80\xA8") == 0 || m_Text.compare(i, 3, "\xE2\x80\xA9") == 0)
+        {
+            display += '\n';
+            i += 2;
+        }
+        else
+            display += m_Text[i];
+    }
     std::size_t first = 0;
     do
     {
-        const auto end = m_Text.find('\n', first);
-        const auto line = TextBuffer::Sanitize(std::string_view(m_Text).substr(first, end - first));
+        const auto end = display.find('\n', first);
+        const auto line = TextBuffer::Sanitize(std::string_view(display).substr(first, end - first));
         m_Paragraphs.push_back(line);
-        m_Lines.push_back(font.Shape(line, GetStyle().m_FontSize));
+        m_Lines.push_back(font.Shape(line, GetStyle()));
         if (end == std::string::npos)
             break;
         first = end + 1;
-    } while (first <= m_Text.size());
+        if (m_Lines.size() > 4096)
+            throw std::length_error("A display label is limited to 4,096 paragraphs.");
+    } while (first <= display.size());
     m_LayoutSize = GetStyle().m_FontSize;
 }
 
@@ -92,44 +133,9 @@ const std::vector<TextLayout>& Label::Lines(FontFace& font, std::optional<float>
             wrapped.m_Lines.push_back(natural);
             continue;
         }
-        const auto& boundaries = natural.m_Offsets;
-        std::size_t first = 0;
-        while (first + 1 < boundaries.size())
-        {
-            const float edge = natural.m_Carets[first] + *width;
-            const auto found = std::upper_bound(natural.m_Carets.begin() + static_cast<std::ptrdiff_t>(first + 1),
-                                                natural.m_Carets.end(), edge + 0.001f);
-            std::size_t end = std::max(first + 1, static_cast<std::size_t>(found - natural.m_Carets.begin()) - 1);
-            if (end + 1 < boundaries.size())
-                for (auto at = end; at > first; --at)
-                {
-                    const auto byte = boundaries[at - 1];
-                    if (text[byte] == ' ' || text[byte] == '-')
-                    {
-                        end = at;
-                        break;
-                    }
-                }
-            auto visibleEnd = end;
-            while (visibleEnd > first + 1 && text[boundaries[visibleEnd - 1]] == ' ')
-                --visibleEnd;
-            auto line =
-                font.Shape(std::string_view(text).substr(boundaries[first], boundaries[visibleEnd] - boundaries[first]),
-                           GetStyle().m_FontSize);
-            // Reshape actual line boundaries; ligatures or kerning may differ from the paragraph estimate.
-            while (line.m_Width > *width + 0.01f && visibleEnd > first + 1)
-            {
-                --visibleEnd;
-                end = visibleEnd;
-                line = font.Shape(
-                    std::string_view(text).substr(boundaries[first], boundaries[visibleEnd] - boundaries[first]),
-                    GetStyle().m_FontSize);
-            }
+        auto lines = font.Wrap(text, GetStyle(), *width);
+        for (auto& line : lines)
             wrapped.m_Lines.push_back(std::move(line));
-            first = end;
-            while (first + 1 < boundaries.size() && text[boundaries[first]] == ' ')
-                ++first;
-        }
     }
     auto& entry = m_Wrapped[m_NextWrapped++ % m_Wrapped.size()];
     entry = std::move(wrapped);

@@ -1175,39 +1175,34 @@ class Provider final : public IRawElementProviderSimple,
             callbacks.m_Query = [state, id](NativeTextSnapshot& snapshot) -> HRESULT
             {
                 std::optional<NativeTextSnapshot> value;
-                const auto status = state->Call(
-                    value,
-                    [state, id](UiContext& ui) -> std::optional<NativeTextSnapshot>
-                    {
-                        const auto* editor = TextEditor(ui, id);
-                        auto node = ui.Semantics().GetNode(id);
-                        if (!editor || !node)
-                            return {};
-                        state->ApplyHostState(*node);
-                        NativeTextSnapshot current;
-                        current.m_Text = editor->GetText();
-                        current.m_Anchor = editor->GetSelectionAnchor();
-                        current.m_Caret = editor->GetSelectionCaret();
-                        current.m_ReadOnly = editor->IsReadOnly();
-                        current.m_Focused = ui.GetFocus() == editor;
-                        const auto content = editor->GetContentBounds();
-                        current.m_Visible = !node->m_Offscreen && content.m_Width > 0 && content.m_Height > 0;
-                        current.m_VisibleStart = editor->TextOffsetAt({content.m_X, content.m_Y});
-                        current.m_VisibleEnd = editor->TextOffsetAt({content.m_X + content.m_Width, content.m_Y});
-                        // Hit testing chooses the nearest caret; include
-                        // graphemes that are only partially in the clip.
-                        const auto boundaries = TextBuffer::Graphemes(current.m_Text);
-                        auto first = std::lower_bound(boundaries.begin(), boundaries.end(), current.m_VisibleStart);
-                        if (first != boundaries.begin() && editor->GetTextRangeBounds(*first, *first).m_X > content.m_X)
-                            current.m_VisibleStart = *std::prev(first);
-                        auto last = std::lower_bound(boundaries.begin(), boundaries.end(), *current.m_VisibleEnd);
-                        if (last != boundaries.end() && std::next(last) != boundaries.end() &&
-                            editor->GetTextRangeBounds(*last, *last).m_X < content.m_X + content.m_Width)
-                            current.m_VisibleEnd = *std::next(last);
-                        if (state->m_Observed.contains(id))
-                            state->m_TextSelections.try_emplace(id, current.m_Anchor, current.m_Caret);
-                        return current;
-                    });
+                const auto status =
+                    state->Call(value,
+                                [state, id](UiContext& ui) -> std::optional<NativeTextSnapshot>
+                                {
+                                    const auto* editor = TextEditor(ui, id);
+                                    auto node = ui.Semantics().GetNode(id);
+                                    if (!editor || !node)
+                                        return {};
+                                    state->ApplyHostState(*node);
+                                    NativeTextSnapshot current;
+                                    current.m_Text = editor->GetText();
+                                    current.m_Anchor = editor->GetSelectionAnchor();
+                                    current.m_Caret = editor->GetSelectionCaret();
+                                    current.m_ReadOnly = editor->IsReadOnly();
+                                    current.m_Focused = ui.GetFocus() == editor;
+                                    const auto content = editor->GetContentBounds();
+                                    current.m_Visible =
+                                        !node->m_Offscreen && content.m_Width > 0 && content.m_Height > 0;
+                                    current.m_VisibleRanges = editor->GetVisibleTextRanges();
+                                    if (!current.m_VisibleRanges.empty())
+                                    {
+                                        current.m_VisibleStart = current.m_VisibleRanges.front().first;
+                                        current.m_VisibleEnd = current.m_VisibleRanges.back().second;
+                                    }
+                                    if (state->m_Observed.contains(id))
+                                        state->m_TextSelections.try_emplace(id, current.m_Anchor, current.m_Caret);
+                                    return current;
+                                });
                 if (FAILED(status))
                     return status;
                 if (!value)
@@ -1215,23 +1210,26 @@ class Provider final : public IRawElementProviderSimple,
                 snapshot = std::move(*value);
                 return S_OK;
             };
-            callbacks.m_Bounds = [state, id](std::size_t start, std::size_t end, Rect& bounds) -> HRESULT
+            callbacks.m_Bounds = [state, id](std::size_t start, std::size_t end, std::vector<Rect>& bounds) -> HRESULT
             {
-                std::optional<Rect> value;
+                std::optional<std::vector<Rect>> value;
                 const auto status =
                     state->Call(value,
-                                [id, start, end](UiContext& ui) -> std::optional<Rect>
+                                [id, start, end](UiContext& ui) -> std::optional<std::vector<Rect>>
                                 {
                                     const auto* editor = TextEditor(ui, id);
                                     if (!editor || !ui.Platform().GetWindowMetrics().m_HasScreenCoordinates)
                                         return {};
-                                    return TextScreenBounds(ui, *editor, editor->GetTextRangeBounds(start, end));
+                                    auto rectangles = editor->GetTextRangeRectangles(start, end);
+                                    for (auto& rectangle : rectangles)
+                                        rectangle = TextScreenBounds(ui, *editor, rectangle);
+                                    return rectangles;
                                 });
                 if (FAILED(status))
                     return status;
                 if (!value)
                     return UIA_E_ELEMENTNOTAVAILABLE;
-                bounds = *value;
+                bounds = std::move(*value);
                 return S_OK;
             };
             callbacks.m_Select = [state, id](std::size_t anchor, std::size_t caret) -> HRESULT

@@ -681,9 +681,8 @@ std::vector<float> TableWidget::GetColumnWidths() const
             if (m_Columns[i].m_Size.m_Mode != SizeRule::Mode::Content || !GetContext())
                 continue;
             auto& font = GetContext()->GetFont();
-            const float sortWidth =
-                std::max(font.Shape(" ↑", header.m_FontSize).m_Width, font.Shape(" ↓", header.m_FontSize).m_Width);
-            float width = font.Shape(m_Columns[i].m_Title, header.m_FontSize).m_Width + headerInset + sortWidth;
+            const float sortWidth = std::max(font.Shape(" ↑", header).m_Width, font.Shape(" ↓", header).m_Width);
+            float width = font.Shape(m_Columns[i].m_Title, header).m_Width + headerInset + sortWidth;
             const auto data = m_View ? m_View->GetModel()->GetSnapshot() : ModelSnapshot{};
             if (m_View && data.GetColumns()[i].m_WidthHint)
                 width = std::max(width, *data.GetColumns()[i].m_WidthHint + cellInset);
@@ -700,9 +699,8 @@ std::vector<float> TableWidget::GetColumnWidths() const
                 end = std::min(count, first + visibleCount);
             }
             for (auto row = first; row < end; ++row)
-                width = std::max(
-                    width, font.Shape(GetCell(static_cast<int>(row), static_cast<int>(i)), cell.m_FontSize).m_Width +
-                               cellInset);
+                width = std::max(width, font.Shape(GetCell(static_cast<int>(row), static_cast<int>(i)), cell).m_Width +
+                                            cellInset);
             m_ContentWidths[i] = width;
         }
         m_FitAll = false;

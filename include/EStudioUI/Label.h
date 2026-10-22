@@ -25,6 +25,9 @@ class Label : public Widget
     bool IsWordWrap() const;
 
   protected:
+    //! Retires cached shaping when registered font resources change.
+    void OnFontsChanged() noexcept override;
+
     //! Measures shaped lines at the current CSS font size.
     Point Measure(FontFace& font) const override;
 

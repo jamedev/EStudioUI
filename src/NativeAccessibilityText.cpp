@@ -70,6 +70,13 @@ HRESULT Query(const NativeTextCallbacks& callbacks, NativeTextSnapshot& snapshot
     snapshot.m_VisibleEnd = Snap(boundaries, snapshot.m_VisibleEnd.value_or(snapshot.m_Text.size()));
     if (*snapshot.m_VisibleEnd < snapshot.m_VisibleStart)
         snapshot.m_VisibleEnd = snapshot.m_VisibleStart;
+    if (snapshot.m_VisibleRanges.empty())
+        snapshot.m_VisibleRanges.emplace_back(snapshot.m_VisibleStart, *snapshot.m_VisibleEnd);
+    for (auto& [first, last] : snapshot.m_VisibleRanges)
+    {
+        first = Snap(boundaries, first);
+        last = std::max(first, Snap(boundaries, last));
+    }
     return S_OK;
 }
 
@@ -345,22 +352,31 @@ class TextRange final : public ITextRangeProvider
                     *result = SafeArrayCreateVector(VT_R8, 0, 0);
                     return *result ? S_OK : E_OUTOFMEMORY;
                 }
-                Rect bounds;
+                std::vector<Rect> bounds;
                 code = m_Callbacks->m_Bounds(m_Start, m_End, bounds);
                 if (FAILED(code))
                     return code;
-                const auto visible = bounds.m_Width > 0 && bounds.m_Height > 0;
-                auto* array = SafeArrayCreateVector(VT_R8, 0, visible ? 4 : 0);
+                std::erase_if(bounds,
+                              [](const Rect& rectangle) { return rectangle.m_Width <= 0 || rectangle.m_Height <= 0; });
+                if (bounds.size() > 4096)
+                    return UIA_E_NOTSUPPORTED;
+                auto* array = SafeArrayCreateVector(VT_R8, 0, static_cast<ULONG>(bounds.size() * 4));
                 if (!array)
                     return E_OUTOFMEMORY;
-                const double values[] = {bounds.m_X, bounds.m_Y, bounds.m_Width, bounds.m_Height};
-                for (LONG index = 0; visible && index < 4; ++index)
+                LONG index = 0;
+                for (const auto& rectangle : bounds)
                 {
-                    code = SafeArrayPutElement(array, &index, const_cast<double*>(&values[index]));
-                    if (FAILED(code))
+                    const double values[] = {rectangle.m_X, rectangle.m_Y, rectangle.m_Width, rectangle.m_Height};
+                    for (const auto value : values)
                     {
-                        SafeArrayDestroy(array);
-                        return code;
+                        auto element = value;
+                        code = SafeArrayPutElement(array, &index, &element);
+                        if (FAILED(code))
+                        {
+                            SafeArrayDestroy(array);
+                            return code;
+                        }
+                        ++index;
                     }
                 }
                 *result = array;
@@ -853,15 +869,41 @@ class TextProvider final : public ITextProvider2
                     return code;
                 if (visible && !snapshot.m_Visible)
                     return UnknownArray(nullptr, result);
-                const auto first = visible ? snapshot.m_VisibleStart : std::min(snapshot.m_Anchor, snapshot.m_Caret);
-                const auto last = visible ? *snapshot.m_VisibleEnd : std::max(snapshot.m_Anchor, snapshot.m_Caret);
-                ITextRangeProvider* range = nullptr;
-                const auto created = TextRange::Create(m_Callbacks, std::move(snapshot), first, last, &range);
-                if (FAILED(created))
-                    return created;
-                const auto array = UnknownArray(range, result);
-                range->Release();
-                return array;
+                if (!visible)
+                {
+                    const auto first = std::min(snapshot.m_Anchor, snapshot.m_Caret);
+                    const auto last = std::max(snapshot.m_Anchor, snapshot.m_Caret);
+                    ITextRangeProvider* range = nullptr;
+                    const auto created = TextRange::Create(m_Callbacks, std::move(snapshot), first, last, &range);
+                    if (FAILED(created))
+                        return created;
+                    const auto array = UnknownArray(range, result);
+                    range->Release();
+                    return array;
+                }
+                if (snapshot.m_VisibleRanges.size() > 256 ||
+                    snapshot.m_Text.size() > 16 * 1024 * 1024 / snapshot.m_VisibleRanges.size())
+                    return UIA_E_NOTSUPPORTED;
+                const auto intervals = snapshot.m_VisibleRanges;
+                std::unique_ptr<SAFEARRAY, decltype(&SafeArrayDestroy)> array(
+                    SafeArrayCreateVector(VT_UNKNOWN, 0, static_cast<ULONG>(intervals.size())), SafeArrayDestroy);
+                if (!array)
+                    return E_OUTOFMEMORY;
+                LONG index = 0;
+                for (const auto& [first, last] : intervals)
+                {
+                    ITextRangeProvider* range = nullptr;
+                    auto created = TextRange::Create(m_Callbacks, snapshot, first, last, &range);
+                    if (FAILED(created))
+                        return created;
+                    created = SafeArrayPutElement(array.get(), &index, range);
+                    range->Release();
+                    if (FAILED(created))
+                        return created;
+                    ++index;
+                }
+                *result = array.release();
+                return S_OK;
             });
     }
 

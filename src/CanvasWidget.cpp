@@ -120,10 +120,13 @@ struct CanvasWidget::PaintCache
         }
     };
 
+    std::uint64_t m_FontRevision = 0, m_FontIdentity = 0;
+
     struct TextKey
     {
         const CanvasGeometryData* m_Data = nullptr;
         const FontFace* m_Font = nullptr;
+        FontSelection m_Selection;
 
         bool operator==(const TextKey&) const = default;
     };
@@ -132,7 +135,14 @@ struct CanvasWidget::PaintCache
     {
         std::size_t operator()(const TextKey& key) const
         {
-            return std::hash<const void*>{}(key.m_Data) ^ (std::hash<const void*>{}(key.m_Font) << 1);
+            auto hash = std::hash<const void*>{}(key.m_Data) ^ (std::hash<const void*>{}(key.m_Font) << 1);
+            const auto add = [&](std::size_t value) { hash ^= value + 0x9e3779b9U + (hash << 6) + (hash >> 2); };
+            add(std::hash<std::string>{}(key.m_Selection.m_Family));
+            add(std::hash<std::string>{}(key.m_Selection.m_Style));
+            add(std::hash<std::string>{}(key.m_Selection.m_Direction));
+            add(std::hash<std::string>{}(key.m_Selection.m_Language));
+            add(std::hash<float>{}(key.m_Selection.m_Weight));
+            return hash;
         }
     };
 
@@ -213,9 +223,22 @@ struct CanvasWidget::PaintCache
         return entry->second.m_Points;
     }
 
-    const TextLayout& Text(const CanvasGeometry& geometry, FontFace& font)
+    const TextLayout& Text(const CanvasGeometry& geometry, FontFace& font, const Style& style)
     {
-        const TextKey key{geometry.m_Data.get(), &font};
+        const auto revision = font.GetRevision();
+        const auto identity = font.GetIdentity();
+        if (m_FontRevision != revision || m_FontIdentity != identity)
+        {
+            m_Text.clear();
+            m_TextRecency.clear();
+            m_TextBytes = 0;
+            m_FontRevision = revision;
+            m_FontIdentity = identity;
+        }
+        const TextKey key{
+            geometry.m_Data.get(),
+            &font,
+            {style.m_FontFamily, 16, style.m_FontWeight, style.m_FontStyle, style.m_TextDirection, style.m_Language}};
         if (auto found = m_Text.find(key); found != m_Text.end())
         {
             ++m_Stats.m_TextHits;
@@ -224,11 +247,9 @@ struct CanvasWidget::PaintCache
         }
         ++m_Stats.m_TextMisses;
         // Shape at a fixed size, then scale the resolution-independent glyph outlines on the GPU.
-        m_TextScratch = font.Shape(geometry.m_Data->m_Text, 16);
-        const auto bytes = GeometryBytes(geometry) + m_TextScratch.m_Glyphs.capacity() * sizeof(PositionedGlyph) +
-                           m_TextScratch.m_Offsets.capacity() * sizeof(std::size_t) +
-                           m_TextScratch.m_Carets.capacity() * sizeof(float) + sizeof(TextEntry) + sizeof(TextKey) * 2 +
-                           128;
+        m_TextScratch = font.Shape(geometry.m_Data->m_Text, 16, style);
+        const auto bytes =
+            GeometryBytes(geometry) + m_TextScratch.StorageBytes() + sizeof(TextEntry) + sizeof(TextKey) * 2 + 128;
         if (bytes > s_MaxBytes)
             return m_TextScratch;
         while (!m_Text.empty() && (m_Text.size() >= s_MaxEntries || m_TextBytes + bytes > s_MaxBytes))
@@ -265,6 +286,14 @@ struct CanvasWidget::PaintCache
         return identity;
     }
 };
+
+void CanvasWidget::OnFontsChanged() noexcept
+{
+    m_PaintCache->m_Text.clear();
+    m_PaintCache->m_TextRecency.clear();
+    m_PaintCache->m_TextScratch = {};
+    m_PaintCache->m_TextBytes = 0;
+}
 
 CanvasWidget::CanvasWidget()
     : Widget("canvas"), m_Scene(std::make_shared<CanvasScene>()), m_PaintCache(std::make_unique<PaintCache>())
@@ -709,7 +738,7 @@ void CanvasWidget::DrawGeometry(Renderer& renderer, FontFace& font, const Canvas
             width / scale > std::numeric_limits<float>::max() * 0.25 ||
             height / scale > std::numeric_limits<float>::max() * 0.25)
             return;
-        const auto& layout = m_PaintCache->Text(geometry, font);
+        const auto& layout = m_PaintCache->Text(geometry, font, style);
         renderer.PushState();
         renderer.PushClip(screenBounds.Intersect(clip));
         renderer.PushState({static_cast<float>(scale), 0, 0, static_cast<float>(scale), position.m_X, position.m_Y});

@@ -63,6 +63,15 @@ class TextBox : public Widget, public TextInputClient
     //! Returns last-prepared canonical text-range geometry in untransformed layout coordinates.
     Rect GetTextRangeBounds(std::size_t start, std::size_t end) const;
 
+    //! Returns disjoint visual rectangles for a logical mixed-direction selection.
+    std::vector<Rect> GetTextRangeRectangles(std::size_t start, std::size_t end) const;
+
+    //! Returns the visible logical intervals, including partially clipped graphemes.
+    std::vector<std::pair<std::size_t, std::size_t>> GetVisibleTextRanges() const;
+
+    //! Returns the committed caret byte offset with bidirectional affinity.
+    TextCaret GetVisualCaret() const;
+
     //! Scrolls a canonical range into view while preserving the current selection.
     void RevealTextRange(std::size_t start, std::size_t end);
 
@@ -91,6 +100,9 @@ class TextBox : public Widget, public TextInputClient
     double NextCaretDeadline(double now) const;
 
   protected:
+    //! Retires cached shaping when registered font resources change.
+    void OnFontsChanged() noexcept override;
+
     //! Measures intrinsic editor dimensions.
     Point Measure(FontFace& font) const override;
 
@@ -146,6 +158,9 @@ class TextBox : public Widget, public TextInputClient
     //! Converts a pointer position into a grapheme boundary.
     std::size_t PointerOffset(Point position) const;
 
+    //! Converts a pointer hit without discarding bidirectional affinity.
+    TextCaret PointerCaret(Point position) const;
+
     //! Clears local temporary text without sending canonical change notifications.
     void ClearComposition();
 
@@ -160,6 +175,12 @@ class TextBox : public Widget, public TextInputClient
 
     //! Stores editing state independently of rendering.
     TextBuffer m_Buffer;
+
+    //! Chooses the preceding edge at split bidirectional caret boundaries.
+    bool m_CaretTrailing = false;
+
+    //! Preserves the visual anchor while extending a selection.
+    bool m_AnchorTrailing = false;
 
     //! Owns temporary preedit while canonical text and undo history remain unchanged.
     std::string m_CompositionText;

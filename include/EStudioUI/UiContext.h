@@ -554,7 +554,16 @@ class UiContext
                                      const AnimationOptions& options);
 
     //! Observes the font service, which outlives the context.
+    //! Grants the font service access to registration guards and cache retirement.
+    friend class FontFace;
+
+    //! Retires built-in/custom text caches outside active traversal.
+    void FontsChanged();
+
     FontFace& m_Font;
+
+    //! Last font registration revision consumed by measurement and layout.
+    std::uint64_t m_FontRevision = 0;
 
     //! Owns the window's root and descendants.
     Widget m_Root{"window"};

@@ -37,6 +37,9 @@ class ScrollWidget : public Widget
     std::size_t GetTextCacheBytes() const;
 
   protected:
+    //! Retires cached shaping when registered font resources change.
+    void OnFontsChanged() noexcept override;
+
     //! Returns stored scroll coordinates without recursively querying virtual geometry.
     Point GetStoredScrollOffset() const;
 
@@ -55,7 +58,10 @@ class ScrollWidget : public Widget
                      Rect clip, float opacity = 1) const;
 
     //! Returns a cached shaped caption; an oversized caption uses one replaceable scratch run.
-    const TextLayout& TextFor(FontFace& font, std::string_view text, float fontSize) const;
+    const TextLayout& TextFor(FontFace& font, std::string_view text, const Style& style) const;
+
+    //! Shapes a caption at an explicit size with the widget's inherited typography.
+    const TextLayout& TextFor(FontFace& font, std::string_view text, float size) const;
 
     //! Returns orientation and current pointer/drag state for one scrollbar paint part.
     unsigned ScrollPartState(bool horizontal, bool thumb) const;
@@ -105,6 +111,21 @@ class ScrollWidget : public Widget
 
         //! Requested logical-pixel font size.
         float m_FontSize = 0;
+
+        //! Lifetime-unique font service identity.
+        std::uint64_t m_Identity = 0;
+        //! Complete registration revision.
+        std::uint64_t m_Revision = 0;
+        //! Exact requested CSS families.
+        std::string_view m_Family;
+        //! Requested CSS weight.
+        float m_Weight = 400;
+        //! Requested CSS font style.
+        std::string_view m_Style;
+        //! Requested paragraph direction.
+        std::string_view m_Direction;
+        //! Requested shaping language.
+        std::string_view m_Language;
     };
 
     //! A shaped caption identity includes the font service and exact font size.
@@ -118,6 +139,21 @@ class ScrollWidget : public Widget
 
         //! Requested logical-pixel font size.
         float m_FontSize = 0;
+
+        //! Lifetime-unique font service identity.
+        std::uint64_t m_Identity = 0;
+        //! Complete registration revision.
+        std::uint64_t m_Revision = 0;
+        //! Exact requested CSS families.
+        std::string m_Family;
+        //! Requested CSS weight.
+        float m_Weight = 400;
+        //! Requested CSS font style.
+        std::string m_Style;
+        //! Requested paragraph direction.
+        std::string m_Direction;
+        //! Requested shaping language.
+        std::string m_Language;
 
         //! Compares every shaping input.
         bool operator==(const TextKey&) const = default;

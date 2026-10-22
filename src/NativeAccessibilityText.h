@@ -12,6 +12,8 @@
 #include <memory>
 #include <optional>
 #include <string>
+#include <vector>
+#include <utility>
 
 namespace EStudioUI::Detail
 {
@@ -28,6 +30,8 @@ struct NativeTextSnapshot
     std::size_t m_VisibleStart = 0;
     //! Last partially visible grapheme endpoint; absent means document end.
     std::optional<std::size_t> m_VisibleEnd{};
+    //! Disjoint visible logical intervals for mixed-direction text.
+    std::vector<std::pair<std::size_t, std::size_t>> m_VisibleRanges;
     //! Prevents editing while preserving text selection and reading.
     bool m_ReadOnly = false;
     //! Reports whether this editor owns the keyboard caret.
@@ -45,8 +49,8 @@ struct NativeTextCallbacks
     std::uint64_t m_Identity = 0;
     //! Queries committed text, selection, and visibility without changing layout.
     std::function<HRESULT(NativeTextSnapshot&)> m_Query{};
-    //! Returns a clipped physical desktop rectangle for a UTF-8 byte range.
-    std::function<HRESULT(std::size_t, std::size_t, Rect&)> m_Bounds{};
+    //! Returns clipped physical desktop rectangles for a logical UTF-8 byte range.
+    std::function<HRESULT(std::size_t, std::size_t, std::vector<Rect>&)> m_Bounds{};
     //! Replaces only the selection through the canonical editor operation.
     std::function<HRESULT(std::size_t, std::size_t)> m_Select{};
     //! Maps physical desktop coordinates to the nearest UTF-8 grapheme boundary.

@@ -5,3 +5,7 @@
 /benchmark-local/
 CMakeUserPresets.json
 *.user
+/third_party/fonts/NotoSansArabic.ttf
+/third_party/fonts/NotoSansDevanagari.ttf
+/third_party/fonts/NotoSansHebrew.ttf
+/third_party/fonts/NotoSansItalic.ttf

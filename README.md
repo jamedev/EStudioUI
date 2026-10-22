@@ -13,12 +13,24 @@ current capabilities from proposed work and define delivery prerequisites.
 The [developer experience principles](DEVELOPER_EXPERIENCE.md) make simple,
 safe application code an acceptance requirement for every foundation change.
 
-F09 input/actions/focus is delivered. The current priorities are F11 platform/
-accessibility and F10a essential widget text/input, followed by broad controls and application
-workspaces. F10b document editing is a later track. F14 module extraction and SDK
+F09 input/actions/focus, F11 platform contracts, and F10a essential control text
+are implemented. The next increment adds the first common-control batch and
+application workspaces. F10b document editing is a later track. F14 module extraction and SDK
 packaging are deferred until that use informs reusable boundaries, including
 services for applications without a UI. Standalone modules are planned, not
 current package capabilities; see the roadmaps for acceptance criteria.
+
+## Control typography and bidirectional text (0.17)
+
+Open **Text & fonts** for fallback captions, real weight/italic selection,
+mixed-direction single-line editing and wrapping labels. Inherited CSS selects
+families, weight, style, direction and language; selections, pointer hits, visual
+arrow navigation and preedit share shaped geometry. GPU glyph identities include
+the actual font instance. CPU and GPU text caches have explicit budgets and
+retirement. See [TEXT.md](TEXT.md), the compiled [example](examples/ControlText.cpp),
+and [verification](verification/TEXT_0_17.md) for supported behavior and limits.
+
+![Control text drawn by the actual EStudioUI renderer](verification/text-foundation-0-17.png)
 
 ## Native services, composition and accessibility (0.16)
 
@@ -34,8 +46,8 @@ See [PLATFORM.md](PLATFORM.md), the compiled
 Preedit is GPU presentation separate from committed text; a commit is one validated
 undoable edit. Virtual rows/cells/tree records/canvas items have stable identities
 without per-row widgets. Native acceptance results and explicit work budgets are
-recorded in the verification guide. F10a font fallback/full script-direction work
-and interactive input-method/accessibility/DPI acceptance remain open; Gate B stays open.
+recorded in the verification guide. Interactive input-method/accessibility/DPI
+acceptance remains open and is tracked separately from automated verification.
 
 ## Shared actions, input, focus, and popup sessions (0.14)
 
@@ -65,8 +77,7 @@ remains usable from input handlers while nested frames/event pumping are guarded
 
 See [INPUT.md](INPUT.md), the compiled [input example](examples/InputActions.cpp),
 and [0.14 verification](verification/INPUT_0_14.md) for APIs and measured limits.
-F11 platform composition is described above; F10a font resolution/fallback and
-complete script/direction support remain next.
+F11 platform composition is described above; F10a control typography is described below.
 
 ![Shared actions and nested modal content rendered by EStudioUI](verification/input-foundation.png)
 

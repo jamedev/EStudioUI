@@ -1,0 +1,14 @@
+#text-foundation { padding: 20px; gap: 14px; }
+#text-foundation .text-heading { font-size: 26px; font-weight: 700; color: #81bbff; }
+#text-foundation .text-note { font-size: 14px; color: #91a5c3; text-wrap: wrap; }
+#text-foundation .text-caption { font-size: 22px; min-height: 48px; height: auto; }
+#text-foundation .text-bold { font-weight: 700; }
+#text-foundation .text-italic { font-style: italic; }
+#text-foundation .text-rtl { direction: rtl; text-align: right; font-family: "Noto Sans Arabic", "Noto Sans Hebrew", sans-serif; }
+#text-foundation textbox { min-height: 64px; height: 64px; font-size: 22px; border-radius: 12px; background-image: linear-gradient(115deg, #182840, #182036); }
+#text-foundation textbox:focus { border-color: #60b6ff; box-shadow: 0 0 12px #3095ff55; }
+#text-foundation textbox::selection { background-image: linear-gradient(90deg, #126fc5, #7252ca); color: white; border-radius: 3px; }
+#text-foundation textbox::caret { background-color: #8bd9ff; width: 2px; }
+#text-foundation textbox::preedit { background-color: #ffbc64; height: 2px; }
+#text-foundation .text-wrap { direction: auto; text-wrap: wrap; font-size: 18px; height: auto; }
+#text-foundation .text-actions { flex-direction: row; gap: 10px; }

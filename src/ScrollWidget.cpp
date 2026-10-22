@@ -30,6 +30,14 @@ Rect Inset(Rect bounds, const Style& style)
 }
 } // namespace
 
+void ScrollWidget::OnFontsChanged() noexcept
+{
+    m_TextCache.clear();
+    m_TextRecency.clear();
+    m_TextScratch = {};
+    m_TextBytes = 0;
+}
+
 ScrollWidget::ScrollWidget(std::string type) : Widget(std::move(type))
 {
     RegisterStylePart("scroll-track", Horizontal | Vertical | Hover | Pressed,
@@ -141,7 +149,8 @@ void ScrollWidget::EnsureVisible(Rect rectangle)
 
 std::size_t ScrollWidget::TextHash::operator()(const TextKey& key) const
 {
-    return (*this)(TextLookup{key.m_Text, key.m_Font, key.m_FontSize});
+    return (*this)(TextLookup{key.m_Text, key.m_Font, key.m_FontSize, key.m_Identity, key.m_Revision, key.m_Family,
+                              key.m_Weight, key.m_Style, key.m_Direction, key.m_Language});
 }
 
 std::size_t ScrollWidget::TextHash::operator()(const TextLookup& key) const
@@ -149,28 +158,66 @@ std::size_t ScrollWidget::TextHash::operator()(const TextLookup& key) const
     auto hash = std::hash<std::string_view>{}(key.m_Text);
     hash ^= std::hash<const FontFace*>{}(key.m_Font) + 0x9e3779b9U + (hash << 6) + (hash >> 2);
     hash ^= std::hash<float>{}(key.m_FontSize) + 0x9e3779b9U + (hash << 6) + (hash >> 2);
+    const auto add = [&](std::size_t value) { hash ^= value + 0x9e3779b9U + (hash << 6) + (hash >> 2); };
+    add(std::hash<std::uint64_t>{}(key.m_Identity));
+    add(std::hash<std::uint64_t>{}(key.m_Revision));
+    add(std::hash<std::string_view>{}(key.m_Family));
+    add(std::hash<float>{}(key.m_Weight));
+    add(std::hash<std::string_view>{}(key.m_Style));
+    add(std::hash<std::string_view>{}(key.m_Direction));
+    add(std::hash<std::string_view>{}(key.m_Language));
     return hash;
 }
 
 bool ScrollWidget::TextKey::operator==(const TextLookup& other) const
 {
-    return m_Text == other.m_Text && m_Font == other.m_Font && m_FontSize == other.m_FontSize;
+    return m_Text == other.m_Text && m_Font == other.m_Font && m_FontSize == other.m_FontSize &&
+           m_Identity == other.m_Identity && m_Revision == other.m_Revision && m_Family == other.m_Family &&
+           m_Weight == other.m_Weight && m_Style == other.m_Style && m_Direction == other.m_Direction &&
+           m_Language == other.m_Language;
 }
 
-const TextLayout& ScrollWidget::TextFor(FontFace& font, std::string_view text, float fontSize) const
+const TextLayout& ScrollWidget::TextFor(FontFace& font, std::string_view text, float size) const
 {
+    auto style = GetStyle();
+    style.m_FontSize = size;
+    return TextFor(font, text, style);
+}
+
+const TextLayout& ScrollWidget::TextFor(FontFace& font, std::string_view text, const Style& style) const
+{
+    const float fontSize = style.m_FontSize;
     if (!std::isfinite(fontSize) || fontSize < 0)
         throw std::invalid_argument("Caption font size must be finite and nonnegative.");
-    if (auto found = m_TextCache.find(TextLookup{text, &font, fontSize}); found != m_TextCache.end())
+    const TextLookup lookup{text,
+                            &font,
+                            fontSize,
+                            font.GetIdentity(),
+                            font.GetRevision(),
+                            style.m_FontFamily,
+                            style.m_FontWeight,
+                            style.m_FontStyle,
+                            style.m_TextDirection,
+                            style.m_Language};
+    if (auto found = m_TextCache.find(lookup); found != m_TextCache.end())
     {
         m_TextRecency.splice(m_TextRecency.begin(), m_TextRecency, found->second.m_Recency);
         return found->second.m_Layout;
     }
-    const TextKey key{std::string(text), &font, fontSize};
-    auto layout = font.Shape(text, fontSize);
-    const auto bytes = 2 * (key.m_Text.capacity() + sizeof(TextKey)) + sizeof(TextEntry) + 128 +
-                       layout.m_Glyphs.capacity() * sizeof(PositionedGlyph) +
-                       layout.m_Offsets.capacity() * sizeof(std::size_t) + layout.m_Carets.capacity() * sizeof(float);
+    const TextKey key{std::string(text),
+                      &font,
+                      fontSize,
+                      lookup.m_Identity,
+                      lookup.m_Revision,
+                      std::string(lookup.m_Family),
+                      lookup.m_Weight,
+                      std::string(lookup.m_Style),
+                      std::string(lookup.m_Direction),
+                      std::string(lookup.m_Language)};
+    auto layout = font.Shape(text, style);
+    const auto bytes =
+        2 * (key.m_Text.capacity() + sizeof(TextKey)) + sizeof(TextEntry) + 128 + layout.StorageBytes() +
+        2 * (key.m_Family.capacity() + key.m_Style.capacity() + key.m_Direction.capacity() + key.m_Language.capacity());
     if (bytes > s_MaxTextBytes)
     {
         m_TextScratch = std::move(layout);
@@ -229,7 +276,7 @@ void ScrollWidget::DrawRowText(Renderer& renderer, FontFace& font, std::string_v
     const auto textClip = clip.Intersect(content);
     if (textClip.m_Width <= 0 || textClip.m_Height <= 0)
         return;
-    const auto& run = TextFor(font, text, style.m_FontSize);
+    const auto& run = TextFor(font, text, style);
     float x = content.m_X;
     if (style.m_TextAlign == "center")
         x += (content.m_Width - run.m_Width) * 0.5f;

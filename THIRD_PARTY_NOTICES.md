@@ -1,7 +1,7 @@
 # Third-party notices
 
 EStudioUI is MIT licensed. Runtime libraries use permissive licenses allowing
-commercial use; the demo font uses SIL OFL 1.1. Preserve the notices when
+commercial use; the demo fonts use SIL OFL 1.1. Preserve the notices when
 redistributing binaries. **This software uses the FreeType project
 (https://freetype.org/)** under the FTL alternative of its dual license.
 
@@ -10,7 +10,9 @@ Runtime packages come from `vcpkg.json`, pinned to the official registry's
 Kiwi uses the project overlay in `cmake/ports/kiwi`, pinned to upstream tag
 1.4.8, tree `ee80a5e061a61c0ff6d47b7c61ef95d68766b232` and a SHA-512 archive checksum.
 It has no binary or transitive dependencies and is private to the implementation.
-Both its BSD license and the bundled AssocVector notice permit commercial use;
+SheenBidi is pinned to upstream v3.0.0 with the official port archive SHA-512
+in `cmake/ports/sheenbidi`; it has no transitive dependencies.
+Both Kiwi's BSD license and the bundled AssocVector notice permit commercial use;
 its vcpkg copyright file includes both authoritative upstream texts.
 
 | Component | Version at baseline | Selected license | Purpose |
@@ -19,12 +21,15 @@ its vcpkg copyright file includes both authoritative upstream texts.
 | FreeType | 2.13.3 | FTL | Unhinted font outlines |
 | HarfBuzz | 10.2.0#3 | Old MIT / MIT-Modern-Variant | Text shaping |
 | Kiwi | 1.4.8 (project overlay) | BSD-3-Clause and bundled permissive Loki/MIT-style notice | Incremental linear layout solver |
+| SheenBidi | 3.0.0 (project overlay) | Apache-2.0 | Unicode bidirectional and script analysis |
+| libunibreak | 6.1#1 | zlib and Unicode data notice | Unicode line and word boundaries |
 | utf8proc | 2.10.0 | MIT and permissive Unicode data notice | Grapheme boundaries |
 | Generated GLAD loader | glad2 2.0.8, generated GL 3.3 core | CC0-1.0 alternative and Apache-2.0 API definitions | GL entry points |
 | Slug reference shader | EricLengyel/Slug, retrieved 2026-10-21 | MIT alternative | Analytic outline coverage |
-| Noto Sans | google/fonts/ofl/notosans, retrieved 2026-10-21 | SIL OFL 1.1 | Demo font |
+| Noto Sans | google/fonts/ofl/notosans, retrieved 2026-10-21 | SIL OFL 1.1 | Primary demo font |
+| Noto Sans Arabic, Hebrew, Devanagari; Noto Sans Italic | google/fonts commit `45e3d5269e4a17d823f6d84470bc084dc5ae46f6` | SIL OFL 1.1 | Demo fallback and actual italic faces |
 
-All five vcpkg dependencies disable default features. HarfBuzz does not enable
+All seven vcpkg dependencies disable default features. HarfBuzz does not enable
 GLib, ICU, Cairo, Graphite, or platform shapers; FreeType does not enable external
 image/compression libraries. The Windows triplet builds static dependencies with
 the dynamic MSVC runtime. vcpkg may download build-only tools such as Meson,
@@ -49,3 +54,8 @@ loader, and reference shader checksums are recorded in `third_party/SOURCES.sha2
 
 Host C/C++ runtimes, operating-system frameworks, X11 libraries, and graphics
 drivers are supplied by the OS/toolchain and retain their own terms.
+
+The additional demo/test fonts are fetched by `cmake/ControlFonts.cmake` at the
+pinned google/fonts revision above, with a SHA-256 per file. They are copied next
+to the demo with their OFL notices. Library-only builds do not fetch these fonts.
+For offline builds, prepopulate `ESTUDIOUI_CONTROL_FONT_DIR` with these exact files.

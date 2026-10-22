@@ -14,7 +14,8 @@ class Painter
 {
   public:
     //! Saves renderer state, installs a parent-space clip, and translates to a local origin.
-    Painter(Renderer& renderer, FontFace& font, Rect clip, float opacity = 1, Point origin = {});
+    Painter(Renderer& renderer, FontFace& font, Rect clip, float opacity = 1, Point origin = {},
+            const Style* textStyle = nullptr);
 
     //! Restores all renderer state, including unbalanced local Save calls.
     ~Painter();
@@ -122,6 +123,9 @@ class Painter
 
     //! Observes the font service.
     FontFace& m_Font;
+
+    //! Optional widget typography observed for the painter's lexical lifetime.
+    const Style* m_TextStyle = nullptr;
 
     //! Fixed outer rectangle in constructor-parent coordinates.
     Rect m_Clip;

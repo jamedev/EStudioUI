@@ -59,8 +59,9 @@ separate from TextBuffer, paints its temporary run and underline through the GPU
 and commits one validated undoable edit. Focus/owner loss expires pending input.
 The Windows adapter updates candidate geometry from the prepared caret and current
 window metrics rather than asking widgets to handle native messages. Custom
-editors implement TextInputClient; F10a still supplies the later font-resolution
-and complete script/direction work. Native input-method, assistive-technology and
+editors implement TextInputClient. F10a now shares actual-font resolution,
+script/bidi runs, visual caret affinity and disjoint range geometry across all
+control text; [TEXT.md](TEXT.md) documents resource ownership and budgets. Native input-method, assistive-technology and
 mixed-monitor observations remain separate acceptance evidence; see [PLATFORM.md](PLATFORM.md).
 
 ## Frame and cache behavior

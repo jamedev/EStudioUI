@@ -39,8 +39,8 @@ float Opacity(float value)
 }
 } // namespace
 
-Painter::Painter(Renderer& renderer, FontFace& font, Rect clip, float opacity, Point origin)
-    : m_Renderer(renderer), m_Font(font), m_Clip(clip), m_InheritedOpacity(Opacity(opacity))
+Painter::Painter(Renderer& renderer, FontFace& font, Rect clip, float opacity, Point origin, const Style* textStyle)
+    : m_Renderer(renderer), m_Font(font), m_TextStyle(textStyle), m_Clip(clip), m_InheritedOpacity(Opacity(opacity))
 {
     Validate(clip);
     Validate(origin);
@@ -280,7 +280,7 @@ void Painter::DrawText(std::string_view text, Point baseline, float fontSize)
     m_Affinity.VerifyAccess("Painter::DrawText");
     if (!std::isfinite(fontSize) || fontSize <= 0)
         throw std::invalid_argument("Painter font size must be finite and positive.");
-    DrawText(m_Font.Shape(text, fontSize), baseline);
+    DrawText(m_TextStyle ? m_Font.Shape(text, fontSize, *m_TextStyle) : m_Font.Shape(text, fontSize), baseline);
 }
 
 FontFace& Painter::GetFont() const

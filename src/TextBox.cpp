@@ -8,6 +8,15 @@
 
 namespace EStudioUI
 {
+void TextBox::OnFontsChanged() noexcept
+{
+    m_Layout = {};
+    m_CompositionLayout = {};
+    m_PlaceholderLayout = {};
+    m_LayoutText.clear();
+    m_LayoutSize = m_CompositionLayoutSize = m_PlaceholderLayoutSize = -1;
+}
+
 TextBox::TextBox(std::string text) : Widget("textbox")
 {
     SetCursor(CursorShape::Text);
@@ -117,10 +126,17 @@ void TextBox::SetSelection(std::size_t anchor, std::size_t caret)
     if (!EndComposition())
         return;
     m_Buffer.SetSelection(anchor, caret);
+    m_CaretTrailing = m_AnchorTrailing = false;
     ResetCaret();
 }
 
-Rect TextBox::GetTextRangeBounds(std::size_t start, std::size_t end) const
+TextCaret TextBox::GetVisualCaret() const
+{
+    VerifyAccess();
+    return {m_Buffer.GetCaret(), m_CaretTrailing};
+}
+
+std::vector<Rect> TextBox::GetTextRangeRectangles(std::size_t start, std::size_t end) const
 {
     VerifyAccess();
     if (start > end || end > m_Buffer.GetText().size())
@@ -130,10 +146,60 @@ Rect TextBox::GetTextRangeBounds(std::size_t start, std::size_t end) const
     EnsureCaretVisible();
     const auto content = GetContentBounds();
     const float height = m_Layout.m_Ascender + m_Layout.m_Descender;
-    const float left = m_Layout.CaretPosition(start);
-    const float right = m_Layout.CaretPosition(end);
-    return {TextOriginX() + std::min(left, right), content.m_Y + (content.m_Height - height) * 0.5f,
-            std::max(start == end ? CaretWidth() : 0.0f, std::abs(right - left)), height};
+    auto rectangles = m_Layout.SelectionRectangles(start, end);
+    if (start == end)
+        rectangles.push_back({m_Layout.CaretPosition(TextCaret{start, start == m_Buffer.GetCaret() && m_CaretTrailing}),
+                              0, CaretWidth(), height});
+    const float x = TextOriginX(), y = content.m_Y + (content.m_Height - height) * 0.5f;
+    for (auto& rectangle : rectangles)
+    {
+        rectangle.m_X += x;
+        rectangle.m_Y += y;
+    }
+    return rectangles;
+}
+
+Rect TextBox::GetTextRangeBounds(std::size_t start, std::size_t end) const
+{
+    const auto rectangles = GetTextRangeRectangles(start, end);
+    if (rectangles.empty())
+    {
+        const auto content = GetContentBounds();
+        return {TextOriginX() + m_Layout.CaretPosition(start), content.m_Y, 0, content.m_Height};
+    }
+    auto result = rectangles.front();
+    for (const auto& rectangle : rectangles)
+    {
+        const float right = std::max(result.m_X + result.m_Width, rectangle.m_X + rectangle.m_Width);
+        const float bottom = std::max(result.m_Y + result.m_Height, rectangle.m_Y + rectangle.m_Height);
+        result.m_X = std::min(result.m_X, rectangle.m_X);
+        result.m_Y = std::min(result.m_Y, rectangle.m_Y);
+        result.m_Width = right - result.m_X;
+        result.m_Height = bottom - result.m_Y;
+    }
+    return result;
+}
+
+std::vector<std::pair<std::size_t, std::size_t>> TextBox::GetVisibleTextRanges() const
+{
+    VerifyAccess();
+    if (auto* context = GetContext())
+        EnsureLayout(context->GetFont());
+    EnsureCaretVisible();
+    const auto content = GetContentBounds();
+    const float left = content.m_X - TextOriginX(), right = left + content.m_Width;
+    std::vector<std::pair<std::size_t, std::size_t>> ranges;
+    for (const auto& span : m_Layout.m_Spans)
+        if (span.m_Right > left && span.m_Left < right)
+        {
+            if (!ranges.empty() && ranges.back().second == span.m_First)
+                ranges.back().second = span.m_Last;
+            else
+                ranges.emplace_back(span.m_First, span.m_Last);
+        }
+    if (ranges.empty())
+        ranges.emplace_back(m_Buffer.GetCaret(), m_Buffer.GetCaret());
+    return ranges;
 }
 
 void TextBox::RevealTextRange(std::size_t start, std::size_t end)
@@ -144,8 +210,9 @@ void TextBox::RevealTextRange(std::size_t start, std::size_t end)
     if (auto* context = GetContext())
         EnsureLayout(context->GetFont());
     const float width = std::max(1.0f, GetContentBounds().m_Width - std::max(2.0f, CaretWidth()));
-    const float left = m_Layout.CaretPosition(start);
-    const float right = m_Layout.CaretPosition(end);
+    const auto bounds = GetTextRangeBounds(start, end);
+    const float left = bounds.m_X - TextOriginX();
+    const float right = left + bounds.m_Width;
     if (right - m_ScrollX > width)
         m_ScrollX = right - width;
     if (left < m_ScrollX)
@@ -174,7 +241,8 @@ TextInputState TextBox::GetTextInputState() const
     const auto content = GetContentBounds();
     const auto& line = DisplayLayout();
     const float height = line.m_Ascender + line.m_Descender;
-    state.m_CaretBounds = {TextOriginX() + line.CaretPosition(DisplayCaret()),
+    state.m_CaretBounds = {TextOriginX() +
+                               line.CaretPosition(TextCaret{DisplayCaret(), !m_Composing && m_CaretTrailing}),
                            content.m_Y + (content.m_Height - height) * 0.5f, CaretWidth(), height};
     state.m_Composing = m_Composing;
     state.m_ReadOnly = m_ReadOnly;
@@ -377,13 +445,15 @@ void TextBox::SelectAll()
 
 void TextBox::EnsureLayout(FontFace& font) const
 {
-    if (m_LayoutSize != GetStyle().m_FontSize || m_LayoutText != m_Buffer.GetText())
+    if (m_LayoutSize != GetStyle().m_FontSize || m_LayoutText != m_Buffer.GetText() ||
+        !font.Matches(m_Layout, GetStyle()))
     {
-        m_Layout = font.Shape(m_Buffer.GetText(), GetStyle().m_FontSize, true);
+        m_Layout = font.Shape(m_Buffer.GetText(), GetStyle(), true);
         m_LayoutText = m_Buffer.GetText();
         m_LayoutSize = GetStyle().m_FontSize;
     }
-    if (m_Composing && m_CompositionLayoutSize != GetStyle().m_FontSize)
+    if (m_Composing &&
+        (m_CompositionLayoutSize != GetStyle().m_FontSize || !font.Matches(m_CompositionLayout, GetStyle())))
     {
         const auto start = std::min(m_CompositionAnchor, m_CompositionOriginalCaret);
         const auto end = std::max(m_CompositionAnchor, m_CompositionOriginalCaret);
@@ -392,13 +462,13 @@ void TextBox::EnsureLayout(FontFace& font) const
         visual.append(m_Buffer.GetText(), 0, start);
         visual += m_CompositionText;
         visual.append(m_Buffer.GetText(), end);
-        m_CompositionLayout = font.Shape(visual, GetStyle().m_FontSize, true);
+        m_CompositionLayout = font.Shape(visual, GetStyle(), true);
         m_CompositionLayoutSize = GetStyle().m_FontSize;
     }
     const float placeholderSize = GetPartStyle("placeholder").m_FontSize;
-    if (m_PlaceholderLayoutSize != placeholderSize)
+    if (m_PlaceholderLayoutSize != placeholderSize || !font.Matches(m_PlaceholderLayout, GetPartStyle("placeholder")))
     {
-        m_PlaceholderLayout = font.Shape(m_Placeholder, placeholderSize, true);
+        m_PlaceholderLayout = font.Shape(m_Placeholder, GetPartStyle("placeholder"), true);
         m_PlaceholderLayoutSize = placeholderSize;
     }
 }
@@ -444,7 +514,7 @@ void TextBox::EnsureCaretVisible() const
     if (m_RevealOverride)
         return;
     const float width = std::max(1.0f, GetContentBounds().m_Width - std::max(2.0f, CaretWidth()));
-    const float caret = DisplayLayout().CaretPosition(DisplayCaret());
+    const float caret = DisplayLayout().CaretPosition(TextCaret{DisplayCaret(), !m_Composing && m_CaretTrailing});
     if (caret - m_ScrollX > width)
         m_ScrollX = caret - width;
     else if (caret < m_ScrollX)
@@ -473,6 +543,7 @@ void TextBox::AfterEdit(bool changed)
         UpdatePresentationState(m_Validator ? m_Validator->Validate(m_Buffer.GetText()) : ValidationState::Acceptable);
     if (changed)
     {
+        m_CaretTrailing = m_AnchorTrailing = false;
         m_LayoutSize = -1;
         Invalidate(Invalidation::Content);
     }
@@ -499,12 +570,17 @@ bool TextBox::UpdatePresentationState(ValidationState state)
     return changed;
 }
 
-std::size_t TextBox::PointerOffset(Point position) const
+TextCaret TextBox::PointerCaret(Point position) const
 {
     if (auto* context = GetContext())
         EnsureLayout(context->GetFont());
     EnsureCaretVisible();
-    return m_Layout.HitTest(position.m_X - TextOriginX());
+    return m_Layout.HitTestCaret(position.m_X - TextOriginX());
+}
+
+std::size_t TextBox::PointerOffset(Point position) const
+{
+    return PointerCaret(position).m_Offset;
 }
 
 void TextBox::OnPointerDown(const PointerEvent& event)
@@ -512,13 +588,25 @@ void TextBox::OnPointerDown(const PointerEvent& event)
     const auto ownerLease = RetainOwner();
     if (!EndComposition())
         return;
-    const auto offset = PointerOffset(event.m_Position);
+    const auto hit = PointerCaret(event.m_Position);
+    const auto offset = hit.m_Offset;
     if (event.m_Clicks >= 3)
         m_Buffer.SelectAll();
     else if (event.m_Clicks == 2)
         m_Buffer.SelectWord(offset);
     else
         m_Buffer.SetSelection(event.m_Modifiers.m_Shift ? m_Buffer.GetAnchor() : offset, offset);
+    if (event.m_Clicks == 1)
+    {
+        m_CaretTrailing = hit.m_Trailing;
+        if (!event.m_Modifiers.m_Shift)
+            m_AnchorTrailing = hit.m_Trailing;
+    }
+    else
+    {
+        m_AnchorTrailing = false;
+        m_CaretTrailing = true;
+    }
     m_Dragging = event.m_Clicks == 1;
     ResetCaret();
 }
@@ -527,7 +615,9 @@ void TextBox::OnPointerMove(const PointerEvent& event)
 {
     if (m_Dragging)
     {
-        m_Buffer.SetSelection(m_Buffer.GetAnchor(), PointerOffset(event.m_Position));
+        const auto hit = PointerCaret(event.m_Position);
+        m_Buffer.SetSelection(m_Buffer.GetAnchor(), hit.m_Offset);
+        m_CaretTrailing = hit.m_Trailing;
         ResetCaret();
     }
 }
@@ -603,14 +693,38 @@ void TextBox::OnKey(Key key, bool down, bool, Modifiers modifiers)
         else if (key == Key::Y && !m_ReadOnly)
             changed = m_Buffer.Redo();
     }
-    if (key == Key::Left)
-        m_Buffer.Move(-1, modifiers.m_Shift, modifiers.m_Control);
-    else if (key == Key::Right)
-        m_Buffer.Move(1, modifiers.m_Shift, modifiers.m_Control);
-    else if (key == Key::Home)
-        m_Buffer.MoveToEdge(false, modifiers.m_Shift);
-    else if (key == Key::End)
-        m_Buffer.MoveToEdge(true, modifiers.m_Shift);
+    if (key == Key::Left || key == Key::Right || key == Key::Home || key == Key::End)
+    {
+        if (auto* context = GetContext())
+            EnsureLayout(context->GetFont());
+        if (m_Layout.m_VisualCarets.empty())
+        {
+            if (key == Key::Home || key == Key::End)
+                m_Buffer.MoveToEdge(key == Key::End, modifiers.m_Shift);
+            else
+                m_Buffer.Move(key == Key::Left ? -1 : 1, modifiers.m_Shift, modifiers.m_Control);
+        }
+        else
+        {
+            auto target = GetVisualCaret();
+            if (key == Key::Home || key == Key::End)
+                target = m_Layout.EdgeCaret(key == Key::End);
+            else if (m_Buffer.HasSelection() && !modifiers.m_Shift)
+            {
+                const TextCaret anchor{m_Buffer.GetAnchor(), m_AnchorTrailing};
+                const bool chooseAnchor =
+                    (m_Layout.CaretPosition(anchor) < m_Layout.CaretPosition(target)) == (key == Key::Left);
+                if (chooseAnchor)
+                    target = anchor;
+            }
+            else
+                target = m_Layout.MoveCaret(target, key == Key::Left ? -1 : 1, modifiers.m_Control);
+            m_Buffer.SetSelection(modifiers.m_Shift ? m_Buffer.GetAnchor() : target.m_Offset, target.m_Offset);
+            m_CaretTrailing = target.m_Trailing;
+            if (!modifiers.m_Shift)
+                m_AnchorTrailing = target.m_Trailing;
+        }
+    }
     else if (key == Key::Backspace && !m_ReadOnly)
         changed = m_Buffer.Backspace(modifiers.m_Control);
     else if (key == Key::Delete && !m_ReadOnly)
@@ -660,18 +774,23 @@ void TextBox::Paint(Renderer& renderer, FontFace& font, double time, float opaci
     color.m_A *= opacity;
     const auto start = std::min(m_Buffer.GetCaret(), m_Buffer.GetAnchor());
     const auto end = std::max(m_Buffer.GetCaret(), m_Buffer.GetAnchor());
-    const float selectionStart = m_Layout.CaretPosition(start);
-    const float selectionEnd = m_Layout.CaretPosition(end);
-    const Rect selection{baseline.m_X + selectionStart, content.m_Y, selectionEnd - selectionStart, content.m_Height};
+    auto selections = m_Layout.SelectionRectangles(start, end);
+    for (auto& selection : selections)
+    {
+        selection.m_X += baseline.m_X;
+        selection.m_Y = content.m_Y;
+        selection.m_Height = content.m_Height;
+    }
     if (!m_Composing && m_Buffer.HasSelection())
     {
         const auto& style = GetPartStyle("selection");
         if (style.m_Displayed && style.m_Opacity > 0)
-        {
-            renderer.PushState(style.m_Transform.Resolve(selection));
-            renderer.DrawBox(selection, style, clip, opacity * style.m_Opacity);
-            renderer.PopState();
-        }
+            for (const auto& selection : selections)
+            {
+                renderer.PushState(style.m_Transform.Resolve(selection));
+                renderer.DrawBox(selection, style, clip, opacity * style.m_Opacity);
+                renderer.PopState();
+            }
     }
     if (m_Buffer.GetText().empty() && !m_Composing)
     {
@@ -702,26 +821,29 @@ void TextBox::Paint(Renderer& renderer, FontFace& font, double time, float opaci
         {
             auto selected = style.m_Color;
             selected.m_A *= opacity * style.m_Opacity;
-            renderer.PushState(style.m_Transform.Resolve(selection));
-            renderer.DrawText(m_Layout, baseline, selected, clip.Intersect(selection));
-            renderer.PopState();
+            for (const auto& selection : selections)
+            {
+                renderer.PushState(style.m_Transform.Resolve(selection));
+                renderer.DrawText(m_Layout, baseline, selected, clip.Intersect(selection));
+                renderer.PopState();
+            }
         }
     }
     if (m_Composing && !m_CompositionText.empty())
     {
         const auto& style = GetPartStyle("preedit");
         const auto compositionStart = std::min(m_CompositionAnchor, m_CompositionOriginalCaret);
-        const float left = line.CaretPosition(compositionStart);
-        const float right = line.CaretPosition(compositionStart + m_CompositionText.size());
         const float thickness = std::max(0.0f, style.m_Height.Resolve(content.m_Height, 1));
-        const Rect underline{baseline.m_X + std::min(left, right), baseline.m_Y + line.m_Descender - thickness,
-                             std::abs(right - left), thickness};
         if (style.m_Displayed && style.m_Opacity > 0)
-        {
-            renderer.PushState(style.m_Transform.Resolve(underline));
-            renderer.DrawBox(underline, style, clip, opacity * style.m_Opacity);
-            renderer.PopState();
-        }
+            for (const auto& span :
+                 line.SelectionRectangles(compositionStart, compositionStart + m_CompositionText.size()))
+            {
+                const Rect underline{baseline.m_X + span.m_X, baseline.m_Y + line.m_Descender - thickness, span.m_Width,
+                                     thickness};
+                renderer.PushState(style.m_Transform.Resolve(underline));
+                renderer.DrawBox(underline, style, clip, opacity * style.m_Opacity);
+                renderer.PopState();
+            }
     }
     if (IsFocused() && !m_ReadOnly && static_cast<long long>(std::max(0.0, time - m_CaretEpoch) * 2) % 2 == 0)
     {
@@ -732,7 +854,8 @@ void TextBox::Paint(Renderer& renderer, FontFace& font, double time, float opaci
                 std::clamp(style.m_Height.Resolve(content.m_Height, content.m_Height),
                            std::min(style.m_MinHeight, content.m_Height),
                            std::min(std::max(style.m_MinHeight, style.m_MaxHeight), content.m_Height));
-            const Rect caret{baseline.m_X + line.CaretPosition(DisplayCaret()),
+            const Rect caret{baseline.m_X +
+                                 line.CaretPosition(TextCaret{DisplayCaret(), !m_Composing && m_CaretTrailing}),
                              content.m_Y + (content.m_Height - caretHeight) * 0.5f, CaretWidth(), caretHeight};
             renderer.PushState(style.m_Transform.Resolve(caret));
             renderer.DrawBox(caret, style, clip, opacity * style.m_Opacity);

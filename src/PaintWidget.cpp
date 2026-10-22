@@ -30,7 +30,7 @@ void PaintWidget::Paint(Renderer& renderer, FontFace& font, double time, float o
     const auto clip = content.Intersect(GetClip());
     if (clip.m_Width <= 0 || clip.m_Height <= 0)
         return;
-    Painter painter(renderer, font, clip, opacity, {content.m_X, content.m_Y});
+    Painter painter(renderer, font, clip, opacity, {content.m_X, content.m_Y}, &GetStyle());
     if (GetStyle().m_ClipContent)
     {
         auto bounds = GetBounds();

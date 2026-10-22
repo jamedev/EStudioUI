@@ -89,6 +89,12 @@ class Renderer
     //! Enables asynchronous GPU timers without blocking on pending query results.
     void SetGpuTimingEnabled(bool enabled);
 
+    //! Retires glyph buffers between frames and invalidates retained framebuffer history.
+    void ClearFontCache();
+
+    //! Sets a hard GPU outline/band budget, retiring existing cached glyphs.
+    void SetFontCacheLimit(std::size_t bytes);
+
     //! Starts recording a logical-pixel frame for retained rendering.
     void BeginFrame(float width, float height, int framebufferWidth, int framebufferHeight, Color clear);
 

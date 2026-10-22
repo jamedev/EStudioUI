@@ -11,8 +11,9 @@ std::string TextBuffer::Sanitize(std::string_view text)
 {
     std::string result;
     result.reserve(std::min<std::size_t>(text.size(), 1048576));
-    std::size_t offset = 0;
-    while (offset < text.size() && result.size() < 1048576)
+    std::size_t offset = 0, clusterStart = 0;
+    utf8proc_int32_t previous = -1, graphemeState = 0;
+    while (offset < text.size())
     {
         utf8proc_int32_t codepoint = 0;
         auto count = utf8proc_iterate(reinterpret_cast<const utf8proc_uint8_t*>(text.data() + offset),
@@ -25,13 +26,24 @@ std::string TextBuffer::Sanitize(std::string_view text)
         offset += static_cast<std::size_t>(count);
         if (codepoint == '\r' && offset < text.size() && text[offset] == '\n')
             continue;
-        if (codepoint == '\r' || codepoint == '\n' || codepoint == '\t' || codepoint == 0x2028 || codepoint == 0x2029)
+        if (codepoint == '\r' || codepoint == '\n' || codepoint == '\t' || codepoint == 0x85 || codepoint == 0x2028 ||
+            codepoint == 0x2029)
             codepoint = ' ';
         if (codepoint < 32 || codepoint == 127)
             continue;
         utf8proc_uint8_t encoded[4]{};
         const auto length = utf8proc_encode_char(codepoint, encoded);
+        const bool boundary = previous < 0 || utf8proc_grapheme_break_stateful(previous, codepoint, &graphemeState);
+        if (result.size() + static_cast<std::size_t>(length) > 1048576)
+        {
+            if (!boundary)
+                result.resize(clusterStart);
+            break;
+        }
+        if (boundary)
+            clusterStart = result.size();
         result.append(reinterpret_cast<const char*>(encoded), static_cast<std::size_t>(length));
+        previous = codepoint;
     }
     return result;
 }

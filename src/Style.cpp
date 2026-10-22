@@ -949,6 +949,19 @@ void StyleSheet::Apply(Style& style, const Declaration& declaration)
         style.m_BorderWidth = Number(value);
     else if (name == "border-radius")
         style.m_Radius = Number(value);
+    else if (name == "font-family")
+        SetStyleValue(style, StyleProperty::FontFamily, value);
+    else if (name == "font-weight")
+        SetStyleValue(style, StyleProperty::FontWeight,
+                      value == "normal" ? 400.0f
+                      : value == "bold" ? 700.0f
+                                        : Number(value));
+    else if (name == "font-style")
+        SetStyleValue(style, StyleProperty::FontStyle, value);
+    else if (name == "direction")
+        SetStyleValue(style, StyleProperty::TextDirection, value);
+    else if (name == "language")
+        SetStyleValue(style, StyleProperty::Language, value);
     else if (name == "font-size")
         style.m_FontSize = std::clamp(Number(value), 0.0f, 512.0f);
     else if (name == "opacity")
@@ -1444,6 +1457,11 @@ Style StyleSheet::Compute(const StyleNode& node, const Style* inherited, int pse
     {
         style.m_Color = inherited->m_Color;
         style.m_FontSize = inherited->m_FontSize;
+        style.m_FontFamily = inherited->m_FontFamily;
+        style.m_FontWeight = inherited->m_FontWeight;
+        style.m_FontStyle = inherited->m_FontStyle;
+        style.m_TextDirection = inherited->m_TextDirection;
+        style.m_Language = inherited->m_Language;
         style.m_TextAlign = inherited->m_TextAlign;
         style.m_WordWrap = inherited->m_WordWrap;
     }

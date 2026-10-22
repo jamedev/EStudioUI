@@ -13,6 +13,7 @@
 #include "ConstraintGallery.h"
 #include "InputGallery.h"
 #include "PlatformGallery.h"
+#include "TextGallery.h"
 
 #include <EStudioUI/ContextMenu.h>
 #include <EStudioUI/ListWidget.h>
@@ -149,6 +150,9 @@ class WidgetGallery
     std::unique_ptr<InputGallery> m_Input;
     //! Owns native-service and semantic inspection examples.
     std::unique_ptr<PlatformGallery> m_Platform;
+
+    //! Owns mixed-script typography and visual editing examples.
+    std::unique_ptr<TextGallery> m_Text;
     //! Observes the visible shortcut to a tab beyond a narrow tab strip.
     WidgetRef m_ConstraintShortcut;
 };

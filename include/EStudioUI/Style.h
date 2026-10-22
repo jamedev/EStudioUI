@@ -176,6 +176,21 @@ struct Style
     //! Inherited font size in logical pixels.
     float m_FontSize = 16;
 
+    //! Inherited ordered CSS family list, resolved against registered outline faces.
+    std::string m_FontFamily = "sans-serif";
+
+    //! Inherited numeric CSS font weight.
+    float m_FontWeight = 400;
+
+    //! Inherited normal, italic or oblique face selection.
+    std::string m_FontStyle = "normal";
+
+    //! Inherited auto, ltr or rtl paragraph direction.
+    std::string m_TextDirection = "auto";
+
+    //! Inherited BCP-47 language hint for shaping and line breaking.
+    std::string m_Language = "und";
+
     //! Local opacity, multiplied by ancestor opacity when painting.
     float m_Opacity = 1;
 

@@ -690,6 +690,37 @@ void NativeText(IUIAutomationElement& editor, IUIAutomationValuePattern& value, 
         caret->CompareEndpoints(TextPatternRangeEndpoint_Start, caret.Get(), TextPatternRangeEndpoint_End, &comparison),
         "Compare native caret endpoints");
     Check(comparison == 0, "Native caret range is degenerate at the canonical insertion position");
+    replacement = SysAllocString(L"abc אבג XYZ");
+    if (!replacement)
+        throw std::bad_alloc();
+    const auto mixedEdit = value.SetValue(replacement);
+    SysFreeString(replacement);
+    Require(mixedEdit, "Set native mixed-direction text");
+    ComPtr<IUIAutomationTextRange> mixedRange;
+    Require(text->get_DocumentRange(&mixedRange), "Read mixed-direction native range");
+    Require(mixedRange->MoveEndpointByUnit(TextPatternRangeEndpoint_Start, TextUnit_Character, 1, &moved),
+            "Move mixed native range start");
+    Require(mixedRange->MoveEndpointByUnit(TextPatternRangeEndpoint_End, TextUnit_Character, -6, &moved),
+            "Move mixed native range end");
+    rectangles = nullptr;
+    Require(mixedRange->GetBoundingRectangles(&rectangles), "Read disjoint native bidi range rectangles");
+    first = 0;
+    last = -1;
+    Require(SafeArrayGetLBound(rectangles, 1, &first), "Read bidi rectangle lower bound");
+    Require(SafeArrayGetUBound(rectangles, 1, &last), "Read bidi rectangle upper bound");
+    SafeArrayDestroy(rectangles);
+    Check(last - first + 1 == 8, "One contiguous logical mixed-direction range exposes two actual native rectangles");
+    Require(mixedRange->Select(), "Select native mixed-direction logical range");
+    contents = nullptr;
+    Require(mixedRange->GetText(-1, &contents), "Read selected logical mixed-direction text");
+    const bool logicalMixed = contents && std::wstring_view(contents) == L"bc א";
+    SysFreeString(contents);
+    Check(logicalMixed, "Native bidi geometry preserves logical selected text order");
+    ComPtr<IUIAutomationTextRangeArray> visibleMixed;
+    Require(text->GetVisibleRanges(&visibleMixed), "Read native mixed-direction visible ranges");
+    count = 0;
+    Require(visibleMixed->get_Length(&count), "Count native mixed-direction visible ranges");
+    Check(count >= 1, "Native visible ranges include the prepared mixed-script viewport");
     replacement = SysAllocString(L"After \u03a9");
     if (!replacement)
         throw std::bad_alloc();
@@ -1106,6 +1137,7 @@ int main()
         Require(initialized, "Initialize native platform test STA");
         NativeOwner native;
         FontFace font(ESTUDIOUI_FONT_PATH);
+        font.AddFont({std::filesystem::path(ESTUDIOUI_TEST_FONT_DIR) / "NotoSansHebrew.ttf"});
         UiContext ui(font);
         ui.GetDispatcher().SetWakeup([window = native.m_Window] { PostMessageW(window, WM_NULL, 0, 0); });
         ui.SetPlatformServices(Detail::CreateNativePlatformServices(Host(ui, native.m_Window)));

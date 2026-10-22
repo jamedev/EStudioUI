@@ -471,6 +471,10 @@ Widget* Widget::FindById(const std::string& id)
     return nullptr;
 }
 
+void Widget::OnFontsChanged() noexcept
+{
+}
+
 Point Widget::Measure(FontFace&) const
 {
     VerifyAccess();

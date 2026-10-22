@@ -52,6 +52,11 @@ enum class StyleProperty
     Decoration,
     Anchors,
     WordWrap,
+    FontFamily,
+    FontWeight,
+    FontStyle,
+    TextDirection,
+    Language,
     Count
 };
 

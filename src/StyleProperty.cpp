@@ -1,6 +1,7 @@
 #include <EStudioUI/StyleProperty.h>
 
 #include <array>
+#include <algorithm>
 #include <cmath>
 #include <stdexcept>
 #include <type_traits>
@@ -60,7 +61,12 @@ const auto s_Properties = std::to_array<PropertyInfo>({{"background-color", &Sty
                                                        {"overflow", &Style::m_ClipContent},
                                                        {"content", &Style::m_Decoration},
                                                        {"inset", &Style::m_Anchors},
-                                                       {"text-wrap", &Style::m_WordWrap}});
+                                                       {"text-wrap", &Style::m_WordWrap},
+                                                       {"font-family", &Style::m_FontFamily},
+                                                       {"font-weight", &Style::m_FontWeight},
+                                                       {"font-style", &Style::m_FontStyle},
+                                                       {"direction", &Style::m_TextDirection},
+                                                       {"language", &Style::m_Language}});
 static_assert(s_Properties.size() == static_cast<std::size_t>(StyleProperty::Count));
 
 const PropertyInfo& Info(StyleProperty property)
@@ -69,6 +75,28 @@ const PropertyInfo& Info(StyleProperty property)
     if (index >= s_Properties.size())
         throw std::invalid_argument("Unknown style property.");
     return s_Properties[index];
+}
+
+bool ValidFamilies(std::string_view value)
+{
+    if (value.empty() || value.size() > 1024 || value.find_first_of("\r\n\0", 0, 3) != std::string_view::npos)
+        return false;
+    char quote = 0;
+    std::size_t first = 0, count = 0;
+    for (std::size_t i = 0; i <= value.size(); ++i)
+    {
+        const char c = i == value.size() ? ',' : value[i];
+        if ((c == '\'' || c == '"') && (!quote || quote == c))
+            quote = quote ? 0 : c;
+        else if (c == ',' && !quote)
+        {
+            const auto family = value.substr(first, i - first);
+            if (family.find_first_not_of(" \t\"'") == std::string_view::npos || ++count > 16)
+                return false;
+            first = i + 1;
+        }
+    }
+    return !quote && count > 0;
 }
 
 float Finite(float value, float minimum = 0, float maximum = 1000000)
@@ -209,11 +237,13 @@ void SetStyleValue(Style& style, StyleProperty property, const StyleValue& value
                 throw std::invalid_argument("Incorrect value type for " + std::string(GetStylePropertyName(property)));
             if constexpr (std::is_same_v<Value, float>)
             {
-                const float minimum = property == StyleProperty::RowHeight ? 12.0f
+                const float minimum = property == StyleProperty::FontWeight  ? 1.0f
+                                      : property == StyleProperty::RowHeight ? 12.0f
                                       : property == StyleProperty::TranslateX || property == StyleProperty::TranslateY
                                           ? -1000000.0f
                                           : 0.0f;
-                const float maximum = property == StyleProperty::Opacity    ? 1.0f
+                const float maximum = property == StyleProperty::FontWeight ? 1000.0f
+                                      : property == StyleProperty::Opacity  ? 1.0f
                                       : property == StyleProperty::FontSize ? 512.0f
                                                                             : 1000000.0f;
                 style.*member = Finite(*typed, minimum, maximum);
@@ -221,8 +251,21 @@ void SetStyleValue(Style& style, StyleProperty property, const StyleValue& value
             else if constexpr (std::is_same_v<Value, std::string>)
             {
                 const bool valid =
-                    property == StyleProperty::Align ? (*typed == "stretch" || *typed == "start" ||
-                                                        *typed == "center" || *typed == "end" || *typed == "baseline")
+                    property == StyleProperty::FontFamily ? ValidFamilies(*typed)
+                    : property == StyleProperty::FontStyle
+                        ? (*typed == "normal" || *typed == "italic" || *typed == "oblique")
+                    : property == StyleProperty::TextDirection
+                        ? (*typed == "auto" || *typed == "ltr" || *typed == "rtl")
+                    : property == StyleProperty::Language
+                        ? (!typed->empty() && typed->size() <= 63 &&
+                           std::all_of(typed->begin(), typed->end(),
+                                       [](unsigned char c)
+                                       {
+                                           return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') ||
+                                                  (c >= '0' && c <= '9') || c == '-';
+                                       }))
+                    : property == StyleProperty::Align ? (*typed == "stretch" || *typed == "start" ||
+                                                          *typed == "center" || *typed == "end" || *typed == "baseline")
                     : property == StyleProperty::Justify
                         ? (*typed == "start" || *typed == "center" || *typed == "end" || *typed == "space-between")
                         : (*typed == "left" || *typed == "center" || *typed == "right");

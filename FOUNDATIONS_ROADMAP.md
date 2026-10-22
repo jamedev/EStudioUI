@@ -35,7 +35,7 @@ command history, geometry, and persistence; these are not promised modules or
 current standalone SDKs. Public API usability and supported extension points
 remain acceptance criteria throughout.
 
-## Implementation status: 0.16, composition and virtual semantics
+## Implementation status: 0.17, control typography
 
 The 0.14.1 maintenance increment fixes retained native window closure, stable
 GPU capture after presentation, and MSVC conversion warnings before the initial F11 increment.
@@ -67,7 +67,7 @@ and its remaining platform limits.
 | F08 | Implemented in 0.12: width-first constrained measurement, baselines and composition sources, shared box/grid/form/flow strategies, bounded caches, percentage-cycle fallback, owned child/track diagnostics; verification recorded below |
 | F09 | Implemented in 0.14: owning input payloads, rich native metadata, transactional shared actions and worker handles, scoped/ambiguity-safe shortcuts, local focus scopes, nested popup/modal sessions, menu nesting and phase/lifetime guards |
 | F11 | 0.16 implementation extends 0.15 native services with shared composition, Windows IMM, GPU preedit, stable virtual list/tree/table/canvas semantics and native collection/text/event patterns; automated Windows Release/Debug/native repetitions pass; interactive IME/AT/mixed-DPI acceptance remains open |
-| F10a | Remaining Gate B work: font resolution/fallback, complete script/direction/caret behavior and text-resource budgets; reuse the 0.16 F11 composition protocol |
+| F10a | Implemented in 0.17: actual font identity/selection/fallback, script and bidi shaping, visual caret affinity and disjoint selection, Unicode wrapping, shared composition and bounded CPU/GPU text caches; see TEXT.md and verification/TEXT_0_17.md |
 | F10b, F12, F16 | Planned: later document editing, feature-driven resource hardening, and reusable history/workspace services |
 | F14 | Deferred until broad widget/workspace use informs reusable module extraction and SDK packaging; not a Gate B prerequisite |
 
@@ -375,10 +375,12 @@ platforms and broader hardware coverage remain explicit F15 work.
 
 ## F10a: essential text and input before common controls
 
-The current TextBuffer intentionally sanitizes line breaks/tabs to spaces and
-keeps full-string history snapshots. FontFace shapes one LTR run from one face. The 0.16 composition protocol is
-implemented; font resolution and complete script/direction work below remain
-planned, not descriptions of shipped shaping capabilities.
+Implemented in 0.17 with the existing 0.16 composition protocol. TextBuffer
+continues to sanitize line breaks/tabs to spaces and retain full-string history
+snapshots. FontFace resolves actual registered fonts and shapes script/direction
+runs with visual caret mapping. See [TEXT.md](TEXT.md) and
+[verification](verification/TEXT_0_17.md) for evidence, limits and outstanding
+human native acceptance.
 
 F10a supplies the common services required by labels, buttons, menus, text and
 numeric fields, editable combos, and collection editors:
@@ -510,8 +512,10 @@ the actual failure paths before they spread into new widgets.
 Gate A, the F05/F07 first slice, F06 core, F08, the optional constraint-layout
 increment, and F09 are now delivered as recorded above. F11 composition/virtual
 semantics and automated native verification are complete; retain its interactive
-acceptance checklist. Next finish F10a, with relevant F12/F13/F15 work.
-Review Gate B integration, then expand the widget catalog and application
+acceptance checklist. F10a implementation is complete; its automated integration
+evidence and remaining human native acceptance are recorded separately. The
+user-authorized next increment is the first common-control batch, reusing these
+contracts while retaining that acceptance checklist. Then expand application
 workspaces. Keep the document-editor track F10b later and develop F16 with the
 workspaces that need it. Schedule F14 module extraction/package integration once
 real widget/workspace consumers establish useful boundaries, including non-UI

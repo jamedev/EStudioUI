@@ -124,7 +124,7 @@ void Css()
     Check(!error.empty() && css.GetRevision() == revision, "failed reload keeps stylesheet revision");
     Check(Near(css.Compute(button).m_Background.m_R, 18.0f / 255), "failed reload retains old rules");
     Check(!css.Parse("button { display: grid; }", error), "unsupported declaration value diagnosed");
-    Check(!css.Parse("button { font-family: imaginary; }", error), "unsupported property diagnosed");
+    Check(!css.Parse("button { font-stretch: imaginary; }", error), "unsupported property diagnosed");
     Check(!css.Parse("button { padding: -1px; }", error), "negative padding rejected");
     Check(!css.Parse("button { color: red;", error), "unclosed block rejected");
     Check(css.Parse(".card button { color: #1234; }", error), "four-digit alpha color");
