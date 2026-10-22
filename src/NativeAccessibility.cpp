@@ -6,6 +6,7 @@
 #include <EStudioUI/UiContext.h>
 
 #ifdef _WIN32
+#include <ole2.h>
 #include <UIAutomation.h>
 #include <commctrl.h>
 
@@ -126,7 +127,7 @@ struct ProviderState : std::enable_shared_from_this<ProviderState>
             {
                 const auto owner = m_Owner.lock();
                 result = function(*m_Ui);
-                return S_OK;
+                return m_Closed ? UIA_E_ELEMENTNOTAVAILABLE : S_OK;
             }
 
             struct Reply
@@ -143,6 +144,8 @@ struct ProviderState : std::enable_shared_from_this<ProviderState>
                     if (self->m_Closed)
                         return;
                     auto value = function(*root.GetContext());
+                    if (self->m_Closed)
+                        return;
                     std::lock_guard lock(reply->m_Mutex);
                     reply->m_Result = std::move(value);
                 });
@@ -173,6 +176,12 @@ struct ProviderState : std::enable_shared_from_this<ProviderState>
         }
     }
 
+    void ApplyHostState(SemanticNode& node) const
+    {
+        node.m_Enabled = node.m_Enabled && IsWindowEnabled(m_Window);
+        node.m_Offscreen = node.m_Offscreen || !IsWindowVisible(m_Window);
+    }
+
     HRESULT Node(SemanticId id, SemanticNode& node)
     {
         std::optional<SemanticNode> result;
@@ -182,7 +191,7 @@ struct ProviderState : std::enable_shared_from_this<ProviderState>
                                {
                                    auto value = ui.Semantics().GetNode(id);
                                    if (value)
-                                       value->m_Enabled = value->m_Enabled && IsWindowEnabled(self->m_Window);
+                                       self->ApplyHostState(*value);
                                    if (value && (self->m_Observed.size() < 64 || self->m_Observed.contains(id)))
                                        self->m_Observed.insert_or_assign(id, *value);
                                    return value;
@@ -745,12 +754,13 @@ struct NativeAccessibility::Impl
         {
             if (state->m_Closed)
                 break;
-            const auto node = tree.GetNode(id);
+            auto node = tree.GetNode(id);
             if (!node)
             {
                 state->m_Observed.erase(id);
                 continue;
             }
+            state->ApplyHostState(*node);
             state->m_Observed.insert_or_assign(id, *node);
             auto* provider = new Provider(state, id);
             const auto changed = [&](PROPERTYID property, VARIANT before, VARIANT after)

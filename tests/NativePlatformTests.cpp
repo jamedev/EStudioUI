@@ -10,6 +10,7 @@
 #include <EStudioUI/ToolButton.h>
 #include <EStudioUI/UiContext.h>
 
+#include <ole2.h>
 #include <UIAutomation.h>
 #include <wrl/client.h>
 
