@@ -368,4 +368,14 @@ void OpenGLWidget::OnKey(Key key, bool down, bool repeat, Modifiers modifiers)
 {
     m_Impl->m_Keys.Emit({key, down, repeat, modifiers});
 }
+
+bool OpenGLWidget::OnInput(const InputEvent& event)
+{
+    if (const auto* key = std::get_if<KeyboardEvent>(&event))
+    {
+        m_Impl->m_Keys.Emit(*key);
+        return true;
+    }
+    return Widget::OnInput(event);
+}
 } // namespace EStudioUI

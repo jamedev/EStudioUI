@@ -16,6 +16,17 @@
   Preserve stable IDs, final-candidate validation, typed values, immutable worker
   ownership, prevalidated adapter chains, and coherent deletion/selection updates.
   Keep viewport access bounded; document complete scans and selected-set copying.
+- Use Action/ActionState for shared commands and typed action handles for worker
+  requests. Preserve transaction validation, scoped shortcut precedence, ambiguity
+  handling, and domain/receiver expiry. Keep platform key normalization out of widgets.
+- Route owning InputEvent values through the shared input boundary. Preserve
+  physical/logical/scancode/pointer metadata, captured pointer/button identity,
+  transformed hit geometry, and deletion-safe preview paths. Explicit Prepare is
+  geometry-only; input must not pump native events, drain queues, or advance frames.
+- Reuse the popup/modal stack and PopupSession for asynchronous results. Preserve
+  logical CSS ownership, parent lifetimes, top-layer dismissal, focus restoration,
+  bounded depth, and callback-safe settlement. Native reentrant input is queued;
+  deactivation invalidates stale focus-session input and prevents popup reopening.
 - Declare built-in changes with the narrowest correct Invalidation impacts.
   Keep selector/inheritance dependencies correct and preserve unrelated intrinsic
   measurements. Verify work counters and actual pixels when changing cache behavior.

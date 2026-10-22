@@ -2,6 +2,7 @@
 #include <EStudioUI/Renderer.h>
 #include <EStudioUI/UiContext.h>
 #include <EStudioUI/CssMotion.h>
+#include <EStudioUI/Action.h>
 
 #include <algorithm>
 #include <bit>
@@ -24,7 +25,11 @@ Widget::~Widget()
     if (!IsOwnerThread())
         std::terminate();
     if (m_Context)
+    {
+        if (!m_Actions.empty())
+            m_Context->UnregisterActions(*this);
         m_Context->ReleaseSelectorOwner(*this);
+    }
     m_Lifetime.reset();
     m_LifetimeStop.request_stop();
 }
@@ -59,11 +64,16 @@ void Widget::Attach(UiContext* context, Widget* parent)
         context->VerifyAccess();
     if (parent)
         parent->VerifyAccess();
+    if (m_Context && !m_Actions.empty())
+        m_Context->UnregisterActions(*this);
     m_Context = context;
     m_Parent = parent;
     m_StyleDirty = m_SubtreeStyleDirty = m_DescendantStyleDirty = m_ArrangeDirty = true;
     m_IntrinsicValid = m_MeasureValid = false;
     m_Node.m_Parent = parent ? &parent->m_Node : nullptr;
+    if (m_Context)
+        for (const auto& association : m_Actions)
+            m_Context->RegisterAction(*this, association.m_Action, association.m_Scope);
     for (auto& child : m_Children)
         child->Attach(context, this);
 }
@@ -488,6 +498,76 @@ void Widget::OnPointerUp(const PointerEvent&)
 void Widget::OnKey(Key, bool, bool, Modifiers)
 {
     VerifyAccess();
+}
+
+bool Widget::OnInput(const InputEvent& event)
+{
+    VerifyAccess();
+    if (const auto* key = std::get_if<KeyboardEvent>(&event))
+        OnKey(key->m_Key, key->m_Down, key->m_Repeat, EditingModifiers(key->m_Modifiers));
+    else if (const auto* text = std::get_if<TextInputEvent>(&event))
+        OnText(text->m_Text);
+    else if (const auto* pointer = std::get_if<PointerEvent>(&event))
+    {
+        if (pointer->m_Type == PointerEventType::Cancel)
+            OnCaptureLost();
+        else if (pointer->m_Type == PointerEventType::Move)
+            OnPointerMove(*pointer);
+        else if (pointer->m_Button == PointerButton::Left && pointer->m_Type == PointerEventType::Down)
+            OnPointerDown(*pointer);
+        else if (pointer->m_Button == PointerButton::Left && pointer->m_Type == PointerEventType::Up)
+            OnPointerUp(*pointer);
+        else
+            return false;
+    }
+    else if (const auto* wheel = std::get_if<ScrollEvent>(&event))
+        return OnScroll(wheel->m_Delta, EditingModifiers(wheel->m_Modifiers));
+    return true;
+}
+
+bool Widget::OnInputPreview(const InputEvent& event)
+{
+    VerifyAccess();
+    if (const auto* key = std::get_if<KeyboardEvent>(&event))
+        return OnKeyPreview(key->m_Key, key->m_Down, key->m_Repeat, EditingModifiers(key->m_Modifiers));
+    return false;
+}
+
+void Widget::SetFocusScope(bool enabled)
+{
+    VerifyStructuralMutation();
+    m_FocusScope = enabled;
+}
+
+bool Widget::IsFocusScope() const
+{
+    VerifyAccess();
+    return m_FocusScope;
+}
+
+void Widget::AddAction(std::shared_ptr<Action> action, ShortcutScope scope)
+{
+    VerifyStructuralMutation();
+    if (!action || scope < ShortcutScope::Widget || scope > ShortcutScope::Window)
+        throw std::invalid_argument("An action association requires a valid action and scope.");
+    (void)action->GetSnapshot();
+    RemoveAction(action);
+    m_Actions.push_back({action, scope});
+    if (m_Context)
+        m_Context->RegisterAction(*this, std::move(action), scope);
+}
+
+void Widget::RemoveAction(const std::shared_ptr<Action>& action)
+{
+    VerifyStructuralMutation();
+    if (!std::erase_if(m_Actions, [&](const ActionAssociation& association) { return association.m_Action == action; }))
+        return;
+    if (m_Context)
+    {
+        m_Context->UnregisterActions(*this);
+        for (const auto& association : m_Actions)
+            m_Context->RegisterAction(*this, association.m_Action, association.m_Scope);
+    }
 }
 
 void Widget::OnText(std::string_view)

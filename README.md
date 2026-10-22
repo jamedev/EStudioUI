@@ -13,12 +13,39 @@ current capabilities from proposed work and define delivery prerequisites.
 The [developer experience principles](DEVELOPER_EXPERIENCE.md) make simple,
 safe application code an acceptance requirement for every foundation change.
 
-The current priority is F09 input/actions/focus, F11 platform/accessibility, and
-F10a essential widget text/input, followed by broad controls and application
+F09 input/actions/focus is delivered. The current priorities are F11 platform/
+accessibility and F10a essential widget text/input, followed by broad controls and application
 workspaces. F10b document editing is a later track. F14 module extraction and SDK
 packaging are deferred until that use informs reusable boundaries, including
 services for applications without a UI. Standalone modules are planned, not
 current package capabilities; see the roadmaps for acceptance criteria.
+
+## Shared actions, input, focus, and popup sessions (0.14)
+
+The demo opens **Input & actions** by default. One transactional command can drive
+buttons, toolbars, nested menus, split-tool choosers, and scoped shortcuts. Action
+handles queue worker requests with receiver/domain lifetime checks. Ambiguous
+shortcuts execute neither command; AltGr is kept separate from editing shortcuts.
+
+```cpp
+auto save = window.Ui().CreateAction("Save document");
+save->SetShortcut({EStudioUI::Key::S, EStudioUI::ShortcutModifier::Primary});
+toolbar.AddAction(save);
+menu.AddAction(save);
+save->Triggered().Connect([] { /* Save the application document. */ });
+```
+
+Local Tab scopes and a bounded popup/modal stack provide nested dismissal, logical
+CSS ancestry, focus restoration, and asynchronous results without a nested event
+loop. Native input retains logical/physical keys, scan codes, source timestamps,
+and pointer metadata; reentrant native delivery is queued. Geometry-only refresh
+remains usable from input handlers while nested frames/event pumping are guarded.
+
+See [INPUT.md](INPUT.md), the compiled [input example](examples/InputActions.cpp),
+and [0.14 verification](verification/INPUT_0_14.md) for APIs and measured limits.
+F11 accessibility/platform services and F10a native composition remain pending.
+
+![Shared actions and nested modal content rendered by EStudioUI](verification/input-foundation.png)
 
 ## Linear constraints and live resizing (0.13)
 
@@ -40,7 +67,7 @@ contracts and performance boundaries, and
 
 ## Predictable measurement and layout (0.12)
 
-The **Layout lab** now opens by default. Width-dependent labels measure their
+The **Layout lab** demonstrates width-dependent labels that measure their
 height at the allocated width; forms align painted baselines and share columns;
 flow rows wrap working tools; grids share Fixed/Content/Fill track allocation.
 Existing explicit sizes retain precedence over CSS. No runtime dependency was added.

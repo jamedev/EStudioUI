@@ -15,6 +15,9 @@ class ToolBar : public Widget
     //! Appends a compact command button.
     ToolButton& AddButton(std::string text);
 
+    //! Appends a presentation of one shared action.
+    ToolButton& AddAction(std::shared_ptr<Action> action);
+
     //! Appends a default command button with a popup action chooser.
     SplitToolButton& AddSplitButton(std::string text = "Tools");
 

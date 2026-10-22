@@ -290,6 +290,15 @@ screen-space stroke versus world-space geometry contract.
 
 ## Precision controls and custom painting (0.7)
 
+F09 shared actions reuse the ordinary button/tool-button CSS states. Canonical
+enabled/visible/checked changes update associated presentations; no new selector
+parser or per-frame CSS evaluation was added. Menus use `.menu-action` children,
+and submenu launchers also expose `.submenu-action`. Popup/modal content can be
+assembled from ordinary styled widgets. Context-owned overlays retain their
+logical owner's selector ancestry/inheritance while painting in independent
+root-level stack order; nested overlays preserve input transforms and clipping.
+See [INPUT.md](INPUT.md) for focus, lifetime, and asynchronous result contracts.
+
 `numericinput`, `slider`, and `splittoolbutton` are ordinary selector identities.
 Numeric inputs compose `.numeric-editor`, `.numeric-increment`, and
 `.numeric-decrement` children; split controls compose `.split-primary` and

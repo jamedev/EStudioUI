@@ -233,7 +233,7 @@ class Demo
             });
         if (!LoadCss(m_CurrentCss))
             throw std::runtime_error("Initial CSS could not be loaded.");
-        m_Tabs->SetCurrentIndex(3);
+        m_Tabs->SetCurrentIndex(13);
     }
 
     ~Demo()

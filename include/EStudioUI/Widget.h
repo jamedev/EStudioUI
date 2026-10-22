@@ -1,5 +1,8 @@
 #pragma once
 
+#include "InputEvent.h"
+#include "Shortcut.h"
+
 #include "Signal.h"
 #include "Style.h"
 #include "Layout.h"
@@ -25,6 +28,7 @@ class UiContext;
 class CssMotion;
 class FontFace;
 class Renderer;
+class Action;
 
 namespace Detail
 {
@@ -192,6 +196,18 @@ class Widget
     //! Returns whether the widget participates in keyboard navigation.
     virtual bool IsFocusable() const;
 
+    //! Cycles Tab navigation inside this subtree until focus is explicitly moved elsewhere.
+    void SetFocusScope(bool enabled);
+
+    //! Returns whether this widget establishes a local Tab-navigation scope.
+    bool IsFocusScope() const;
+
+    //! Associates an action; its shortcuts are scoped to this widget's lifetime and context.
+    void AddAction(std::shared_ptr<Action> action, ShortcutScope scope = ShortcutScope::Window);
+
+    //! Removes this widget's association without affecting other action presentations.
+    void RemoveAction(const std::shared_ptr<Action>& action);
+
     //! Finds a descendant, including this node, by CSS identifier.
     Widget* FindById(const std::string& id);
 
@@ -224,6 +240,12 @@ class Widget
 
     //! Handles a captured left-button press.
     virtual void OnPointerDown(const PointerEvent& event);
+
+    //! Receives rich input; the default adapts to the existing typed widget hooks.
+    virtual bool OnInput(const InputEvent& event);
+
+    //! Intercepts routed input before shortcuts and normal focus delivery.
+    virtual bool OnInputPreview(const InputEvent& event);
 
     //! Handles pointer movement during capture.
     virtual void OnPointerMove(const PointerEvent& event);
@@ -411,6 +433,22 @@ class Widget
 
     //! Observes the GUI context.
     UiContext* m_Context = nullptr;
+
+    //! Owns one action association independently of its other presentations.
+    struct ActionAssociation
+    {
+        //! Keeps the shared command alive while associated.
+        std::shared_ptr<Action> m_Action;
+
+        //! Limits shortcut eligibility without changing command state.
+        ShortcutScope m_Scope = ShortcutScope::Window;
+    };
+
+    //! Stores only this widget's associated commands.
+    std::vector<ActionAssociation> m_Actions;
+
+    //! Establishes a local cyclic Tab-navigation boundary.
+    bool m_FocusScope = false;
 
     //! Owns children in painter order.
     std::vector<std::unique_ptr<Widget>> m_Children;

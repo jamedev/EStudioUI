@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cstdint>
+#include <string>
 
 namespace EStudioUI
 {
@@ -71,7 +72,7 @@ struct Color
     bool operator==(const Color&) const = default;
 };
 
-//! Physical keyboard commands used by controls independently of GLFW.
+//! Logical keyboard commands used by controls independently of GLFW.
 enum class Key
 {
     Unknown,
@@ -118,7 +119,54 @@ enum class Key
     F5,
     F6,
     F2,
-    Menu
+    Menu,
+    Insert,
+    D0,
+    D1,
+    D2,
+    D3,
+    D4,
+    D5,
+    D6,
+    D7,
+    D8,
+    D9,
+    F1,
+    F3,
+    F4,
+    F7,
+    F8,
+    F9,
+    F10,
+    F11,
+    F12,
+    F13,
+    F14,
+    F15,
+    F16,
+    F17,
+    F18,
+    F19,
+    F20,
+    F21,
+    F22,
+    F23,
+    F24,
+    Minus,
+    Equal,
+    Comma,
+    Period,
+    Slash,
+    Backslash,
+    Semicolon,
+    Apostrophe,
+    LeftBracket,
+    RightBracket,
+    Grave,
+    Shift,
+    Control,
+    Alt,
+    Meta
 };
 
 //! Keyboard modifiers normalized by the platform backend.
@@ -132,6 +180,46 @@ struct Modifiers
 
     //! Alt is tracked independently of text input.
     bool m_Alt = false;
+
+    //! Super/Command is preserved separately from the platform-primary modifier.
+    bool m_Meta = false;
+
+    //! Physical Control, including on platforms where Command is primary.
+    bool m_PhysicalControl = false;
+
+    //! Native adapters mark text-producing AltGr so it cannot execute shortcuts.
+    bool m_AltGraph = false;
+};
+
+//! The phase of a pointer input event.
+enum class PointerEventType
+{
+    Move,
+    Down,
+    Up,
+    Cancel
+};
+
+//! The originating pointer device; native pen/touch adapters are separate capabilities.
+enum class PointerDevice
+{
+    Mouse,
+    Pen,
+    Touch
+};
+
+//! The button changing state; held buttons use the corresponding bit in m_Buttons.
+enum class PointerButton
+{
+    None,
+    Left,
+    Right,
+    Middle,
+    Button4,
+    Button5,
+    Button6,
+    Button7,
+    Button8
 };
 
 //! Pointer information delivered in logical window coordinates.
@@ -148,12 +236,33 @@ struct PointerEvent
 
     //! Whether the original window point lies inside every transformed ancestor clip.
     bool m_InsideClip = true;
+
+    //! Input phase; legacy pointer methods populate it automatically.
+    PointerEventType m_Type = PointerEventType::Move;
+
+    //! Button changing state, or None during motion.
+    PointerButton m_Button = PointerButton::None;
+
+    //! Held button bitmask, using bit (button - 1).
+    unsigned m_Buttons = 0;
+
+    //! Stable device-local pointer identity; the mouse uses zero.
+    std::uint64_t m_PointerId = 0;
+
+    //! Originating device category.
+    PointerDevice m_Device = PointerDevice::Mouse;
+
+    //! Monotonic source timestamp in seconds.
+    double m_Timestamp = 0;
+
+    //! Normalized pen pressure when supplied by a capable adapter.
+    float m_Pressure = 0;
 };
 
 //! A normalized keyboard event delivered to an embedded scene.
 struct KeyboardEvent
 {
-    //! Physical key independent of the text input layout.
+    //! Logical shortcut key; committed text arrives separately.
     Key m_Key = Key::Unknown;
 
     //! Whether the key is pressed rather than released.
@@ -164,5 +273,17 @@ struct KeyboardEvent
 
     //! Modifier state accompanying this event.
     Modifiers m_Modifiers;
+
+    //! Physical key position using the framework's US-layout key names.
+    Key m_PhysicalKey = Key::Unknown;
+
+    //! Native scan code, or zero when unavailable.
+    int m_ScanCode = 0;
+
+    //! Monotonic source timestamp in seconds.
+    double m_Timestamp = 0;
+
+    //! Layout-dependent printable key name, including names outside the named-key enumeration.
+    std::string m_KeyName{};
 };
 } // namespace EStudioUI

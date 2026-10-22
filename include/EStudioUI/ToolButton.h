@@ -26,6 +26,10 @@ class ToolButton : public Button
     //! Emits after a programmatic or user checked-state change.
     Signal<bool>& Toggled();
 
+  protected:
+    //! Synchronizes canonical checkable/checked state in addition to button presentation.
+    void OnActionChanged() override;
+
   private:
     //! Enables toggle behavior independently of the current value.
     bool m_Checkable = false;

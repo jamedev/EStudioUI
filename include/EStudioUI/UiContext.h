@@ -5,6 +5,8 @@
 #include "AnimationSystem.h"
 #include "UiHandle.h"
 #include "StateStore.h"
+#include "Action.h"
+#include "PopupSession.h"
 
 #include <functional>
 #include <stdexcept>
@@ -62,6 +64,9 @@ struct UiStats
 
     //! Number of container strategy computations, including natural-size queries.
     std::size_t m_LayoutPlans = 0;
+
+    //! Registered action associations examined by shortcut resolution, independent of widget count.
+    std::size_t m_ShortcutChecks = 0;
 };
 
 //! Owns one window's widget tree, style resolution, layout, and input routing.
@@ -168,11 +173,20 @@ class UiContext
     //! Returns whether an input or model change requires a frame.
     bool NeedsRepaint() const;
 
-    //! Resolves styles and layout against current logical window dimensions.
+    //! Refreshes geometry at logical dimensions; safe from input, never paints or pumps events.
     void Prepare(float width, float height);
 
     //! Paints the prepared tree and clears the repaint request.
     void Paint(Renderer& renderer, double time);
+
+    //! Routes an owning input payload; nested input/frame/queue dispatch is diagnosed.
+    bool DispatchInput(const InputEvent& event);
+
+    //! Creates a shared command in this context's state domain.
+    std::shared_ptr<Action> CreateAction(std::string text = {});
+
+    //! Returns the last key event's deterministic shortcut resolution.
+    ShortcutStatus GetLastShortcutStatus() const;
 
     //! Delivers a pointer move, maintaining ancestor hover states.
     void PointerMove(Point position, Modifiers modifiers = {});
@@ -192,17 +206,32 @@ class UiContext
     //! Bubbles a right-click or Menu-key request through the hit ancestor path.
     void ContextMenu(Point position);
 
-    //! Shows one owned overlay, clamps it to the window, and saves keyboard focus.
-    void ShowPopup(Widget& popup, Point anchor);
+    //! Opens an overlay/modal session, replacing a chain or stacking below an explicit/logical parent.
+    PopupSession ShowPopup(Widget& popup, Point anchor, PopupOptions options = {});
 
     //! Owns a root popup until its logical owner is removed; expired popups are pruned before layout.
     Widget& AddOwnedPopup(std::unique_ptr<Widget> popup, Widget& owner);
 
     //! Dismisses the active overlay and restores the previous live focus target.
-    void ClosePopup();
+    void ClosePopup(PopupResult result = {});
+
+    //! Closes one popup and its descendants with one terminal result per session.
+    void ClosePopup(Widget& popup, PopupResult result = {});
+
+    //! Closes the complete current chain without a nested event loop.
+    void CloseAllPopups(PopupCloseReason reason = PopupCloseReason::Closed);
+
+    //! Returns whether a widget has a live presentation anywhere in the chain.
+    bool IsPopupOpen(const Widget& popup) const;
+
+    //! Returns the number of currently stacked presentations.
+    std::size_t GetPopupCount() const;
 
     //! Returns the live active popup, or null.
     Widget* GetPopup() const;
+
+    //! Returns one presentation's observed parent, or null for a root popup.
+    Widget* GetPopupParent(const Widget& popup) const;
 
     //! Prepares external GPU surfaces while the window's GL context is current.
     void PrepareSurfaces(double time, float scaleX, float scaleY);
@@ -246,6 +275,9 @@ class UiContext
     //! Converts window input coordinates into a widget's untransformed layout coordinates.
     Point ToLayoutPoint(const Widget& widget, Point point) const;
 
+    //! Maps an attached widget's layout point through visual transforms into window coordinates.
+    Point ToWindowPoint(const Widget& widget, Point point) const;
+
     //! Returns current monotonic GUI time.
     double GetTime() const;
 
@@ -286,7 +318,7 @@ class UiContext
     void VerifyDispatchPhase() const;
 
     //! Prevents frame traversal from observing staged values or incomplete binding updates.
-    void VerifyTraversalEntry() const;
+    void VerifyTraversalEntry(bool inputPreparation = false) const;
 
     //! Propagates a widget edit through its style and geometry dependencies.
     void Invalidate(Widget& widget, Invalidation flags);
@@ -315,6 +347,45 @@ class UiContext
     //! Removes popups whose composite-widget owners have been destroyed.
     void PruneOwnedPopups();
 
+    //! Closes hidden, disabled, removed, or owner-expired popup branches.
+    void PrunePopups();
+
+    //! Removes a complete branch before running focus/capture/result callbacks.
+    void ClosePopupBranch(std::size_t index, PopupResult result);
+
+    //! Returns the logical parent across owned or explicitly nested overlays.
+    Widget* LogicalParent(const Widget& widget) const;
+
+    //! Tests logical ancestry without extending widget lifetime.
+    bool IsWithin(const Widget* widget, const Widget* ancestor) const;
+
+    //! Returns the top overlay or root as the active keyboard/focus boundary.
+    Widget& InputRoot() const;
+
+    //! Searches overlays front-to-back, stopping at a modal barrier.
+    Widget* InputHitTest(Point position) const;
+
+    //! Registers a live widget association without scanning unrelated widgets.
+    void RegisterAction(Widget& owner, const std::shared_ptr<Action>& action, ShortcutScope scope);
+
+    //! Removes only one widget's shortcut associations.
+    void UnregisterActions(const Widget& owner);
+
+    //! Resolves nearest scoped actions, deduplicating shared presentations and consuming ambiguity.
+    bool DispatchShortcut(const KeyboardEvent& event);
+
+    //! Dispatches one keyboard event inside an established input scope.
+    bool RouteKey(const KeyboardEvent& event);
+
+    //! Dispatches one pointer event while retaining device/button/capture identity.
+    bool RoutePointer(const PointerEvent& event);
+
+    //! Delivers preview hooks along one deletion-safe logical ancestor path.
+    bool PreviewInput(Widget& target, const InputEvent& event);
+
+    //! Refreshes geometry internally without allowing callbacks to start a nested frame.
+    void PrepareInput();
+
     //! Keeps popup ownership independent of composite-widget layout and clipping.
     struct OwnedPopup
     {
@@ -327,6 +398,64 @@ class UiContext
 
     //! Tracks popup lifetimes without extending their logical owners' lifetimes.
     std::vector<OwnedPopup> m_OwnedPopups;
+
+    //! Observes one command association; widgets retain the actual command ownership.
+    struct ActionAssociation
+    {
+        //! Observes the registration owner's unique lifetime.
+        WidgetRef m_Owner;
+        //! Observes the shared command without keeping dead associations alive.
+        std::weak_ptr<Action> m_Action;
+        //! Selects widget, subtree, or window resolution.
+        ShortcutScope m_Scope = ShortcutScope::Window;
+    };
+
+    //! Scales shortcut work with registered commands rather than widget count.
+    std::vector<ActionAssociation> m_ActionAssociations;
+
+    //! Stores one live overlay branch and its asynchronous result.
+    struct PopupEntry
+    {
+        //! Observes the root-owned overlay widget.
+        WidgetRef m_Widget;
+        //! Observes the parent presentation, if any.
+        WidgetRef m_Parent;
+        //! Observes the focus target that preceded this presentation.
+        WidgetRef m_ReturnFocus;
+        //! Owns the presentation configuration; m_Parent is cleared after observation.
+        PopupOptions m_Options;
+        //! Stores the requested window-coordinate origin.
+        Point m_Anchor;
+        //! Owns asynchronous completion independently of widget lifetime.
+        PopupSession m_Session;
+    };
+
+    //! Holds at most 64 nested popup/modal presentations in painter order.
+    std::vector<PopupEntry> m_Popups;
+
+    //! Distinguishes focus/popup changes made by reentrant callbacks.
+    std::uint64_t m_PopupRevision = 0;
+
+    //! Records the last key event's shortcut resolution.
+    ShortcutStatus m_LastShortcut = ShortcutStatus::Unmatched;
+
+    //! Prevents nested public input delivery and frame/queue traversal during input callbacks.
+    bool m_DispatchingInput = false;
+
+    //! Rejects new commands/presentations during context teardown.
+    bool m_Closing = false;
+
+    //! Prevents completion observers from reopening overlays during window deactivation.
+    bool m_Deactivating = false;
+
+    //! Retains the pointer owning capture independently of changing button state.
+    std::uint64_t m_CapturePointer = 0;
+
+    //! Retains the captured device category.
+    PointerDevice m_CaptureDevice = PointerDevice::Mouse;
+
+    //! Retains the button whose matching release ends capture.
+    PointerButton m_CaptureButton = PointerButton::None;
 
     //! Recursively resolves inherited and state-dependent CSS.
     void Restyle(Widget& widget, const Style* parent, bool force = false);
@@ -428,15 +557,6 @@ class UiContext
 
     //! Writes platform clipboard text.
     std::function<void(std::string_view)> m_SetClipboard;
-
-    //! Observes the active overlay without extending its lifetime.
-    WidgetRef m_Popup;
-
-    //! Saves focus for restoration when a popup closes.
-    WidgetRef m_PopupReturnFocus;
-
-    //! Stores the requested popup origin in logical window coordinates.
-    Point m_PopupAnchor;
 
     //! Records explicit main-axis overflow for layout diagnostics.
     std::vector<WidgetRef> m_OverflowingContainers;

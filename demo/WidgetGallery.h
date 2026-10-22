@@ -11,6 +11,7 @@
 #include "ModelGallery.h"
 #include "LayoutGallery.h"
 #include "ConstraintGallery.h"
+#include "InputGallery.h"
 
 #include <EStudioUI/ContextMenu.h>
 #include <EStudioUI/ListWidget.h>
@@ -139,6 +140,12 @@ class WidgetGallery
     std::unique_ptr<LayoutGallery> m_LayoutFoundation;
     //! Owns linear constraint and live-resize examples.
     std::unique_ptr<ConstraintGallery> m_Constraints;
+
+    //! Identifies the constraints page independently of later tab additions.
+    WidgetRef m_ConstraintPage;
+
+    //! Owns shared-action, input, nested menu, and modal-result acceptance examples.
+    std::unique_ptr<InputGallery> m_Input;
     //! Observes the visible shortcut to a tab beyond a narrow tab strip.
     WidgetRef m_ConstraintShortcut;
 };

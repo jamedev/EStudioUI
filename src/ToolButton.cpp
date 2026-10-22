@@ -8,7 +8,7 @@ ToolButton::ToolButton(std::string text) : Button(std::move(text), "toolbutton")
     Clicked().Connect(
         [owner]
         {
-            if (auto* live = dynamic_cast<ToolButton*>(owner.Get()); live && live->m_Checkable)
+            if (auto* live = dynamic_cast<ToolButton*>(owner.Get()); live && live->m_Checkable && !live->GetAction())
                 live->SetChecked(!live->m_Checked);
         });
 }
@@ -16,6 +16,11 @@ ToolButton::ToolButton(std::string text) : Button(std::move(text), "toolbutton")
 void ToolButton::SetCheckable(bool checkable)
 {
     VerifyAccess();
+    if (const auto action = GetAction(); action && action->GetSnapshot()->m_Checkable != checkable)
+    {
+        action->SetCheckable(checkable);
+        return;
+    }
     if (m_Checkable == checkable)
         return;
     m_Checkable = checkable;
@@ -30,6 +35,11 @@ bool ToolButton::IsCheckable() const
 void ToolButton::SetChecked(bool checked)
 {
     VerifyAccess();
+    if (const auto action = GetAction(); action && action->GetSnapshot()->m_Checked != checked)
+    {
+        action->SetChecked(checked);
+        return;
+    }
     const auto ownerLease = RetainOwner();
     if (m_Checked == checked)
         return;
@@ -48,5 +58,13 @@ Signal<bool>& ToolButton::Toggled()
 {
     VerifyAccess();
     return m_Toggled;
+}
+
+void ToolButton::OnActionChanged()
+{
+    Button::OnActionChanged();
+    const auto state = GetAction()->GetSnapshot();
+    m_Checkable = state->m_Checkable;
+    SetChecked(state->m_Checked);
 }
 } // namespace EStudioUI

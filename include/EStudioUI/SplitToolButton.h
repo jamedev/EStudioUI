@@ -16,6 +16,9 @@ class SplitToolButton : public Widget
     //! Adds an action; choosing it also makes it the default command.
     ToolButton& AddAction(std::string text);
 
+    //! Adds a shared command whose default presentation follows canonical action state.
+    ToolButton& AddAction(std::shared_ptr<Action> action);
+
     //! Returns the number of commands in the chooser.
     std::size_t GetActionCount() const;
 
@@ -68,6 +71,12 @@ class SplitToolButton : public Widget
 
     //! Observes stable command objects owned by the popup.
     std::vector<WidgetRef> m_Actions;
+
+    //! Retires shared-command presentation observers with this chooser.
+    std::vector<ScopedConnection> m_ActionConnections;
+
+    //! Disables the primary presentation when its external command domain expires.
+    std::vector<std::unique_ptr<std::stop_callback<std::function<void()>>>> m_ActionStops;
 
     //! Stores the remembered action without executing it.
     std::size_t m_Default = std::numeric_limits<std::size_t>::max();

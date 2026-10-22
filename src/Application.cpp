@@ -1,6 +1,7 @@
 #include <EStudioUI/Application.h>
 #include <EStudioUI/BackgroundTasks.h>
 #include <EStudioUI/StateStore.h>
+#include <EStudioUI/InputEvent.h>
 
 #include "ApplicationRuntime.h"
 
@@ -56,7 +57,7 @@ struct Runtime
     double Process()
     {
         m_Affinity.VerifyAccess("Application event processing");
-        if (m_Processing || m_DispatchDepth)
+        if (m_Processing || m_DispatchDepth || Detail::IsDeliveringInput())
             throw std::logic_error("Application event processing cannot be nested inside a callback.");
         if (OpenCount() == 0)
         {
@@ -134,7 +135,7 @@ void FlushRetiredWindows()
 
 bool CanServiceNativeFrame()
 {
-    return GetRuntime().m_DispatchDepth == 1;
+    return GetRuntime().m_DispatchDepth == 1 && !IsDeliveringInput();
 }
 
 double ServiceNativeWindows()

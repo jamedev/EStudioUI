@@ -38,6 +38,10 @@ UiContext::~UiContext()
 {
     if (!IsOwnerThread() || m_Phase != UiPhase::Idle)
         std::terminate();
+    m_Closing = true;
+    const auto popups = std::move(m_Popups);
+    for (auto entry = popups.rbegin(); entry != popups.rend(); ++entry)
+        entry->m_Session.Complete({PopupCloseReason::ContextClosed, 0});
     m_Dispatcher.Close();
     m_States.reset();
     m_Root.Attach(nullptr, nullptr);
@@ -106,14 +110,16 @@ void UiContext::VerifyStructuralMutation() const
 void UiContext::VerifyDispatchPhase() const
 {
     VerifyAccess();
-    if (m_Phase != UiPhase::Idle)
+    if (m_Closing || m_Phase != UiPhase::Idle)
         throw std::logic_error(
             "UI traversal is active; defer structural changes with UiContext::Defer or UiHandle::Post.");
 }
 
-void UiContext::VerifyTraversalEntry() const
+void UiContext::VerifyTraversalEntry(bool inputPreparation) const
 {
     VerifyDispatchPhase();
+    if (Detail::IsDeliveringInput() && !inputPreparation)
+        throw std::logic_error("Input delivery is active; defer nested frame or queue traversal.");
     if (StateStore::IsUpdatingOnThisThread())
         throw std::logic_error("State update is active; defer frame traversal until the update completes.");
 }
@@ -289,7 +295,7 @@ AnimationId UiContext::BeginStyleTransition(std::optional<StyleSheet> initial, S
         m_CssMotion->Reset();
         Invalidate();
     }
-    Prepare(m_Width, m_Height);
+    PrepareInput();
 
     struct Snapshot
     {
@@ -438,7 +444,7 @@ AnimationId UiContext::BeginStyleTransition(std::optional<StyleSheet> initial, S
     if (generation == m_StyleTransitionGeneration)
         m_StyleTransition = id;
     Invalidate();
-    Prepare(m_Width, m_Height);
+    PrepareInput();
     return id;
 }
 
@@ -461,14 +467,10 @@ void UiContext::Restyle(Widget& widget, const Style* parent, bool force)
         widget.m_StyleDirty = true;
         try
         {
-            widget.m_Node.m_Parent = widget.m_Parent ? &widget.m_Parent->m_Node : nullptr;
-            for (const auto& popup : m_OwnedPopups)
-                if (popup.m_Popup.Get() == &widget)
-                    if (auto* owner = popup.m_Owner.Get(); owner && owner->GetContext() == this)
-                    {
-                        widget.m_Node.m_Parent = &owner->m_Node;
-                        parent = &owner->m_Style;
-                    }
+            auto* logicalParent = LogicalParent(widget);
+            widget.m_Node.m_Parent = logicalParent ? &logicalParent->m_Node : nullptr;
+            if (widget.m_Overlay && logicalParent)
+                parent = &logicalParent->m_Style;
             widget.m_Node.m_State &= ~FocusWithin;
             for (auto* focused = m_Focus.Get(); focused;)
             {
@@ -477,12 +479,7 @@ void UiContext::Restyle(Widget& widget, const Style* parent, bool force)
                     widget.m_Node.m_State |= FocusWithin;
                     break;
                 }
-                auto* next = focused->m_Parent;
-                for (const auto& popup : m_OwnedPopups)
-                    if (popup.m_Popup.Get() == focused)
-                        if (auto* owner = popup.m_Owner.Get())
-                            next = owner;
-                focused = next;
+                focused = LogicalParent(*focused);
             }
             if (!widget.m_Visible)
             {
@@ -983,7 +980,7 @@ void UiContext::Prepare(float width, float height)
 {
     const auto ownerLifetime = RetainOwner();
     VerifyAccess();
-    VerifyTraversalEntry();
+    VerifyTraversalEntry(true);
     PruneOwnedPopups();
     width = std::max(1.0f, width);
     height = std::max(1.0f, height);
@@ -1004,22 +1001,9 @@ void UiContext::Prepare(float width, float height)
     Restyle(m_Root, nullptr, fullStyle);
     m_FullStyleDirty = false;
     m_ResetMeasurements = false;
-    const auto ownedPopup = std::find_if(m_OwnedPopups.begin(), m_OwnedPopups.end(), [this](const OwnedPopup& entry)
-                                         { return entry.m_Popup.Get() == m_Popup.Get(); });
-    if (m_Popup.Get() && ownedPopup != m_OwnedPopups.end())
-    {
-        const auto* owner = ownedPopup->m_Owner.Get();
-        if (!owner || !owner->IsVisible() || !owner->IsEnabled())
-        {
-            ClosePopup();
-            Restyle(m_Root, nullptr, m_FullStyleDirty);
-        }
-    }
-    if (auto* popup = m_Popup.Get(); popup && (!popup->IsVisible() || !popup->IsEnabled()))
-    {
-        ClosePopup();
+    PrunePopups();
+    if (m_FullStyleDirty || m_Root.m_SubtreeStyleDirty)
         Restyle(m_Root, nullptr, m_FullStyleDirty);
-    }
     const auto visible = [](Widget* widget)
     {
         for (auto* node = widget; node; node = node->m_Parent)
@@ -1071,16 +1055,17 @@ void UiContext::Arrange()
     }
     const PhaseScope phase(*this, UiPhase::Layout);
     Layout(m_Root, {0, 0, m_Width, m_Height}, {0, 0, m_Width, m_Height}, true, true);
-    if (auto* popup = m_Popup.Get(); popup && popup->IsVisible())
-    {
-        const auto measured = Measure(*popup, {m_Width, m_Height}).m_Preferred;
-        const float popupWidth = std::min(m_Width, measured.m_X);
-        const float popupHeight = std::min(m_Height, measured.m_Y);
-        Layout(*popup,
-               {std::clamp(m_PopupAnchor.m_X, 0.0f, m_Width - popupWidth),
-                std::clamp(m_PopupAnchor.m_Y, 0.0f, m_Height - popupHeight), popupWidth, popupHeight},
-               {0, 0, m_Width, m_Height});
-    }
+    for (const auto& entry : m_Popups)
+        if (auto* popup = entry.m_Widget.Get(); popup && popup->IsVisible())
+        {
+            const auto measured = Measure(*popup, {m_Width, m_Height}).m_Preferred;
+            const float popupWidth = std::min(m_Width, measured.m_X);
+            const float popupHeight = std::min(m_Height, measured.m_Y);
+            Layout(*popup,
+                   {std::clamp(entry.m_Anchor.m_X, 0.0f, m_Width - popupWidth),
+                    std::clamp(entry.m_Anchor.m_Y, 0.0f, m_Height - popupHeight), popupWidth, popupHeight},
+                   {0, 0, m_Width, m_Height});
+        }
 }
 
 void UiContext::PaintTree(Widget& widget, Renderer& renderer, double time, float opacity)
@@ -1124,8 +1109,9 @@ void UiContext::Paint(Renderer& renderer, double time)
     try
     {
         PaintTree(m_Root, renderer, time, 1);
-        if (auto* popup = m_Popup.Get())
-            PaintTree(*popup, renderer, time, 1);
+        for (const auto& entry : m_Popups)
+            if (auto* popup = entry.m_Widget.Get())
+                PaintTree(*popup, renderer, time, 1);
     }
     catch (...)
     {
@@ -1144,412 +1130,6 @@ Point UiContext::ToLayoutPoint(const Widget& widget, Point point) const
 {
     VerifyAccess();
     return MakePointerEvent(widget, point).m_Position;
-}
-
-PointerEvent UiContext::MakePointerEvent(const Widget& widget, Point position, Modifiers modifiers, int clicks) const
-{
-    std::vector<const Widget*> path;
-    for (auto* node = &widget; node; node = node->m_Parent)
-    {
-        path.push_back(node);
-        if (node->m_Overlay)
-            break;
-    }
-    Affine matrix, inverse;
-    bool inside = true;
-    for (auto i = path.rbegin(); i != path.rend(); ++i)
-    {
-        if (!matrix.Inverse(inverse) || !(*i)->m_Clip.Contains(inverse.Map(position)))
-            inside = false;
-        matrix = matrix * (*i)->m_Style.m_Transform.Resolve((*i)->m_Bounds);
-        if (!matrix.Inverse(inverse))
-            return {{-1000000, -1000000}, modifiers, clicks, false};
-        if (*i != &widget && (*i)->m_Style.m_ClipContent &&
-            !ContainsRounded((*i)->m_Bounds, (*i)->m_Style.m_Radius, inverse.Map(position)))
-            inside = false;
-    }
-    return {inverse.Map(position), modifiers, clicks, inside};
-}
-
-Widget* UiContext::HitTest(Widget& widget, Point position, Affine parentTransform) const
-{
-    if (!widget.m_Style.m_Displayed)
-        return nullptr;
-    Affine parentInverse;
-    if (!parentTransform.Inverse(parentInverse) || !widget.m_Clip.Contains(parentInverse.Map(position)))
-        return nullptr;
-    const auto matrix = parentTransform * widget.m_Style.m_Transform.Resolve(widget.m_Bounds);
-    Affine inverse;
-    if (!matrix.Inverse(inverse))
-        return nullptr;
-    const auto local = inverse.Map(position);
-    if (!ContainsRounded(widget.m_Bounds, widget.m_Style.m_ClipContent ? widget.m_Style.m_Radius : 0, local))
-        return nullptr;
-    for (auto i = widget.m_Children.rbegin(); i != widget.m_Children.rend(); ++i)
-        if (!(*i)->m_Overlay)
-            if (auto* found = HitTest(**i, position, matrix))
-                return found;
-    return ContainsRounded(widget.m_Bounds, widget.m_Style.m_Radius, local) ? &widget : nullptr;
-}
-
-bool UiContext::RefreshHover()
-{
-    if (!m_PointerPosition)
-        return false;
-    auto* target = HitTest(m_Popup.Get() ? *m_Popup.Get() : m_Root, *m_PointerPosition);
-    std::vector<Widget*> path;
-    for (auto* node = target; node; node = node->m_Parent)
-        path.push_back(node);
-    if (path.size() == m_HoverPath.size() &&
-        std::equal(path.begin(), path.end(), m_HoverPath.begin(),
-                   [](Widget* widget, const WidgetRef& previous) { return widget == previous.Get(); }))
-        return false;
-    for (const auto& reference : m_HoverPath)
-        if (auto* previous = reference.Get(); previous && std::find(path.begin(), path.end(), previous) == path.end())
-            previous->SetState(Hover, false);
-    m_HoverPath.clear();
-    for (auto* node : path)
-    {
-        node->SetState(Hover, true);
-        m_HoverPath.emplace_back(node);
-    }
-    return true;
-}
-
-void UiContext::PointerMove(Point position, Modifiers modifiers)
-{
-    const auto ownerLifetime = RetainOwner();
-    VerifyAccess();
-    VerifyDispatchPhase();
-    m_PointerPosition = position;
-    Prepare(m_Width, m_Height);
-    RefreshHover();
-    auto* target = HitTest(m_Popup.Get() ? *m_Popup.Get() : m_Root, position);
-    if (auto* capture = m_Capture.Get())
-        capture->OnPointerMove(MakePointerEvent(*capture, position, modifiers));
-    else if (target && target->IsEnabled())
-        target->OnPointerMove(MakePointerEvent(*target, position, modifiers));
-}
-
-void UiContext::PointerDown(Point position, Modifiers modifiers, int clicks)
-{
-    const auto ownerLifetime = RetainOwner();
-    VerifyAccess();
-    VerifyDispatchPhase();
-    Prepare(m_Width, m_Height);
-    if (auto* popup = m_Popup.Get(); popup && !popup->GetBounds().Contains(ToLayoutPoint(*popup, position)))
-    {
-        ClosePopup();
-        return;
-    }
-    const auto previousCapture = m_Capture;
-    m_Capture = {};
-    if (auto* previous = previousCapture.Get())
-        previous->OnCaptureLost();
-    PointerMove(position, modifiers);
-    Prepare(m_Width, m_Height);
-    auto* target = HitTest(m_Popup.Get() ? *m_Popup.Get() : m_Root, position);
-    if (!target || !target->IsEnabled())
-        return;
-    const WidgetRef reference(target);
-    SetFocus(target->IsFocusable() ? target : nullptr);
-    if (auto* live = reference.Get())
-    {
-        m_Capture = reference;
-        live->OnPointerDown(MakePointerEvent(*live, position, modifiers, clicks));
-    }
-}
-
-void UiContext::PointerUp(Point position, Modifiers modifiers)
-{
-    const auto ownerLifetime = RetainOwner();
-    VerifyAccess();
-    VerifyDispatchPhase();
-    Prepare(m_Width, m_Height);
-    const auto captured = m_Capture;
-    m_Capture = {};
-    if (auto* live = captured.Get())
-        live->OnPointerUp(MakePointerEvent(*live, position, modifiers));
-    PointerMove(position, modifiers);
-}
-
-void UiContext::SetFocus(Widget* widget)
-{
-    const auto ownerLifetime = RetainOwner();
-    VerifyAccess();
-    if (widget && (!widget->IsEnabled() || !widget->IsFocusable() || widget->m_Context != this || !widget->IsVisible()))
-        widget = nullptr;
-    if (m_Focus.Get() == widget)
-        return;
-    const WidgetRef next(widget);
-    const auto previousFocus = m_Focus;
-    m_Focus = next;
-    Invalidate(m_Root, Invalidation::Selector);
-    if (auto* previous = previousFocus.Get())
-    {
-        previous->SetState(Focus, false);
-        previous->OnFocus(false);
-    }
-    if (m_Focus.Get() != next.Get())
-        return;
-    if (auto* current = next.Get())
-    {
-        current->SetState(Focus, true);
-        current->OnFocus(true);
-    }
-}
-
-void UiContext::FocusNext(bool backwards)
-{
-    std::vector<Widget*> candidates;
-    const auto collect = [&](auto&& self, Widget& widget) -> void
-    {
-        if (!widget.IsVisible() || !widget.IsEnabled())
-            return;
-        if (widget.IsFocusable())
-            candidates.push_back(&widget);
-        for (auto& child : widget.m_Children)
-            self(self, *child);
-    };
-    collect(collect, m_Popup.Get() ? *m_Popup.Get() : m_Root);
-    if (candidates.empty())
-    {
-        SetFocus(nullptr);
-        return;
-    }
-    const auto current = std::find(candidates.begin(), candidates.end(), m_Focus.Get());
-    const auto count = static_cast<std::ptrdiff_t>(candidates.size());
-    const auto index = current == candidates.end() ? (backwards ? 0 : -1) : current - candidates.begin();
-    SetFocus(candidates[static_cast<std::size_t>((index + (backwards ? -1 : 1) + count) % count)]);
-}
-
-void UiContext::KeyEvent(Key key, bool down, bool repeat, Modifiers modifiers)
-{
-    const auto ownerLifetime = RetainOwner();
-    VerifyAccess();
-    VerifyDispatchPhase();
-    Prepare(m_Width, m_Height);
-    if (down && key == Key::Escape && m_Popup.Get())
-    {
-        ClosePopup();
-        return;
-    }
-    if (down && key == Key::Menu && m_Focus.Get())
-    {
-        const auto bounds = m_Focus.Get()->GetBounds();
-        ContextMenu({bounds.m_X + bounds.m_Width * 0.5f, bounds.m_Y + bounds.m_Height * 0.5f});
-        return;
-    }
-    std::vector<WidgetRef> preview;
-    for (auto* node = m_Focus.Get(); node; node = node->m_Parent)
-        preview.emplace_back(node);
-    for (auto& reference : preview)
-        if (auto* node = reference.Get(); node && node->OnKeyPreview(key, down, repeat, modifiers))
-            return;
-    if (key == Key::Tab && down)
-    {
-        Prepare(m_Width, m_Height);
-        if (!repeat)
-            FocusNext(modifiers.m_Shift);
-        return;
-    }
-    if (auto* focused = m_Focus.Get(); focused && focused->IsEnabled())
-        focused->OnKey(key, down, repeat, modifiers);
-}
-
-void UiContext::TextInput(std::string_view text)
-{
-    const auto ownerLifetime = RetainOwner();
-    VerifyAccess();
-    VerifyDispatchPhase();
-    Prepare(m_Width, m_Height);
-    if (auto* focused = m_Focus.Get(); focused && focused->IsEnabled())
-        focused->OnText(text);
-}
-
-void UiContext::Deactivate()
-{
-    const auto ownerLifetime = RetainOwner();
-    VerifyAccess();
-    ClosePopup();
-    if (auto* captured = m_Capture.Get())
-        captured->OnCaptureLost();
-    m_Capture = {};
-    SetFocus(nullptr);
-    for (auto& reference : m_HoverPath)
-        if (auto* widget = reference.Get())
-            widget->SetState(Hover, false);
-    m_HoverPath.clear();
-    m_PointerPosition.reset();
-}
-
-void UiContext::SetClipboard(std::function<std::string()> get, std::function<void(std::string_view)> set)
-{
-    const auto ownerLifetime = RetainOwner();
-    VerifyAccess();
-    m_GetClipboard = std::move(get);
-    m_SetClipboard = std::move(set);
-}
-
-std::string UiContext::GetClipboard() const
-{
-    const auto ownerLifetime = RetainOwner();
-    VerifyAccess();
-    return m_GetClipboard ? m_GetClipboard() : std::string{};
-}
-
-void UiContext::SetClipboardText(std::string_view text) const
-{
-    const auto ownerLifetime = RetainOwner();
-    VerifyAccess();
-    if (m_SetClipboard)
-        m_SetClipboard(text);
-}
-} // namespace EStudioUI
-
-namespace EStudioUI
-{
-void UiContext::Scroll(Point position, Point delta, Modifiers modifiers)
-{
-    const auto ownerLifetime = RetainOwner();
-    VerifyAccess();
-    VerifyDispatchPhase();
-    m_PointerPosition = position;
-    Prepare(m_Width, m_Height);
-    std::vector<WidgetRef> path;
-    for (auto* node = HitTest(m_Popup.Get() ? *m_Popup.Get() : m_Root, position); node; node = node->m_Parent)
-        path.emplace_back(node);
-    for (auto& reference : path)
-        if (auto* node = reference.Get(); node && node->IsEnabled() && node->OnScroll(delta, modifiers))
-            return;
-}
-
-std::optional<Point> UiContext::GetPointerPosition() const
-{
-    VerifyAccess();
-    return m_PointerPosition;
-}
-
-void UiContext::ContextMenu(Point position)
-{
-    const auto ownerLifetime = RetainOwner();
-    VerifyAccess();
-    VerifyDispatchPhase();
-    ClosePopup();
-    Prepare(m_Width, m_Height);
-    std::vector<WidgetRef> path;
-    for (auto* node = HitTest(m_Root, position); node; node = node->m_Parent)
-        path.emplace_back(node);
-    for (auto& reference : path)
-        if (auto* node = reference.Get(); node && node->IsEnabled() && node->m_ContextMenuRequested.HasConnections())
-        {
-            node->m_ContextMenuRequested.Emit(position);
-            return;
-        }
-}
-
-void UiContext::ShowPopup(Widget& popup, Point anchor)
-{
-    const auto ownerLifetime = RetainOwner();
-    VerifyAccess();
-    VerifyDispatchPhase();
-    if (!std::isfinite(anchor.m_X) || !std::isfinite(anchor.m_Y))
-        throw std::invalid_argument("Popup coordinates must be finite.");
-    if (popup.GetContext() != this || &popup == &m_Root || popup.GetParent() != &m_Root)
-        throw std::invalid_argument("Popups must be immediate owned children of this UI root.");
-    const WidgetRef popupRef(&popup);
-    ClosePopup();
-    if (!popupRef.Get())
-        return;
-    m_PopupReturnFocus = m_Focus;
-    m_Popup = WidgetRef(&popup);
-    m_PopupAnchor = anchor;
-    popup.m_Overlay = true;
-    popup.SetVisible(true);
-    Invalidate();
-    Prepare(m_Width, m_Height);
-    if (auto* live = popupRef.Get(); live && m_Popup.Get() == live)
-        SetFocus(live);
-}
-
-Widget& UiContext::AddOwnedPopup(std::unique_ptr<Widget> popup, Widget& owner)
-{
-    const auto ownerLifetime = RetainOwner();
-    VerifyAccess();
-    VerifyDispatchPhase();
-    if (!popup || owner.GetContext() != this)
-        throw std::invalid_argument("An owned popup requires a live owner attached to this context.");
-    popup->SetVisible(false);
-    popup->m_Overlay = true;
-    auto& result = m_Root.AddChild(std::move(popup));
-    m_OwnedPopups.push_back({WidgetRef(&owner), WidgetRef(&result)});
-    result.m_Node.m_Parent = &owner.m_Node;
-    return result;
-}
-
-void UiContext::ReleaseSelectorOwner(const Widget& owner)
-{
-    for (const auto& entry : m_OwnedPopups)
-        if (entry.m_Owner.Get() == &owner)
-            if (auto* popup = entry.m_Popup.Get())
-                popup->m_Node.m_Parent = popup->m_Parent ? &popup->m_Parent->m_Node : nullptr;
-}
-
-void UiContext::PruneOwnedPopups()
-{
-    std::vector<WidgetRef> expired;
-    bool close = false;
-    std::erase_if(m_OwnedPopups,
-                  [&](const OwnedPopup& entry)
-                  {
-                      auto* owner = entry.m_Owner.Get();
-                      if (!owner || owner->GetContext() != this)
-                      {
-                          expired.push_back(entry.m_Popup);
-                          return true;
-                      }
-                      if ((!owner->IsVisible() || !owner->IsEnabled()) && entry.m_Popup.Get() == m_Popup.Get())
-                          close = true;
-                      return !entry.m_Popup.Get();
-                  });
-    if (close)
-        ClosePopup();
-    for (const auto& reference : expired)
-    {
-        if (reference.Get() && m_Popup.Get() == reference.Get())
-            ClosePopup();
-        if (auto* popup = reference.Get())
-            m_Root.RemoveChild(*popup);
-    }
-}
-
-void UiContext::ClosePopup()
-{
-    const auto ownerLifetime = RetainOwner();
-    VerifyAccess();
-    const auto popup = m_Popup;
-    const auto restore = m_PopupReturnFocus;
-    m_Popup = {};
-    m_PopupReturnFocus = {};
-    if (auto* live = popup.Get())
-    {
-        live->SetVisible(false);
-        const auto capture = m_Capture;
-        m_Capture = {};
-        if (auto* captured = capture.Get())
-            captured->OnCaptureLost();
-        auto* target = restore.Get();
-        while (target && (!target->IsVisible() || !target->IsEnabled() || !target->IsFocusable()))
-            target = target->m_Parent;
-        SetFocus(target);
-    }
-    Invalidate();
-}
-
-Widget* UiContext::GetPopup() const
-{
-    VerifyAccess();
-    return m_Popup.Get();
 }
 
 void UiContext::PrepareSurfaces(double time, float scaleX, float scaleY)

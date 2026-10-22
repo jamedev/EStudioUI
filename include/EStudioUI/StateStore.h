@@ -105,6 +105,8 @@ void RecordStateReconciliationError(const std::weak_ptr<StateStoreData>& data, s
 //! Groups typed application values into coherent owner-thread revisions.
 class StateStore
 {
+    friend class Action;
+
   public:
     //! Uses one owner dispatcher and bounds callback feedback to a positive number of notification rounds.
     explicit StateStore(UiDispatcher dispatcher, std::size_t maxNotificationRounds = 64);

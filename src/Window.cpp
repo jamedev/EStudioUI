@@ -29,20 +29,28 @@ namespace
 int s_GlfwUsers = 0;
 bool s_Headless = false;
 
-Modifiers TranslateModifiers(int value)
+Modifiers TranslateModifiers(int value, bool altGraph = false)
 {
 #ifdef __APPLE__
     const bool control = (value & GLFW_MOD_SUPER) != 0;
 #else
     const bool control = (value & GLFW_MOD_CONTROL) != 0;
 #endif
-    return {(value & GLFW_MOD_SHIFT) != 0, control, (value & GLFW_MOD_ALT) != 0};
+    return {(value & GLFW_MOD_SHIFT) != 0,   control, (value & GLFW_MOD_ALT) != 0, (value & GLFW_MOD_SUPER) != 0,
+            (value & GLFW_MOD_CONTROL) != 0, altGraph};
 }
 
 Key TranslateKey(int key)
 {
     if (key >= GLFW_KEY_A && key <= GLFW_KEY_Z)
         return static_cast<Key>(static_cast<int>(Key::A) + key - GLFW_KEY_A);
+    if (key >= GLFW_KEY_0 && key <= GLFW_KEY_9)
+        return static_cast<Key>(static_cast<int>(Key::D0) + key - GLFW_KEY_0);
+    const Key functions[]{Key::F1,  Key::F2,  Key::F3,  Key::F4,  Key::F5,  Key::F6,  Key::F7,  Key::F8,
+                          Key::F9,  Key::F10, Key::F11, Key::F12, Key::F13, Key::F14, Key::F15, Key::F16,
+                          Key::F17, Key::F18, Key::F19, Key::F20, Key::F21, Key::F22, Key::F23, Key::F24};
+    if (key >= GLFW_KEY_F1 && key <= GLFW_KEY_F24)
+        return functions[key - GLFW_KEY_F1];
     switch (key)
     {
     case GLFW_KEY_TAB:
@@ -82,9 +90,89 @@ Key TranslateKey(int key)
         return Key::F5;
     case GLFW_KEY_F6:
         return Key::F6;
+    case GLFW_KEY_INSERT:
+        return Key::Insert;
+    case GLFW_KEY_MINUS:
+        return Key::Minus;
+    case GLFW_KEY_EQUAL:
+        return Key::Equal;
+    case GLFW_KEY_COMMA:
+        return Key::Comma;
+    case GLFW_KEY_PERIOD:
+        return Key::Period;
+    case GLFW_KEY_SLASH:
+        return Key::Slash;
+    case GLFW_KEY_BACKSLASH:
+        return Key::Backslash;
+    case GLFW_KEY_SEMICOLON:
+        return Key::Semicolon;
+    case GLFW_KEY_APOSTROPHE:
+        return Key::Apostrophe;
+    case GLFW_KEY_LEFT_BRACKET:
+        return Key::LeftBracket;
+    case GLFW_KEY_RIGHT_BRACKET:
+        return Key::RightBracket;
+    case GLFW_KEY_GRAVE_ACCENT:
+        return Key::Grave;
+    case GLFW_KEY_LEFT_SHIFT:
+    case GLFW_KEY_RIGHT_SHIFT:
+        return Key::Shift;
+    case GLFW_KEY_LEFT_CONTROL:
+    case GLFW_KEY_RIGHT_CONTROL:
+        return Key::Control;
+    case GLFW_KEY_LEFT_ALT:
+    case GLFW_KEY_RIGHT_ALT:
+        return Key::Alt;
+    case GLFW_KEY_LEFT_SUPER:
+    case GLFW_KEY_RIGHT_SUPER:
+        return Key::Meta;
     default:
         return Key::Unknown;
     }
+}
+
+// GLFW key tokens identify US-layout positions; printable names carry the current layout.
+Key LogicalKey(int key, int scanCode)
+{
+    const char* name = glfwGetKeyName(key, scanCode);
+    if (name && name[0] && !name[1])
+    {
+        const unsigned char value = static_cast<unsigned char>(name[0]);
+        if (value >= 'a' && value <= 'z')
+            return static_cast<Key>(static_cast<int>(Key::A) + value - 'a');
+        if (value >= 'A' && value <= 'Z')
+            return static_cast<Key>(static_cast<int>(Key::A) + value - 'A');
+        if (value >= '0' && value <= '9')
+            return static_cast<Key>(static_cast<int>(Key::D0) + value - '0');
+        switch (value)
+        {
+        case '-':
+            return Key::Minus;
+        case '=':
+            return Key::Equal;
+        case ',':
+            return Key::Comma;
+        case '.':
+            return Key::Period;
+        case '/':
+            return Key::Slash;
+        case '\\':
+            return Key::Backslash;
+        case ';':
+            return Key::Semicolon;
+        case '\'':
+            return Key::Apostrophe;
+        case '[':
+            return Key::LeftBracket;
+        case ']':
+            return Key::RightBracket;
+        case '`':
+            return Key::Grave;
+        default:
+            break;
+        }
+    }
+    return TranslateKey(key);
 }
 
 std::string EncodeUtf8(unsigned codepoint)
@@ -141,6 +229,7 @@ struct Window::Impl : std::enable_shared_from_this<Window::Impl>
     double m_LastClick = -100;
     Point m_LastClickPosition;
     int m_Clicks = 0;
+    std::uint64_t m_InputRevision = 0;
     std::string m_TestClipboard;
 
     ~Impl()
@@ -352,12 +441,97 @@ struct Window::Impl : std::enable_shared_from_this<Window::Impl>
         return deadline < 0 ? -1 : std::max(0.0, deadline - glfwGetTime());
     }
 
+    void ObserveNativeDelivery(const DispatchReceipt& receipt)
+    {
+        const auto weak = weak_from_this();
+        receipt.OnFinished(
+            [weak](DispatchStatus status, std::exception_ptr error)
+            {
+                if (status != DispatchStatus::Failed && status != DispatchStatus::Rejected)
+                    return;
+                if (const auto self = weak.lock(); self && self->m_Owner && !self->m_Closed)
+                {
+                    self->m_CallbackError = error ? error
+                                                  : std::make_exception_ptr(std::runtime_error(
+                                                        "The native delivery queue rejected an ordered callback."));
+                    self->RequestClose();
+                }
+            });
+    }
+
+    void SetFocused(bool focused)
+    {
+        m_Focused = focused;
+        if (focused)
+        {
+            m_Ui->RequestRepaint();
+            return;
+        }
+        const auto revision = ++m_InputRevision;
+        if (!Detail::IsDeliveringInput() && m_Ui->GetPhase() == UiPhase::Idle && !StateStore::IsUpdatingOnThisThread())
+        {
+            m_Ui->Deactivate();
+            return;
+        }
+        const auto weak = weak_from_this();
+        auto receipt = m_Ui->Defer(
+            [weak, revision](UiContext& ui)
+            {
+                if (const auto self = weak.lock();
+                    self && self->m_Owner && !self->m_Closed && self->m_InputRevision == revision && !self->m_Focused)
+                    ui.Deactivate();
+            });
+        ObserveNativeDelivery(receipt);
+    }
+
+    void DeliverInput(InputEvent event)
+    {
+        if (Detail::IsDeliveringInput() || m_Ui->GetPhase() != UiPhase::Idle || StateStore::IsUpdatingOnThisThread())
+        {
+            const auto weak = weak_from_this();
+            const auto revision = m_InputRevision;
+            auto receipt = m_Ui->Defer(
+                [weak, revision, event = std::move(event)](UiContext&) mutable
+                {
+                    if (const auto self = weak.lock();
+                        self && self->m_Owner && !self->m_Closed && self->m_InputRevision == revision)
+                        self->DeliverInput(std::move(event));
+                });
+            ObserveNativeDelivery(receipt);
+            return;
+        }
+        const auto* key = std::get_if<KeyboardEvent>(&event);
+        const bool notify = key && key->m_Down && !key->m_Repeat;
+        const auto pressed = key ? key->m_Key : Key::Unknown;
+        m_Ui->DispatchInput(event);
+        if (notify && m_Owner && !m_Closed)
+        {
+            glfwMakeContextCurrent(m_Window);
+            m_KeyPressed.Emit(pressed);
+        }
+    }
+
     Point Cursor() const
     {
         double x = 0;
         double y = 0;
         glfwGetCursorPos(m_Window, &x, &y);
         return {static_cast<float>(x), static_cast<float>(y)};
+    }
+
+    Modifiers InputModifiers(int flags) const
+    {
+        const bool altGraph = (flags & GLFW_MOD_CONTROL) != 0 && glfwGetKey(m_Window, GLFW_KEY_RIGHT_ALT) == GLFW_PRESS;
+        return TranslateModifiers(flags, altGraph);
+    }
+
+    unsigned PointerButtons() const
+    {
+        unsigned result = 0;
+        for (int button = GLFW_MOUSE_BUTTON_1; button <= GLFW_MOUSE_BUTTON_8; ++button)
+            if (glfwGetMouseButton(m_Window, button) == GLFW_PRESS)
+                result |= 1u << static_cast<unsigned>(button);
+        return result;
     }
 
     Modifiers CurrentModifiers() const
@@ -375,7 +549,7 @@ struct Window::Impl : std::enable_shared_from_this<Window::Impl>
         if (glfwGetKey(m_Window, GLFW_KEY_LEFT_ALT) == GLFW_PRESS ||
             glfwGetKey(m_Window, GLFW_KEY_RIGHT_ALT) == GLFW_PRESS)
             flags |= GLFW_MOD_ALT;
-        return TranslateModifiers(flags);
+        return InputModifiers(flags);
     }
 };
 
@@ -470,54 +644,63 @@ Window::Window(const WindowOptions& options, const std::filesystem::path& fontPa
                                                         state.NativeFrame();
                                                     });
                                  });
-    glfwSetCursorPosCallback(
-        self.m_Window,
-        [](GLFWwindow* window, double x, double y)
-        {
-            Impl::Dispatch(
-                window, [&](Impl& state)
-                { state.m_Ui->PointerMove({static_cast<float>(x), static_cast<float>(y)}, state.CurrentModifiers()); });
-        });
+    glfwSetCursorPosCallback(self.m_Window,
+                             [](GLFWwindow* window, double x, double y)
+                             {
+                                 Impl::Dispatch(window,
+                                                [&](Impl& state)
+                                                {
+                                                    PointerEvent event{{static_cast<float>(x), static_cast<float>(y)},
+                                                                       state.CurrentModifiers()};
+                                                    event.m_Buttons = state.PointerButtons();
+                                                    event.m_Timestamp = glfwGetTime();
+                                                    state.DeliverInput(event);
+                                                });
+                             });
     glfwSetCursorEnterCallback(self.m_Window,
                                [](GLFWwindow* window, int entered)
                                {
                                    Impl::Dispatch(window,
                                                   [&](Impl& state)
                                                   {
-                                                      if (!entered)
-                                                          state.m_Ui->PointerMove({-100000, -100000});
+                                                      PointerEvent event{entered ? state.Cursor()
+                                                                                 : Point{-100000, -100000},
+                                                                         state.CurrentModifiers()};
+                                                      event.m_Buttons = state.PointerButtons();
+                                                      event.m_Timestamp = glfwGetTime();
+                                                      state.DeliverInput(event);
                                                   });
                                });
     glfwSetMouseButtonCallback(
         self.m_Window,
         [](GLFWwindow* window, int button, int action, int modifiers)
         {
-            if (button != GLFW_MOUSE_BUTTON_LEFT && button != GLFW_MOUSE_BUTTON_RIGHT)
-                return;
-            Impl::Dispatch(window,
-                           [&](Impl& state)
-                           {
-                               const auto point = state.Cursor();
-                               if (button == GLFW_MOUSE_BUTTON_RIGHT)
-                               {
-                                   if (action == GLFW_PRESS)
-                                       state.m_Ui->ContextMenu(point);
-                                   return;
-                               }
-                               if (action == GLFW_PRESS)
-                               {
-                                   const double now = glfwGetTime();
-                                   const float distance = std::hypot(point.m_X - state.m_LastClickPosition.m_X,
-                                                                     point.m_Y - state.m_LastClickPosition.m_Y);
-                                   state.m_Clicks =
-                                       now - state.m_LastClick <= 0.45 && distance <= 5 ? state.m_Clicks % 3 + 1 : 1;
-                                   state.m_LastClick = now;
-                                   state.m_LastClickPosition = point;
-                                   state.m_Ui->PointerDown(point, TranslateModifiers(modifiers), state.m_Clicks);
-                               }
-                               else if (action == GLFW_RELEASE)
-                                   state.m_Ui->PointerUp(point, TranslateModifiers(modifiers));
-                           });
+            Impl::Dispatch(
+                window,
+                [&](Impl& state)
+                {
+                    if (button < GLFW_MOUSE_BUTTON_1 || button > GLFW_MOUSE_BUTTON_8)
+                        return;
+                    PointerEvent event{state.Cursor(), state.InputModifiers(modifiers)};
+                    event.m_Type = action == GLFW_PRESS ? PointerEventType::Down : PointerEventType::Up;
+                    event.m_Button = button == GLFW_MOUSE_BUTTON_LEFT     ? PointerButton::Left
+                                     : button == GLFW_MOUSE_BUTTON_RIGHT  ? PointerButton::Right
+                                     : button == GLFW_MOUSE_BUTTON_MIDDLE ? PointerButton::Middle
+                                                                          : static_cast<PointerButton>(button + 1);
+                    event.m_Buttons = state.PointerButtons();
+                    event.m_Timestamp = glfwGetTime();
+                    if (action == GLFW_PRESS && button == GLFW_MOUSE_BUTTON_LEFT)
+                    {
+                        const double now = event.m_Timestamp;
+                        const float distance = std::hypot(event.m_Position.m_X - state.m_LastClickPosition.m_X,
+                                                          event.m_Position.m_Y - state.m_LastClickPosition.m_Y);
+                        state.m_Clicks = now - state.m_LastClick <= 0.45 && distance <= 5 ? state.m_Clicks % 3 + 1 : 1;
+                        state.m_LastClick = now;
+                        state.m_LastClickPosition = event.m_Position;
+                        event.m_Clicks = state.m_Clicks;
+                    }
+                    state.DeliverInput(event);
+                });
         });
     glfwSetScrollCallback(self.m_Window,
                           [](GLFWwindow* window, double x, double y)
@@ -525,45 +708,41 @@ Window::Window(const WindowOptions& options, const std::filesystem::path& fontPa
                               Impl::Dispatch(window,
                                              [&](Impl& state)
                                              {
-                                                 state.m_Ui->Scroll(state.Cursor(),
-                                                                    {static_cast<float>(x), static_cast<float>(y)},
-                                                                    state.CurrentModifiers());
+                                                 state.DeliverInput(
+                                                     ScrollEvent{state.Cursor(),
+                                                                 {static_cast<float>(x), static_cast<float>(y)},
+                                                                 state.CurrentModifiers(),
+                                                                 glfwGetTime()});
                                              });
                           });
-    glfwSetKeyCallback(
-        self.m_Window,
-        [](GLFWwindow* window, int key, int, int action, int modifiers)
-        {
-            Impl::Dispatch(window,
-                           [&](Impl& state)
-                           {
-                               const auto translated =
-                                   key == GLFW_KEY_F10 && (modifiers & GLFW_MOD_SHIFT) ? Key::Menu : TranslateKey(key);
-                               state.m_Ui->KeyEvent(translated, action != GLFW_RELEASE, action == GLFW_REPEAT,
-                                                    TranslateModifiers(modifiers));
-                               if (action == GLFW_PRESS && state.m_Owner && !state.m_Closed)
-                               {
-                                   glfwMakeContextCurrent(state.m_Window);
-                                   state.m_KeyPressed.Emit(translated);
-                               }
-                           });
-        });
-    glfwSetCharCallback(
-        self.m_Window, [](GLFWwindow* window, unsigned codepoint)
-        { Impl::Dispatch(window, [&](Impl& state) { state.m_Ui->TextInput(EncodeUtf8(codepoint)); }); });
-    glfwSetWindowFocusCallback(self.m_Window,
-                               [](GLFWwindow* window, int focused)
-                               {
-                                   Impl::Dispatch(window,
-                                                  [&](Impl& state)
-                                                  {
-                                                      state.m_Focused = focused != 0;
-                                                      if (!focused)
-                                                          state.m_Ui->Deactivate();
-                                                      else
-                                                          state.m_Ui->RequestRepaint();
-                                                  });
-                               });
+    glfwSetKeyCallback(self.m_Window,
+                       [](GLFWwindow* window, int key, int scanCode, int action, int modifiers)
+                       {
+                           Impl::Dispatch(window,
+                                          [&](Impl& state)
+                                          {
+                                              const auto translated = LogicalKey(key, scanCode);
+                                              KeyboardEvent event{translated,
+                                                                  action != GLFW_RELEASE,
+                                                                  action == GLFW_REPEAT,
+                                                                  state.InputModifiers(modifiers),
+                                                                  TranslateKey(key),
+                                                                  scanCode,
+                                                                  glfwGetTime()};
+                                              if (const char* name = glfwGetKeyName(key, scanCode))
+                                                  event.m_KeyName = name;
+                                              state.DeliverInput(event);
+                                          });
+                       });
+    glfwSetCharCallback(self.m_Window,
+                        [](GLFWwindow* window, unsigned codepoint)
+                        {
+                            Impl::Dispatch(
+                                window, [&](Impl& state)
+                                { state.DeliverInput(TextInputEvent{EncodeUtf8(codepoint), glfwGetTime()}); });
+                        });
+    glfwSetWindowFocusCallback(self.m_Window, [](GLFWwindow* window, int focused)
+                               { Impl::Dispatch(window, [&](Impl& state) { state.SetFocused(focused != 0); }); });
     glfwSetWindowCloseCallback(self.m_Window, [](GLFWwindow* window)
                                { Impl::Dispatch(window, [](Impl& state) { state.RequestClose(); }); });
     self.m_Ui->Prepare(static_cast<float>(options.m_Width), static_cast<float>(options.m_Height));

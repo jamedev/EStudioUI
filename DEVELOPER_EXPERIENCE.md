@@ -32,6 +32,10 @@ extension contracts, lifetime rules, or per-feature performance evidence.
   have one documented responsibility and consistent naming.
 - Default to composition. Require a paint or event override only when the
   application actually needs custom behavior.
+- Define shared commands once with CreateAction and reuse their presentation;
+  typed action handles make worker command delivery follow the existing queue
+  and lifetime rules. Popup/modal results are asynchronous owner-side sessions.
+  See [INPUT.md](INPUT.md) and the compiled input example for the ordinary path.
 
 For example, the foundation API supports this small, complete function:
 

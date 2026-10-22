@@ -290,7 +290,7 @@ storage and BVHs; an application can map canonical IDs to canvas entity IDs.
 The Models gallery and [verification/MODELS_0_11.md](verification/MODELS_0_11.md)
 record actual 100000-record work counts, editing/lifetime tests, and real retained
 versus full framebuffer results. Layout is delivered in 0.12 with the optional
-constraint strategy in 0.13. Gate B remains open for F09 input/actions/focus,
-F11 platform/accessibility, and F10a essential text/input in
+constraint strategy in 0.13. F09 input/actions/focus is delivered in 0.14.
+Gate B remains open for F11 platform/accessibility and F10a essential text/input in
 [FOUNDATIONS_ROADMAP.md](FOUNDATIONS_ROADMAP.md). F14 module extraction and SDK
 packaging are deferred until broad widget/workspace use informs their boundaries.

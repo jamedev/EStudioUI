@@ -20,8 +20,8 @@ reusable modules, including services for applications without windows or a GPU.
 F14 module extraction and SDK packaging are deferred and no longer block widget
 development. This changes the plan, not the delivered 0.13 API or build targets.
 
-The next sequence is F09 input/actions/focus, F11 platform/accessibility services,
-and F10a essential control text/input. Complete the relevant Gate B integration
+F09 input/actions/focus is now delivered. Continue F11 platform/accessibility
+services and F10a essential control text/input. Complete the relevant Gate B integration
 evidence, then expand common controls, dialogs, data views, and workspaces. F10b
 document editing is a later dedicated track; it does not block those widgets.
 F12 resource limits, F13 diagnostics, and F15 evidence accompany each feature
@@ -35,7 +35,7 @@ command history, geometry, and persistence; these are not promised modules or
 current standalone SDKs. Public API usability and supported extension points
 remain acceptance criteria throughout.
 
-## Implementation status: 0.13, constraints and live resizing
+## Implementation status: 0.14, input, actions, focus, and popup sessions
 
 **Gate A is implemented.** F01-F04 now have public APIs, lifetime/phase/error
 contracts, concurrency tests, and actual multiwindow/framebuffer probes.
@@ -60,7 +60,8 @@ and its remaining platform limits.
 | F15 | Gate A concurrency/lifetime/framebuffer coverage implemented; native hardware and broader platform coverage remain open |
 | F06 | Core implemented: typed external snapshot models, stable IDs, batched edits/structural changes, shared selection, prevalidated sort/filter chains, delegates, worker publication, bounded content sizing, and expanded-branch row maps; integration evidence recorded with 0.11 |
 | F08 | Implemented in 0.12: width-first constrained measurement, baselines and composition sources, shared box/grid/form/flow strategies, bounded caches, percentage-cycle fallback, owned child/track diagnostics; verification recorded below |
-| F09, F11, F10a | Remaining Gate B work: input/focus/actions, platform/accessibility contracts and representative native services, and essential text/input for ordinary controls |
+| F09 | Implemented in 0.14: owning input payloads, rich native metadata, transactional shared actions and worker handles, scoped/ambiguity-safe shortcuts, local focus scopes, nested popup/modal sessions, menu nesting and phase/lifetime guards |
+| F11, F10a | Remaining Gate B work: platform/accessibility contracts and representative native services, and essential text/input for ordinary controls |
 | F10b, F12, F16 | Planned: later document editing, feature-driven resource hardening, and reusable history/workspace services |
 | F14 | Deferred until broad widget/workspace use informs reusable module extraction and SDK packaging; not a Gate B prerequisite |
 
@@ -88,9 +89,20 @@ callbacks and a Win32 system-modal-loop timer present safe paced frames while
 resizing. [verification/CONSTRAINTS_0_13.md](verification/CONSTRAINTS_0_13.md)
 records CPU, framebuffer, sanitizer and platform evidence with explicit limits.
 This adds private header-only Kiwi under permissive licenses; Box/Grid/Form/Flow
-remain independent of the strategy. Continue F09 input/focus/actions, F11
-platform/accessibility services, and F10a essential control text/input.
+remain independent of the strategy. Continue F11 platform/accessibility services
+and F10a essential control text/input.
 Gate B remains open and broad widget expansion remains gated.
+
+**F09 is implemented in 0.14.** [INPUT.md](INPUT.md) documents the delivered APIs
+and migration contracts; [examples/InputActions.cpp](examples/InputActions.cpp)
+is compiled by the ordinary demo build. Shared commands reuse State/StateStore,
+including validated coherent updates, bounded observer feedback, and owner-side
+worker delivery through typed action handles. Buttons, toolbars, menus, and split
+tool choosers share command presentation and execution. No runtime dependency
+was added. [verification/INPUT_0_14.md](verification/INPUT_0_14.md) records CPU,
+concurrency, framebuffer, and native-adapter evidence and remaining platform limits.
+Full font fallback/IME, semantic accessibility/native services, document editing,
+and deferred module packaging retain their F10a/F11/F10b/F14 scopes.
 
 ## Original assessment of the 0.8 implementation
 
@@ -297,6 +309,10 @@ Choose any solver dependency only after requirements and license review.
 
 ## F09/F11: one input, focus, command, and semantic pipeline
 
+The F09 portion is delivered in 0.14; the following pipeline requirements remain
+the design contract. Actual signatures, costs, native-adapter limits, and examples
+are in [INPUT.md](INPUT.md). The F11 semantic/platform portion remains planned.
+
 Define a stable event envelope separating committed text, logical shortcut keys,
 physical keys/scancodes, repeat, modifiers, timestamps, pointer identity/button,
 and future pen/touch data. Handle platform-primary shortcuts and AltGr without
@@ -461,9 +477,9 @@ geometry in a worker, bind progress, replace an earlier request, close the targe
 and keep a second window interactive. This validates developer ergonomics and
 the actual failure paths before they spread into new widgets.
 
-Gate A, the F05/F07 first slice, F06 core, F08, and the optional constraint-layout
-increment are now delivered as recorded above. Next finish F09, F11's initial
-platform services and semantic pipeline, and F10a, with relevant F12/F13/F15 work.
+Gate A, the F05/F07 first slice, F06 core, F08, the optional constraint-layout
+increment, and F09 are now delivered as recorded above. Next finish F11's initial
+platform services and semantic pipeline and F10a, with relevant F12/F13/F15 work.
 Review Gate B integration, then expand the widget catalog and application
 workspaces. Keep the document-editor track F10b later and develop F16 with the
 workspaces that need it. Schedule F14 module extraction/package integration once

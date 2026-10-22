@@ -69,6 +69,35 @@ std::size_t SplitToolButton::GetActionCount() const
     return m_Actions.size();
 }
 
+ToolButton& SplitToolButton::AddAction(std::shared_ptr<Action> command)
+{
+    VerifyStructuralMutation();
+    if (!command)
+        throw std::invalid_argument("A split-tool action cannot be null.");
+    (void)command->GetSnapshot();
+    auto& action = AddAction(command->GetSnapshot()->m_Text);
+    action.SetAction(command);
+    Widget::AddAction(command);
+    const auto index = m_Actions.size() - 1;
+    const WidgetRef owner(this);
+    m_ActionConnections.emplace_back(command->Properties().Subscribe(
+        [owner, index](const StateChange<ActionState>&)
+        {
+            if (auto* live = dynamic_cast<SplitToolButton*>(owner.Get()); live && live->m_Default == index)
+                live->SetDefaultAction(index);
+        }));
+    m_ActionStops.push_back(std::make_unique<std::stop_callback<std::function<void()>>>(
+        command->GetStopToken(),
+        [owner, index]
+        {
+            if (auto* live = dynamic_cast<SplitToolButton*>(owner.Get()); live && live->m_Default == index)
+                live->m_Primary->SetEnabled(false);
+        }));
+    if (m_Default == index)
+        SetDefaultAction(index);
+    return action;
+}
+
 ToolButton& SplitToolButton::GetAction(std::size_t index)
 {
     VerifyAccess();
@@ -86,6 +115,11 @@ void SplitToolButton::SetDefaultAction(std::size_t index)
     auto& action = GetAction(index);
     m_Default = index;
     m_Primary->SetText(action.GetText());
+    m_Primary->SetEnabled(action.IsEnabled());
+    if (const auto command = action.GetAction())
+        m_Primary->SetChecked(command->GetSnapshot()->m_Checked);
+    else
+        m_Primary->SetChecked(false);
 }
 
 std::size_t SplitToolButton::GetDefaultActionIndex() const
@@ -101,8 +135,10 @@ void SplitToolButton::Choose(std::size_t index)
     const auto* action = m_Actions[index].Get();
     if (!IsEnabled() || !action || !action->IsEnabled())
         return;
+    const WidgetRef owner(this);
     SetDefaultAction(index);
-    m_Triggered.Emit(index);
+    if (owner.Get())
+        m_Triggered.Emit(index);
 }
 
 void SplitToolButton::TriggerDefault()
@@ -113,7 +149,17 @@ void SplitToolButton::TriggerDefault()
         return;
     auto* action = dynamic_cast<ToolButton*>(m_Actions[m_Default].Get());
     if (action && action->IsEnabled())
-        action->Clicked().Emit();
+    {
+        if (const auto command = action->GetAction())
+        {
+            const WidgetRef owner(this);
+            Choose(m_Default);
+            if (owner.Get())
+                command->Trigger();
+        }
+        else
+            action->Clicked().Emit();
+    }
 }
 
 void SplitToolButton::OpenMenu()
@@ -130,7 +176,7 @@ void SplitToolButton::OpenMenu()
     if (auto* menu = Menu())
     {
         const auto bounds = GetBounds();
-        menu->Open({bounds.m_X, bounds.m_Y + bounds.m_Height});
+        menu->Open(context->ToWindowPoint(*this, {bounds.m_X, bounds.m_Y + bounds.m_Height}));
     }
 }
 

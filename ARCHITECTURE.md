@@ -14,6 +14,8 @@ without exposing third-party types in its public widget headers.
 | `UiDispatcher`, `UiHandle`, `DispatchReceipt` | Bounded producer queues, owner delivery, target lifetime, coalescing, inspectable outcomes |
 | `BackgroundTasks`, `Task`, `RequestScope` | Cooperative workers, UI continuations, progress, cancellation and stale-request retirement |
 | `State`, `StateStore`, `Binding` | Typed snapshots, validated coherent revisions, savepoints, control synchronization and reconciliation |
+| `Action`, `ActionState`, `Shortcut` | Transactional command presentation, lifetime-bound worker handles, scoped gesture precedence and ambiguity handling |
+| `InputEvent`, `PopupSession` | Owning native-independent payloads, thread-local input boundaries, bounded asynchronous popup/modal results |
 | `UiContext` | Widget tree, CSS resolution, constrained measurement, strategy allocation, clipping, focus, capture |
 | `Widget`, `Label`, `Button`, `TextBox` | Owned model, cached shaping, behavior, emitted signals |
 | `SizeRule`, `Layout` | Fixed/content/fill contracts and shared bounded weighted distribution |
@@ -31,6 +33,26 @@ without exposing third-party types in its public widget headers.
 | `Renderer` | One ordered instance stream, analytic shape and Slug-derived text shaders |
 
 ## Frame and cache behavior
+
+Input dispatch has one thread-local event boundary across contexts. Owning
+InputEvent payloads preserve logical/physical keys and pointer metadata; legacy
+widget hooks remain adapters, while embedded scenes receive complete keyboard
+events. Preview paths and command associations observe unique widget lifetimes.
+Shortcut lookup visits associated commands rather than scanning the widget tree.
+Shared ActionState values use the existing transaction/notification engine.
+
+Native callbacks queue reentrant input through the bounded dispatcher. Focus loss
+invalidates deferred input from the old focus session. Input prevents nested
+native pumping, frame advancement, surface/paint/submission traversals, and queue
+draining; explicit geometry-only Prepare remains available to controls and CSS
+animation endpoint capture. Native resize continues through the ordinary scheduler
+after the current callback. This introduces no render thread or runtime dependency.
+
+Popup entries hold weak widget/parent/return-focus observations and one owned
+PopupSession result. Physical root ownership is separate from logical selector
+ancestry and popup-stack order. Closing first detaches/hides the branch, restores
+eligible focus, then settles all results. Completion callbacks cannot overwrite a
+newer presentation or reopen during teardown/deactivation. See [INPUT.md](INPUT.md).
 
 Input and model changes declare their `Invalidation` impacts. Paint-only changes
 retain styles and geometry; content changes discard the source intrinsic result

@@ -18,8 +18,9 @@ systems require their own scoped roadmap; this scope change does not mark them
 implemented. Keep the C++20, GPU drawing, permissive dependencies, explicit
 ownership, CSS, and low idle-work requirements.
 
-The next foundations are F09 input/actions/focus, F11 platform/accessibility
-services, and F10a essential text/input for controls. F10b document editing and
+F09 input/actions/focus is delivered in 0.14, including shared command presentations
+and nested menus on existing controls. The next foundations are F11 platform/
+accessibility services and F10a essential text/input for controls. F10b document editing and
 W04/W05 remain a later dedicated track; basic forms and workspaces do not wait
 for a document engine. These are sequencing changes, not new shipped features.
 
@@ -38,6 +39,11 @@ scrolling container. The custom dial in the demo is not a public library `Dial`.
 Priority means: **Essential** for ordinary applications, **High** for a powerful
 engineering/CAD workspace, **Later** after the shared foundations and common
 controls. All catalog entries below are **planned** at this baseline.
+
+F09 adds shared action presentations to the existing buttons, toolbars, split
+choosers, and context menus. Nested command menus are implemented through
+`ContextMenu::AddMenu`; W24 remains open for MenuBar and the rest of that family.
+No other planned widget family is marked delivered by the input milestone.
 
 ## Input and display
 
@@ -156,7 +162,7 @@ canvas/sketcher layer rather than becoming mandatory core form controls.
 
 ## Delivery order and completion rules
 
-1. Complete the remaining common-control foundations F09, F11, and F10a and the
+1. Build on delivered F09 input/actions/focus; finish F11 and F10a and the
    Gate B evidence in [FOUNDATIONS_ROADMAP.md](FOUNDATIONS_ROADMAP.md). Carry the
    relevant F12 resource limits, F13 diagnostics, and F15 checks with each feature.
    Deferred F14 packaging and F10b document editing are not prerequisites.

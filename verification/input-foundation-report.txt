@@ -1,0 +1,8 @@
+F09 input/actions/focus/popup integration: PASS
+Toolbar/menu/button/shortcut command state: PASS
+Modal focus, nested chooser, asynchronous result and restoration: PASS
+Production GLFW key/character/pointer callback metadata: PASS
+Reentrant native input is queued; input-time resize defers native frames; nested native loops are rejected: PASS
+Stacked retained/full actual framebuffer equality: PASS
+Unchanged retained GPU instances submitted: 0
+Native callbacks were invoked through their production adapters; this does not validate a real keyboard layout or IME.

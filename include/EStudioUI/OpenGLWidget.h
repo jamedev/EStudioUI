@@ -97,7 +97,10 @@ class OpenGLWidget final : public Widget
     //! Sends scene zoom/pan wheel input.
     bool OnScroll(Point delta, Modifiers modifiers) override;
 
-    //! Forwards focused scene keyboard input.
+    //! Preserves complete keyboard metadata when forwarding focused scene input.
+    bool OnInput(const InputEvent& event) override;
+
+    //! Forwards legacy focused scene keyboard input.
     void OnKey(Key key, bool down, bool repeat, Modifiers modifiers) override;
 
   private:

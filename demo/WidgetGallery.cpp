@@ -74,7 +74,10 @@ WidgetGallery::WidgetGallery(Window& window, TabWidget& tabs, const std::filesys
     m_Foundation = std::make_unique<FoundationGallery>(window, tabs.AddTab("Async"), assets);
     m_State = std::make_unique<StateGallery>(window, tabs.AddTab("State"), assets);
     m_Models = std::make_unique<ModelGallery>(window, tabs.AddTab("Models"), assets);
-    m_Constraints = std::make_unique<ConstraintGallery>(window, tabs.AddTab("Constraints"));
+    auto& constraintsPage = tabs.AddTab("Constraints");
+    m_ConstraintPage = WidgetRef(&constraintsPage);
+    m_Constraints = std::make_unique<ConstraintGallery>(window, constraintsPage);
+    m_Input = std::make_unique<InputGallery>(window, tabs.AddTab("Input & actions"));
 }
 
 void WidgetGallery::BuildCollections(Widget& page)
@@ -270,7 +273,7 @@ void WidgetGallery::BuildLayouts(Widget& page)
                 [this, width = option.second]
                 {
                     m_Window.SetSize(width, 820);
-                    m_Window.RenderFrame();
+                    m_Window.Ui().Prepare(static_cast<float>(width), 820);
                     UpdateLayoutReadout();
                 });
     }
@@ -278,7 +281,16 @@ void WidgetGallery::BuildLayouts(Widget& page)
     toolbar.AddButton("Inspect sizes").Clicked().Connect([this] { UpdateLayoutReadout(); });
     auto& constraints = toolbar.AddButton("Constraint layouts");
     m_ConstraintShortcut = WidgetRef(&constraints);
-    constraints.Clicked().Connect([this] { m_Tabs.SetCurrentIndex(m_Tabs.GetTabCount() - 1); });
+    constraints.Clicked().Connect(
+        [this]
+        {
+            for (int index = 0; index < m_Tabs.GetTabCount(); ++index)
+                if (&m_Tabs.GetPage(index) == m_ConstraintPage.Get())
+                {
+                    m_Tabs.SetCurrentIndex(index);
+                    break;
+                }
+        });
     Caption(page,
             "Resize the native window or choose a preset. Fixed and content sizes stay stable; Fill divides the "
             "remaining space.\nA capped Fill returns its unused share to the others. Hard minima overflow explicitly "
@@ -440,6 +452,9 @@ void WidgetGallery::Verify(const std::filesystem::path& assets, const std::files
     Click(ui, Center(*m_ConstraintShortcut.Get()));
     Check(m_Tabs.GetCurrentIndex() == 12, "visible Layout lab shortcut opens the constraints page");
     m_Constraints->Verify(assets, output);
+    m_Tabs.SetCurrentIndex(13);
+    m_Window.RenderFrame(ui.GetTime());
+    m_Input->Verify(assets, output);
     m_Window.RenderFrame(ui.GetTime());
     std::ofstream report(output / "widgets-report.txt");
     report << "EStudioUI 0.3 widget integration: PASS\n"

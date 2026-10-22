@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.24)
-project(EStudioUI VERSION 0.13.0 LANGUAGES C CXX)
+project(EStudioUI VERSION 0.14.0 LANGUAGES C CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -39,6 +39,7 @@ if(ESTUDIOUI_BUILD_THREAD_TESTS)
     add_library(EStudioUIThreadRuntime STATIC
         src/DispatchReceipt.cpp src/UiDispatcher.cpp src/UiHandle.cpp src/ThreadAffinity.cpp
         src/Task.cpp src/BackgroundTasks.cpp src/StateStore.cpp src/State.cpp
+        src/Action.cpp src/Shortcut.cpp src/InputEvent.cpp
         src/ModelValue.cpp src/ModelSnapshot.cpp src/RecordModel.cpp src/ModelBuilder.cpp
         src/ItemModel.cpp src/SelectionModel.cpp src/SortFilterModel.cpp src/TreeRowMap.cpp)
     target_include_directories(EStudioUIThreadRuntime PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/include")
@@ -48,7 +49,7 @@ if(ESTUDIOUI_BUILD_THREAD_TESTS)
     target_compile_options(EStudioUIThreadRuntime PRIVATE -Wall -Wextra -Wpedantic -Wconversion -Wshadow)
 
     enable_testing()
-    foreach(suite Dispatch QueuedSignal Task State Model)
+    foreach(suite Dispatch QueuedSignal Task State Model ActionDomain)
         add_executable(EStudioUIThread${suite}Tests tests/${suite}Tests.cpp)
         target_link_libraries(EStudioUIThread${suite}Tests PRIVATE EStudioUIThreadRuntime)
         add_test(NAME Thread${suite} COMMAND EStudioUIThread${suite}Tests)
@@ -83,6 +84,7 @@ add_library(EStudioUI STATIC
     src/Style.cpp src/TextBuffer.cpp src/FontFace.cpp src/Renderer.cpp
     src/Widget.cpp src/UiContext.cpp src/Label.cpp src/Button.cpp src/TextBox.cpp src/Window.cpp
     src/SizeRule.cpp src/Layout.cpp src/ToolButton.cpp src/ToolBar.cpp src/TabWidget.cpp
+    src/InputEvent.cpp src/Shortcut.cpp src/Action.cpp src/PopupSession.cpp src/UiInput.cpp
     src/Measure.cpp src/LayoutStrategy.cpp src/BoxLayout.cpp src/GridLayout.cpp src/FormLayout.cpp src/FlowLayout.cpp
     src/ConstraintExpression.cpp src/Constraint.cpp src/ConstraintItem.cpp src/ConstraintLayout.cpp src/NativeResizePump.cpp
     src/ContextMenu.cpp src/ScrollWidget.cpp src/ListWidget.cpp src/TreeWidget.cpp src/TableWidget.cpp src/OpenGLWidget.cpp
@@ -121,10 +123,12 @@ if(ESTUDIOUI_BUILD_DEMO)
         demo/SketchGallery.cpp demo/CanvasPrimitiveProbe.cpp demo/CanvasProbe.cpp demo/CanvasCurvesProbe.cpp
         demo/CustomWidgetGallery.cpp demo/PainterProbe.cpp demo/InputControlsProbe.cpp
         demo/WidgetStylesGallery.cpp demo/WidgetStylesProbe.cpp demo/ApplicationProbe.cpp demo/FoundationGallery.cpp
-        demo/StateGallery.cpp demo/ModelGallery.cpp demo/LayoutGallery.cpp demo/ConstraintGallery.cpp)
+        demo/StateGallery.cpp demo/ModelGallery.cpp demo/LayoutGallery.cpp demo/ConstraintGallery.cpp demo/InputGallery.cpp)
     target_link_libraries(EStudioUIDemo PRIVATE EStudioUI::EStudioUI EStudioUIGl glfw)
     add_executable(EStudioUIConstraintExample examples/ConstraintLayout.cpp)
     target_link_libraries(EStudioUIConstraintExample PRIVATE EStudioUI::EStudioUI)
+    add_executable(EStudioUIInputExample examples/InputActions.cpp)
+    target_link_libraries(EStudioUIInputExample PRIVATE EStudioUI::EStudioUI)
     if(MSVC)
         target_compile_options(EStudioUIDemo PRIVATE /utf-8)
     endif()
@@ -195,7 +199,7 @@ if(ESTUDIOUI_BUILD_TESTS)
     foreach(suite CanvasScene CanvasGeometry SketchDocument CanvasWidget InputControls SplitToolButton Painter
                   StyleParts StyledCollections StyledScroll CompositeStyle
                   Dispatch ThreadAffinity Task QueuedSignal ControlAffinity ServiceAffinity
-                  State Binding Invalidation ControlUpdate Model ModelView Layout ConstraintLayout)
+                  State Binding Invalidation ControlUpdate Model ModelView Layout ConstraintLayout InputFoundation ActionDomain)
         add_executable(EStudioUI${suite}Tests tests/${suite}Tests.cpp)
         target_link_libraries(EStudioUI${suite}Tests PRIVATE EStudioUI::EStudioUI)
         target_compile_definitions(EStudioUI${suite}Tests PRIVATE

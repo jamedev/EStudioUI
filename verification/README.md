@@ -5,6 +5,7 @@ For subsequent work, see [RICH_CSS.md](RICH_CSS.md) (0.5.0) and
 frame pacing, and actual gallery profiling). The records below describe 0.4.0.
 
 Current state/invalidation coverage is in [STATE_0_10.md](STATE_0_10.md).
+Current input/actions/focus/popup coverage is in [INPUT_0_14.md](INPUT_0_14.md).
 Execution/lifetime coverage is in [FOUNDATIONS_0_9.md](FOUNDATIONS_0_9.md).
 Widget-styling coverage and captures are in
 [WIDGET_STYLING_0_8.md](WIDGET_STYLING_0_8.md); the earlier sketcher/custom-control

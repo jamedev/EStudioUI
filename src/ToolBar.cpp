@@ -16,6 +16,16 @@ ToolButton& ToolBar::AddButton(std::string text)
     return button;
 }
 
+ToolButton& ToolBar::AddAction(std::shared_ptr<Action> action)
+{
+    if (!action)
+        throw std::invalid_argument("A toolbar action cannot be null.");
+    (void)action->GetSnapshot();
+    auto& button = AddButton({});
+    button.SetAction(std::move(action));
+    return button;
+}
+
 SplitToolButton& ToolBar::AddSplitButton(std::string text)
 {
     VerifyStructuralMutation();

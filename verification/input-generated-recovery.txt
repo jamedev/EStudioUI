@@ -1,0 +1,7 @@
+Removed invalid generated object: build/gate-b-sanitizers/CMakeFiles/EStudioUI.dir/src/CanvasWidget.cpp.o (0 bytes, prefix=)
+Removed invalid generated object: build/gate-b-sanitizers/CMakeFiles/EStudioUIInputControlsTests.dir/tests/InputControlsTests.cpp.o (0 bytes, prefix=)
+Removed invalid generated object: build/gate-b-sanitizers/CMakeFiles/EStudioUI.dir/src/SplitToolButton.cpp.o (0 bytes, prefix=)
+Removed invalid generated output: build/gate-b-sanitizers/CMakeFiles/EStudioUIDemo.dir/demo/SketchGallery.cpp.o (0 bytes)
+Removed invalid generated output: build/gate-b-sanitizers/CMakeFiles/EStudioUIThreadAffinityTests.dir/tests/ThreadAffinityTests.cpp.o (0 bytes)
+Removed invalid generated output: build/gate-b-sanitizers/CMakeFiles/EStudioUIStylePartsTests.dir/tests/StylePartsTests.cpp.o (0 bytes)
+Removed invalid generated output: build/gate-b-sanitizers/EStudioUIDemo (218914176 bytes)

@@ -1,0 +1,20 @@
+Test project /workspace/scratch/e2c95811cd0a/EStudioUI/build/gate-b-thread
+    Start 1: ThreadDispatch
+1/6 Test #1: ThreadDispatch ...................   Passed    1.16 sec
+    Start 2: ThreadQueuedSignal
+2/6 Test #2: ThreadQueuedSignal ...............   Passed    0.05 sec
+    Start 3: ThreadTask
+3/6 Test #3: ThreadTask .......................   Passed    3.34 sec
+    Start 4: ThreadState
+4/6 Test #4: ThreadState ......................   Passed    0.05 sec
+    Start 5: ThreadModel
+5/6 Test #5: ThreadModel ......................   Passed    0.39 sec
+    Start 6: ThreadActionDomain
+6/6 Test #6: ThreadActionDomain ...............   Passed    0.02 sec
+
+100% tests passed out of 6
+
+Label Time Summary:
+ThreadSanitizer    =   5.01 sec*proc (6 tests)
+
+Total Test time (real) =   5.01 sec
