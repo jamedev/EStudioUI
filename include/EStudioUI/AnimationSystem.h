@@ -1,6 +1,7 @@
 #pragma once
 
 #include "Animation.h"
+#include "ThreadAffinity.h"
 
 #include <cstdint>
 
@@ -80,6 +81,9 @@ class AnimationSystem
     Signal<AnimationId>& Cancelled();
 
   private:
+    //! Enforces scheduler access from its creating UI thread.
+    ThreadAffinity m_Affinity;
+
     //! Hides scheduling and callback-lifetime bookkeeping.
     struct Impl;
 

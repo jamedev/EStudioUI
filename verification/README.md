@@ -4,7 +4,8 @@ For subsequent work, see [RICH_CSS.md](RICH_CSS.md) (0.5.0) and
 [GPU_WORKLOAD.md](GPU_WORKLOAD.md) (0.5.1 retained rendering, hidden animations,
 frame pacing, and actual gallery profiling). The records below describe 0.4.0.
 
-Current widget-styling coverage and captures are in
+Current execution/lifetime coverage is in [FOUNDATIONS_0_9.md](FOUNDATIONS_0_9.md).
+Widget-styling coverage and captures are in
 [WIDGET_STYLING_0_8.md](WIDGET_STYLING_0_8.md); the earlier sketcher/custom-control
 checks are in [SKETCHER_0_7.md](SKETCHER_0_7.md).
 

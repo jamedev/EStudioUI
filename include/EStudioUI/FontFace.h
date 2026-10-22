@@ -1,6 +1,7 @@
 #pragma once
 
 #include "Types.h"
+#include "ThreadAffinity.h"
 
 #include <filesystem>
 #include <memory>
@@ -107,7 +108,13 @@ class FontFace
     //! Returns cached unhinted outline geometry for a glyph.
     const GlyphGeometry& GetGlyph(std::uint32_t id);
 
+    //! Rejects access from another thread before touching font or shaping state.
+    void VerifyAccess() const;
+
   private:
+    //! Keeps each native font/shaping service on its creating thread.
+    ThreadAffinity m_Affinity;
+
     //! Owns FreeType, HarfBuzz, font bytes, and the glyph cache.
     struct Impl;
 

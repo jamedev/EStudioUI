@@ -1,6 +1,8 @@
 #pragma once
 
 #include "Renderer.h"
+#include "ThreadAffinity.h"
+#include "UiHandle.h"
 #include "UiContext.h"
 
 namespace EStudioUI
@@ -58,6 +60,18 @@ class Window
     //! Runs the native event loop, sleeping between changes and caret deadlines.
     int Run();
 
+    //! Returns a typed producer endpoint; worker code never accesses this Window directly.
+    UiHandle<Window> GetHandle();
+
+    //! Returns this window's producer queue endpoint for owned background results.
+    UiDispatcher GetDispatcher() const;
+
+    //! Returns whether native or programmatic closure has been requested.
+    bool IsClosed() const;
+
+    //! Rejects unsupported direct calls before accessing native/UI state.
+    void VerifyAccess() const;
+
     //! Renders one frame without swapping, useful for screenshots and tests.
     void RenderFrame();
 
@@ -80,7 +94,10 @@ class Window
     //! Owns native resources and callback adapters.
     struct Impl;
 
-    //! Hides GLFW and GL types from public headers.
-    std::unique_ptr<Impl> m_Impl;
+    //! Captures native/UI ownership before an implementation is accessed.
+    ThreadAffinity m_Affinity;
+
+    //! Keeps callback execution alive until native resources can be safely retired.
+    std::shared_ptr<Impl> m_Impl;
 };
 } // namespace EStudioUI

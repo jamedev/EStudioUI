@@ -4,6 +4,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <exception>
 #include <list>
 #include <map>
 #include <stdexcept>
@@ -276,10 +277,15 @@ CanvasWidget::CanvasWidget()
     RegisterItemStyle("canvas-item");
 }
 
-CanvasWidget::~CanvasWidget() = default;
+CanvasWidget::~CanvasWidget()
+{
+    if (!IsOwnerThread())
+        std::terminate();
+}
 
 void CanvasWidget::SetScene(std::shared_ptr<CanvasScene> scene)
 {
+    VerifyStructuralMutation();
     m_Scene = scene ? std::move(scene) : std::make_shared<CanvasScene>();
     m_Preview.clear();
     m_SelectionRectangle.reset();
@@ -289,22 +295,26 @@ void CanvasWidget::SetScene(std::shared_ptr<CanvasScene> scene)
 
 CanvasScene& CanvasWidget::GetScene()
 {
+    VerifyAccess();
     return *m_Scene;
 }
 
 const CanvasScene& CanvasWidget::GetScene() const
 {
+    VerifyAccess();
     return *m_Scene;
 }
 
 void CanvasWidget::SceneChanged()
 {
+    VerifyStructuralMutation();
     m_CachedRevision = std::numeric_limits<std::uint64_t>::max();
     RequestRepaint();
 }
 
 CanvasPoint CanvasWidget::ToWorld(Point point) const
 {
+    VerifyAccess();
     const auto content = GetContentBounds();
     return {m_Center.m_X + (static_cast<double>(point.m_X) - content.m_X - content.m_Width * 0.5) / m_Zoom,
             m_Center.m_Y + (static_cast<double>(point.m_Y) - content.m_Y - content.m_Height * 0.5) / m_Zoom};
@@ -312,6 +322,7 @@ CanvasPoint CanvasWidget::ToWorld(Point point) const
 
 Point CanvasWidget::ToScreen(CanvasPoint point) const
 {
+    VerifyAccess();
     const auto content = GetContentBounds();
     return {static_cast<float>((point.m_X - m_Center.m_X) * m_Zoom + content.m_X + content.m_Width * 0.5),
             static_cast<float>((point.m_Y - m_Center.m_Y) * m_Zoom + content.m_Y + content.m_Height * 0.5)};
@@ -319,16 +330,20 @@ Point CanvasWidget::ToScreen(CanvasPoint point) const
 
 CanvasPoint CanvasWidget::GetCenter() const
 {
+    VerifyAccess();
     return m_Center;
 }
 
 double CanvasWidget::GetZoom() const
 {
+    VerifyAccess();
     return m_Zoom;
 }
 
 void CanvasWidget::SetCamera(CanvasPoint center, double zoom)
 {
+    VerifyAccess();
+    const auto ownerLease = RetainOwner();
     if (!Finite(center) || !std::isfinite(zoom) || zoom <= 0)
         throw std::invalid_argument("Canvas camera values must be finite and zoom must be positive.");
     zoom = std::clamp(zoom, 1e-6, 1e6);
@@ -352,6 +367,7 @@ void CanvasWidget::SetCamera(CanvasPoint center, double zoom)
 
 void CanvasWidget::FitScene(double margin)
 {
+    VerifyAccess();
     if (!std::isfinite(margin) || margin < 0)
         throw std::invalid_argument("Canvas fit margin must be finite and nonnegative.");
     if (m_Scene->Size() == 0)
@@ -369,6 +385,7 @@ void CanvasWidget::FitScene(double margin)
 
 CanvasBounds CanvasWidget::GetViewportWorldBounds() const
 {
+    VerifyAccess();
     const auto content = GetContentBounds();
     const auto origin = ToWorld({content.m_X, content.m_Y});
     return {origin.m_X, origin.m_Y, content.m_Width / m_Zoom, content.m_Height / m_Zoom};
@@ -376,6 +393,7 @@ CanvasBounds CanvasWidget::GetViewportWorldBounds() const
 
 void CanvasWidget::SetGridVisible(bool visible)
 {
+    VerifyAccess();
     if (m_GridVisible == visible)
         return;
     m_GridVisible = visible;
@@ -384,16 +402,19 @@ void CanvasWidget::SetGridVisible(bool visible)
 
 void CanvasWidget::SetPanMode(bool enabled)
 {
+    VerifyAccess();
     m_PanMode = enabled;
 }
 
 bool CanvasWidget::IsPanning() const
 {
+    VerifyAccess();
     return m_Panning;
 }
 
 std::uint32_t CanvasWidget::RegisterItemStyle(std::string type, std::vector<std::string> classes, std::string id)
 {
+    VerifyStructuralMutation();
     if (m_Palette.size() >= std::numeric_limits<std::uint32_t>::max())
         throw std::length_error("Canvas palette is full.");
     PaletteEntry entry;
@@ -408,6 +429,7 @@ std::uint32_t CanvasWidget::RegisterItemStyle(std::string type, std::vector<std:
 
 bool CanvasWidget::SetItemStyleSheet(std::string_view css, std::string& error)
 {
+    VerifyStructuralMutation();
     StyleSheet candidate;
     if (!candidate.Parse(std::string(DefaultItemCss) + std::string(css), error))
         return false;
@@ -454,6 +476,7 @@ void CanvasWidget::CompilePalette()
 
 void CanvasWidget::SetPreview(std::vector<CanvasGeometry> geometry, std::uint32_t style)
 {
+    VerifyStructuralMutation();
     for (const auto& item : geometry)
         if (!Finite(item.m_A) || !Finite(item.m_B) || !std::isfinite(item.m_Radius) || item.m_Radius < 0 ||
             !Finite(item.Bounds()))
@@ -465,6 +488,7 @@ void CanvasWidget::SetPreview(std::vector<CanvasGeometry> geometry, std::uint32_
 
 void CanvasWidget::SetSelectionRectangle(std::optional<CanvasBounds> bounds)
 {
+    VerifyAccess();
     if (bounds && !Finite(*bounds))
         throw std::invalid_argument("Canvas selection bounds must be finite and nonnegative.");
     m_SelectionRectangle = bounds;
@@ -473,6 +497,7 @@ void CanvasWidget::SetSelectionRectangle(std::optional<CanvasBounds> bounds)
 
 Widget& CanvasWidget::HostWidget(std::unique_ptr<Widget> widget, CanvasBounds bounds)
 {
+    VerifyStructuralMutation();
     if (!widget || !Finite(bounds))
         throw std::invalid_argument("Canvas hosts require a widget and finite, nonnegative bounds.");
     auto& child = AddChild(std::move(widget));
@@ -483,6 +508,7 @@ Widget& CanvasWidget::HostWidget(std::unique_ptr<Widget> widget, CanvasBounds bo
 
 bool CanvasWidget::RemoveHostedWidget(Widget& widget)
 {
+    VerifyStructuralMutation();
     const auto previous = m_Hosts.size();
     std::erase_if(m_Hosts, [&](const HostedWidget& host) { return host.m_Widget.Get() == &widget; });
     return m_Hosts.size() != previous && RemoveChild(widget);
@@ -533,18 +559,21 @@ void CanvasWidget::UpdateVisibleItems() const
 
 std::size_t CanvasWidget::GetVisibleItemCount() const
 {
+    VerifyAccess();
     UpdateVisibleItems();
     return m_VisibleItems.size();
 }
 
 std::size_t CanvasWidget::GetQueryVisitCount() const
 {
+    VerifyAccess();
     UpdateVisibleItems();
     return m_QueryVisits;
 }
 
 CanvasCacheStats CanvasWidget::GetCacheStats() const
 {
+    VerifyAccess();
     auto stats = m_PaintCache->m_Stats;
     stats.m_CurveEntries = m_PaintCache->m_Curves.size();
     stats.m_TextEntries = m_PaintCache->m_Text.size();
@@ -554,11 +583,13 @@ CanvasCacheStats CanvasWidget::GetCacheStats() const
 
 Signal<>& CanvasWidget::ViewChanged()
 {
+    VerifyAccess();
     return m_ViewChanged;
 }
 
 bool CanvasWidget::IsFocusable() const
 {
+    VerifyAccess();
     return true;
 }
 

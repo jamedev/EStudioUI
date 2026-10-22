@@ -36,16 +36,19 @@ SketchWidget::SketchWidget() : m_Document(std::make_shared<SketchDocument>())
 
 SketchDocument& SketchWidget::GetDocument()
 {
+    VerifyAccess();
     return *m_Document;
 }
 
 const SketchDocument& SketchWidget::GetDocument() const
 {
+    VerifyAccess();
     return *m_Document;
 }
 
 void SketchWidget::SetTool(SketchTool tool)
 {
+    VerifyStructuralMutation();
     CancelGesture();
     m_Tool = tool;
     SetPanMode(tool == SketchTool::Pan);
@@ -54,33 +57,39 @@ void SketchWidget::SetTool(SketchTool tool)
 
 SketchTool SketchWidget::GetTool() const
 {
+    VerifyAccess();
     return m_Tool;
 }
 
 void SketchWidget::SetSnapping(bool enabled)
 {
+    VerifyAccess();
     m_Snapping = enabled;
     NotifyChanged();
 }
 
 bool SketchWidget::IsSnapping() const
 {
+    VerifyAccess();
     return m_Snapping;
 }
 
 void SketchWidget::SetAnnotationText(std::string text)
 {
+    VerifyAccess();
     MakeCanvasText({0, 0, 100, 100}, text, m_AnnotationFontSize);
     m_AnnotationText = std::move(text);
 }
 
 const std::string& SketchWidget::GetAnnotationText() const
 {
+    VerifyAccess();
     return m_AnnotationText;
 }
 
 void SketchWidget::SetAnnotationFontSize(double size)
 {
+    VerifyAccess();
     if (!std::isfinite(size) || size <= 0 || size > 1000000)
         throw std::invalid_argument("Annotation font size must be finite and between zero and one million.");
     m_AnnotationFontSize = size;
@@ -88,26 +97,31 @@ void SketchWidget::SetAnnotationFontSize(double size)
 
 double SketchWidget::GetAnnotationFontSize() const
 {
+    VerifyAccess();
     return m_AnnotationFontSize;
 }
 
 void SketchWidget::SetPathClosed(bool closed)
 {
+    VerifyAccess();
     m_PathClosed = closed;
 }
 
 bool SketchWidget::IsPathClosed() const
 {
+    VerifyAccess();
     return m_PathClosed;
 }
 
 std::size_t SketchWidget::GetPendingPointCount() const
 {
+    VerifyAccess();
     return m_ToolPoints.size();
 }
 
 bool SketchWidget::FinishTool()
 {
+    VerifyStructuralMutation();
     if (m_Tool != SketchTool::Path || m_ToolPoints.size() < (m_PathClosed ? 3U : 2U))
         return false;
     const auto origin = m_ToolPoints.front();
@@ -125,6 +139,7 @@ bool SketchWidget::FinishTool()
 
 bool SketchWidget::Undo()
 {
+    VerifyStructuralMutation();
     CancelGesture();
     const bool changed = m_Document->Undo();
     NotifyChanged();
@@ -133,6 +148,7 @@ bool SketchWidget::Undo()
 
 bool SketchWidget::Redo()
 {
+    VerifyStructuralMutation();
     CancelGesture();
     const bool changed = m_Document->Redo();
     NotifyChanged();
@@ -141,6 +157,7 @@ bool SketchWidget::Redo()
 
 bool SketchWidget::DeleteSelection()
 {
+    VerifyStructuralMutation();
     CancelGesture();
     const bool changed = m_Document->DeleteSelection();
     NotifyChanged();
@@ -149,11 +166,13 @@ bool SketchWidget::DeleteSelection()
 
 std::uint32_t SketchWidget::GetShapeStyle() const
 {
+    VerifyAccess();
     return m_ShapeStyle;
 }
 
 Signal<>& SketchWidget::Changed()
 {
+    VerifyAccess();
     return m_Changed;
 }
 
@@ -168,6 +187,7 @@ void SketchWidget::CancelGesture()
 
 void SketchWidget::NotifyChanged()
 {
+    const auto ownerLease = RetainOwner();
     SceneChanged();
     m_Changed.Emit();
 }

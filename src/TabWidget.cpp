@@ -36,6 +36,8 @@ TabWidget::TabWidget() : Widget("tabwidget")
 
 Widget& TabWidget::AddTab(std::string title)
 {
+    VerifyStructuralMutation();
+    const auto ownerLease = RetainOwner();
     auto& page = m_Pages->Add<Widget>("tabpage");
     page.SetHeight(SizeRule::Fill());
     auto& button = m_Strip->Add<TabButton>(std::move(title));
@@ -63,6 +65,8 @@ Widget& TabWidget::AddTab(std::string title)
 
 void TabWidget::RemoveTab(int index)
 {
+    VerifyStructuralMutation();
+    const auto ownerLease = RetainOwner();
     (void)GetPage(index);
     const auto removed = m_Tabs[static_cast<std::size_t>(index)];
     m_Tabs.erase(m_Tabs.begin() + index);
@@ -86,6 +90,7 @@ void TabWidget::RemoveTab(int index)
 
 Widget& TabWidget::GetPage(int index) const
 {
+    VerifyAccess();
     if (index < 0 || index >= GetTabCount())
         throw std::out_of_range("Invalid tab index.");
     auto* page = m_Tabs[static_cast<std::size_t>(index)].m_Page.Get();
@@ -96,11 +101,14 @@ Widget& TabWidget::GetPage(int index) const
 
 int TabWidget::GetTabCount() const
 {
+    VerifyAccess();
     return static_cast<int>(m_Tabs.size());
 }
 
 void TabWidget::SetCurrentIndex(int index)
 {
+    VerifyAccess();
+    const auto ownerLease = RetainOwner();
     (void)GetPage(index);
     if (m_Current == index)
         return;
@@ -124,11 +132,13 @@ void TabWidget::SetCurrentIndex(int index)
 
 int TabWidget::GetCurrentIndex() const
 {
+    VerifyAccess();
     return m_Current;
 }
 
 void TabWidget::SetTabText(int index, std::string title)
 {
+    VerifyAccess();
     (void)GetPage(index);
     if (auto* button = dynamic_cast<ToolButton*>(m_Tabs[static_cast<std::size_t>(index)].m_Button.Get()))
         button->SetText(std::move(title));
@@ -136,6 +146,7 @@ void TabWidget::SetTabText(int index, std::string title)
 
 Signal<int>& TabWidget::CurrentChanged()
 {
+    VerifyAccess();
     return m_CurrentChanged;
 }
 

@@ -12,6 +12,7 @@ Label::Label(std::string text, std::string type) : Widget(std::move(type)), m_Te
 
 void Label::SetText(std::string text)
 {
+    VerifyAccess();
     if (text == m_Text)
         return;
     m_Text = std::move(text);
@@ -21,6 +22,7 @@ void Label::SetText(std::string text)
 
 const std::string& Label::GetText() const
 {
+    VerifyAccess();
     return m_Text;
 }
 

@@ -86,6 +86,9 @@ class Painter
     FontFace& GetFont() const;
 
   private:
+    //! Keeps scoped renderer and drawing state on the constructing thread.
+    ThreadAffinity m_Affinity;
+
     //! CPU presentation paired with renderer state.
     struct State
     {

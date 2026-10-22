@@ -35,6 +35,9 @@ class CssMotion
     bool HasRunning() const;
 
   private:
+    //! Enforces the owning GUI thread before cached timeline access.
+    ThreadAffinity m_Affinity;
+
     //! Keeps compiled tracks out of public headers.
     struct Impl;
 

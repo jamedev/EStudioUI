@@ -81,6 +81,7 @@ float ScrollWidget::ScrollGutter(bool horizontal) const
 
 Rect ScrollWidget::GetViewport() const
 {
+    VerifyAccess();
     auto content = GetContentBounds();
     content.m_Width = std::max(0.0f, content.m_Width - ScrollGutter(false));
     content.m_Height = std::max(0.0f, content.m_Height - ScrollGutter(true));
@@ -89,6 +90,7 @@ Rect ScrollWidget::GetViewport() const
 
 Point ScrollWidget::GetScrollOffset() const
 {
+    VerifyAccess();
     const auto size = GetVirtualSize();
     const auto viewport = GetViewport();
     return {std::clamp(m_Offset.m_X, 0.0f, std::max(0.0f, size.m_X - viewport.m_Width)),
@@ -97,6 +99,7 @@ Point ScrollWidget::GetScrollOffset() const
 
 void ScrollWidget::SetScrollOffset(Point offset)
 {
+    VerifyAccess();
     if (!std::isfinite(offset.m_X) || !std::isfinite(offset.m_Y))
         throw std::invalid_argument("Scroll coordinates must be finite.");
     const auto previous = GetScrollOffset();
@@ -185,11 +188,13 @@ const TextLayout& ScrollWidget::TextFor(FontFace& font, std::string_view text, f
 
 std::size_t ScrollWidget::GetTextCacheEntryCount() const
 {
+    VerifyAccess();
     return m_TextCache.size();
 }
 
 std::size_t ScrollWidget::GetTextCacheBytes() const
 {
+    VerifyAccess();
     return m_TextBytes;
 }
 
@@ -239,6 +244,7 @@ unsigned ScrollWidget::ScrollPartState(bool horizontal, bool thumb) const
 
 Rect ScrollWidget::GetScrollTrackBounds(bool horizontal) const
 {
+    VerifyAccess();
     const auto viewport = GetViewport();
     const auto size = GetVirtualSize();
     const float length = horizontal ? viewport.m_Width : viewport.m_Height;
@@ -257,6 +263,7 @@ Rect ScrollWidget::ScrollTrackContent(bool horizontal) const
 
 Rect ScrollWidget::GetScrollThumbBounds(bool horizontal) const
 {
+    VerifyAccess();
     const auto viewport = GetViewport();
     const auto track = ScrollTrackContent(horizontal);
     const auto& style = GetPartStyle("scroll-thumb", ScrollPartState(horizontal, true));

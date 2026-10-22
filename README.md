@@ -9,6 +9,33 @@ Development follows the [framework foundation roadmap](FOUNDATIONS_ROADMAP.md)
 before broad widget expansion. The [widget roadmap](WIDGET_ROADMAP.md) records
 the planned controls, document editor, and application workspace. Both distinguish
 current capabilities from proposed work and define delivery prerequisites.
+The [developer experience principles](DEVELOPER_EXPERIENCE.md) make simple,
+safe application code an acceptance requirement for every foundation change.
+
+## Execution and lifetime foundations (0.9)
+
+One application loop now services all windows. Typed UI handles queue updates
+from workers without exposing widget pointers. Cancellable tasks deliver owned
+results to live receivers; request scopes suppress obsolete work, progress
+coalesces, and queues have explicit capacity and failure outcomes. Receiver-bound
+signals use the same delivery mechanism. Direct UI access has owner-thread
+diagnostics, and unsafe structural changes during layout/paint are rejected with
+an explicit deferred alternative.
+
+```cpp
+auto task = app.Tasks().Run(window.Ui().GetHandle(result),
+    [] { return std::string("Calculation complete"); },
+    [](EStudioUI::Label& label, std::string text) { label.SetText(std::move(text)); });
+```
+
+The **Async** tab builds a 200,000-item scene and BVH on a worker, publishes it
+to a live canvas, and demonstrates replacement, cancellation, receiver deletion,
+and another window. See [THREADING.md](THREADING.md) for the common workflow and
+the exact lifetime/error rules. See [foundation verification](verification/FOUNDATIONS_0_9.md)
+for concurrency and actual framebuffer evidence. State bindings and shared data
+models are the next foundation gate.
+
+![Worker-built canvas rendered by EStudioUI](verification/foundation-async.png)
 
 ![EStudioUI widget gallery](verification/widgets-dark.png)
 
@@ -221,6 +248,7 @@ Link the CMake target `EStudioUI::EStudioUI` and include headers from `EStudioUI
 
 ```cpp
 #include <EStudioUI/Button.h>
+#include <EStudioUI/Label.h>
 #include <EStudioUI/TextBox.h>
 #include <EStudioUI/Window.h>
 
@@ -246,10 +274,13 @@ int main()
 Widgets own children through `unique_ptr`; references last until removal.
 Use `UiContext::Observe()` when a callback target may disappear. A `Connection`
 does not disconnect when its handle is destroyed; use `Disconnect()` or
-`ScopedConnection` for receiver lifetime management. Signals run synchronously on
-the GUI thread and support mutation, nested delivery, and sender deletion.
+`ScopedConnection` for explicit disconnection. Direct signals run synchronously on
+the emitter's thread; receiver-bound connections always queue to the receiver's
+UI owner and retire when it disappears. Both support connection mutation and
+sender deletion. Live widget access remains owner-only; use typed handles for
+cross-thread delivery. See [THREADING.md](THREADING.md).
 
-The demo opens on Sketcher. Data & actions has 10,000 table rows and 2,006 list items.
+The demo opens on Async. Data & actions has 10,000 table rows and 2,006 list items.
 Only viewport rows are painted. Inputs preserves the original editor/button
 examples; 3D surfaces has two independent orbit/zoom scenes; Layout lab exposes
 fixed and bounded Fill behavior at different native window sizes.
@@ -281,7 +312,7 @@ supports nested rows/columns, explicit size contracts, and rectangular ancestor
 clips. Grid, automatic wrapping/height-for-width, splitters, and general-purpose
 scrolling forms remain future work. Collection controls currently use single
 selection; tables store UTF-8 strings and sort lexicographically; menus are
-single-level. Accessibility and coordinated multiwindow loops are future work. Large UIs need finer style/layout invalidation
+single-level. Native accessibility remains future work. Large UIs need finer style/layout invalidation
 and profiling. See [ARCHITECTURE.md](ARCHITECTURE.md).
 
 ## Linux, manual CMake, and checks

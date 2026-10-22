@@ -3,13 +3,37 @@
 #include "FontFace.h"
 #include "Widget.h"
 #include "AnimationSystem.h"
+#include "UiHandle.h"
 
 #include <functional>
+#include <stdexcept>
+#include <type_traits>
 #include <unordered_map>
 
 namespace EStudioUI
 {
 class CssMotion;
+
+//! Identifies traversals during which synchronous structural changes are unsafe.
+enum class UiPhase
+{
+    //! Allows ordinary input, commands, and deferred commits.
+    Idle,
+    //! Resolves cached widget and part styles.
+    Style,
+    //! Computes intrinsic geometry.
+    Measure,
+    //! Arranges widgets and invokes their layout hooks.
+    Layout,
+    //! Prepares external scene surfaces before painting.
+    SurfacePreparation,
+    //! Records the ordered widget drawing commands.
+    Paint,
+    //! Notifies surfaces that their shared textures were consumed.
+    Submission,
+    //! Queries extension hooks without permitting changes to the traversed tree.
+    Inspection
+};
 
 //! Cumulative counters used to verify cache behavior across animation frames.
 struct UiStats
@@ -36,6 +60,63 @@ class UiContext
 
     //! A context owns one stable widget tree.
     UiContext& operator=(const UiContext&) = delete;
+
+    //! Throws before direct access from a thread other than the owner.
+    void VerifyAccess() const;
+
+    //! Returns whether the current thread owns this context.
+    bool IsOwnerThread() const noexcept;
+
+    //! Returns a copyable endpoint that producers may use without touching UI state.
+    UiDispatcher GetDispatcher() const;
+
+    //! Captures a typed target that only the owning dispatcher resolves into a widget.
+    template <typename T> UiHandle<T> GetHandle(T& target) const
+    {
+        static_assert(std::is_base_of_v<Widget, T> && !std::is_const_v<T>,
+                      "A UI handle requires a mutable Widget-derived target.");
+        VerifyAccess();
+        auto& widget = static_cast<Widget&>(target);
+        widget.VerifyAccess();
+        if (widget.GetContext() != this)
+            throw std::invalid_argument("A UI handle target must belong to this context.");
+        const WidgetRef reference(&widget);
+        const auto* owner = this;
+        return UiHandle<T>::ForTarget(
+            m_Dispatcher, widget.m_TargetKey,
+            [reference, owner]() -> T*
+            {
+                auto* live = reference.Get();
+                return live && live->GetContext() == owner ? dynamic_cast<T*>(live) : nullptr;
+            },
+            widget.m_LifetimeStop.get_token());
+    }
+
+    //! Queues a context-owned commit for a later dispatcher drain, outside current traversal.
+    DispatchReceipt Defer(std::function<void(UiContext&)> callback);
+
+    //! Queues a move-capable callable accepting either the live context or no arguments.
+    template <typename Callback>
+        requires(!std::is_same_v<std::decay_t<Callback>, std::function<void(UiContext&)>>)
+    DispatchReceipt Defer(Callback&& callback)
+    {
+        VerifyAccess();
+        using Function = std::decay_t<Callback>;
+        static_assert(std::is_invocable_v<Function&, UiContext&> || std::is_invocable_v<Function&>,
+                      "A deferred callback must accept UiContext& or no arguments.");
+        auto work = std::make_shared<Function>(std::forward<Callback>(callback));
+        return Defer(std::function<void(UiContext&)>(
+            [work = std::move(work)](UiContext& context)
+            {
+                if constexpr (std::is_invocable_v<Function&, UiContext&>)
+                    std::invoke(*work, context);
+                else
+                    std::invoke(*work);
+            }));
+    }
+
+    //! Returns the current owner-thread traversal phase for diagnostics.
+    UiPhase GetPhase() const;
 
     //! Returns the root widget.
     Widget& Root();
@@ -158,6 +239,35 @@ class UiContext
   private:
     friend class Widget;
     friend class CssMotion;
+    friend class Window;
+    friend class AnimationSystem;
+
+    //! Associates a containing window without creating a context ownership cycle.
+    void SetOwnerLifetime(std::weak_ptr<void> owner);
+
+    //! Keeps the containing window alive until a callback-driving operation returns.
+    std::shared_ptr<void> RetainOwner() const;
+
+    //! Observes the native owner; standalone contexts need no external lifetime lease.
+    std::weak_ptr<void> m_OwnerLifetime;
+
+    //! Restores the previous phase even when a user hook throws.
+    struct PhaseScope;
+
+    //! Rejects structural changes until the current traversal ends.
+    void VerifyStructuralMutation() const;
+
+    //! Rejects nested public traversals and dispatcher drains during a frame phase.
+    void VerifyDispatchPhase() const;
+
+    //! Captures this context's owner independently of object lifetime.
+    ThreadAffinity m_Affinity;
+
+    //! Owns a synchronized queue that closes before widget/native teardown.
+    UiDispatcher m_Dispatcher;
+
+    //! Tracks guarded traversals without changing ordinary input callback semantics.
+    mutable UiPhase m_Phase = UiPhase::Idle;
 
     //! Refreshes cached part defaults after paint-only owner changes without matching selectors.
     void RefreshStyleParts(Widget& widget);

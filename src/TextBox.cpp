@@ -42,16 +42,20 @@ TextBox::TextBox(std::string text) : Widget("textbox")
 
 bool TextBox::IsFocusable() const
 {
+    VerifyAccess();
     return true;
 }
 
 const std::string& TextBox::GetText() const
 {
+    VerifyAccess();
     return m_Buffer.GetText();
 }
 
 void TextBox::SetValidator(std::shared_ptr<const InputValidator> validator)
 {
+    VerifyAccess();
+    const auto ownerLease = RetainOwner();
     const auto state = validator ? validator->Validate(m_Buffer.GetText()) : ValidationState::Acceptable;
     m_Validator = std::move(validator);
     ++m_EditRevision;
@@ -63,41 +67,50 @@ void TextBox::SetValidator(std::shared_ptr<const InputValidator> validator)
 
 ValidationState TextBox::GetValidationState() const
 {
+    VerifyAccess();
     return m_ValidationState;
 }
 
 bool TextBox::IsReadOnly() const
 {
+    VerifyAccess();
     return m_ReadOnly;
 }
 
 std::string TextBox::GetSelectedText() const
 {
+    VerifyAccess();
     return m_Buffer.GetSelectedText();
 }
 
 Signal<const std::string&>& TextBox::TextChanged()
 {
+    VerifyAccess();
     return m_TextChanged;
 }
 
 Signal<ValidationState>& TextBox::ValidationChanged()
 {
+    VerifyAccess();
     return m_ValidationChanged;
 }
 
 Signal<const std::string&>& TextBox::Submitted()
 {
+    VerifyAccess();
     return m_Submitted;
 }
 
 Signal<>& TextBox::FocusLost()
 {
+    VerifyAccess();
     return m_FocusLost;
 }
 
 void TextBox::SetText(std::string_view text)
 {
+    VerifyAccess();
+    const auto ownerLease = RetainOwner();
     const auto previous = m_Buffer.GetText();
     if (m_Validator)
     {
@@ -114,6 +127,7 @@ void TextBox::SetText(std::string_view text)
 
 void TextBox::SetPlaceholder(std::string text)
 {
+    VerifyAccess();
     m_Placeholder = TextBuffer::Sanitize(text);
     m_PlaceholderLayoutSize = -1;
     UpdatePresentationState(m_ValidationState);
@@ -122,12 +136,15 @@ void TextBox::SetPlaceholder(std::string text)
 
 void TextBox::SetReadOnly(bool readOnly)
 {
+    VerifyAccess();
     m_ReadOnly = readOnly;
     SetState(ReadOnly, readOnly);
 }
 
 void TextBox::SetMaxBytes(std::size_t count)
 {
+    VerifyAccess();
+    const auto ownerLease = RetainOwner();
     const auto previous = m_Buffer.GetText();
     if (m_Validator)
     {
@@ -144,6 +161,7 @@ void TextBox::SetMaxBytes(std::size_t count)
 
 void TextBox::SelectAll()
 {
+    VerifyAccess();
     m_Buffer.SelectAll();
     ResetCaret();
 }
@@ -213,6 +231,7 @@ void TextBox::ResetCaret()
 
 void TextBox::AfterEdit(bool changed)
 {
+    const auto ownerLease = RetainOwner();
     const auto revision = ++m_EditRevision;
     const bool validationChanged =
         UpdatePresentationState(m_Validator ? m_Validator->Validate(m_Buffer.GetText()) : ValidationState::Acceptable);
@@ -371,6 +390,7 @@ void TextBox::OnKey(Key key, bool down, bool, Modifiers modifiers)
 
 double TextBox::NextCaretDeadline(double now) const
 {
+    VerifyAccess();
     const auto& caret = GetPartStyle("caret");
     if (!IsFocused() || m_ReadOnly || !caret.m_Displayed || caret.m_Opacity <= 0 || CaretWidth() <= 0)
         return now + 3600;

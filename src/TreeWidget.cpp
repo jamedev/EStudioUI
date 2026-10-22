@@ -38,6 +38,7 @@ TreeWidget::TreeWidget() : ScrollWidget("treewidget")
 
 TreeWidget::NodeId TreeWidget::AddItem(NodeId parent, std::string text)
 {
+    VerifyStructuralMutation();
     if (parent && !m_Nodes.contains(parent))
         throw std::out_of_range("Invalid tree parent ID.");
     const auto id = m_NextId++;
@@ -50,6 +51,8 @@ TreeWidget::NodeId TreeWidget::AddItem(NodeId parent, std::string text)
 
 void TreeWidget::RemoveItem(NodeId item)
 {
+    VerifyStructuralMutation();
+    const auto ownerLease = RetainOwner();
     const auto parent = m_Nodes.at(item).m_Parent;
     std::erase(parent ? m_Nodes.at(parent).m_Children : m_Roots, item);
     std::vector<NodeId> pending{item};
@@ -78,6 +81,8 @@ void TreeWidget::RemoveItem(NodeId item)
 
 void TreeWidget::Clear()
 {
+    VerifyStructuralMutation();
+    const auto ownerLease = RetainOwner();
     m_Nodes.clear();
     m_Roots.clear();
     m_RowsDirty = true;
@@ -95,17 +100,21 @@ void TreeWidget::Clear()
 
 void TreeWidget::SetItemText(NodeId item, std::string text)
 {
+    VerifyStructuralMutation();
     m_Nodes.at(item).m_Text = TextBuffer::Sanitize(text);
     RequestRepaint();
 }
 
 const std::string& TreeWidget::GetItemText(NodeId item) const
 {
+    VerifyAccess();
     return m_Nodes.at(item).m_Text;
 }
 
 void TreeWidget::SetExpanded(NodeId item, bool expanded)
 {
+    VerifyStructuralMutation();
+    const auto ownerLease = RetainOwner();
     auto& node = m_Nodes.at(item);
     if (node.m_Expanded == expanded)
         return;
@@ -118,6 +127,7 @@ void TreeWidget::SetExpanded(NodeId item, bool expanded)
 
 bool TreeWidget::IsExpanded(NodeId item) const
 {
+    VerifyAccess();
     return m_Nodes.at(item).m_Expanded;
 }
 
@@ -144,6 +154,8 @@ void TreeWidget::EnsureRows() const
 
 void TreeWidget::SetCurrentItem(NodeId item)
 {
+    VerifyStructuralMutation();
+    const auto ownerLease = RetainOwner();
     bool revealed = false;
     if (item)
     {
@@ -173,32 +185,38 @@ void TreeWidget::SetCurrentItem(NodeId item)
 
 TreeWidget::NodeId TreeWidget::GetCurrentItem() const
 {
+    VerifyAccess();
     return m_Current;
 }
 
 std::size_t TreeWidget::GetVisibleRowCount() const
 {
+    VerifyAccess();
     EnsureRows();
     return m_Rows.size();
 }
 
 Signal<TreeWidget::NodeId>& TreeWidget::CurrentChanged()
 {
+    VerifyAccess();
     return m_CurrentChanged;
 }
 
 Signal<TreeWidget::NodeId, bool>& TreeWidget::ExpandedChanged()
 {
+    VerifyAccess();
     return m_ExpandedChanged;
 }
 
 Signal<TreeWidget::NodeId>& TreeWidget::Activated()
 {
+    VerifyAccess();
     return m_Activated;
 }
 
 bool TreeWidget::IsFocusable() const
 {
+    VerifyAccess();
     return true;
 }
 

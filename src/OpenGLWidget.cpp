@@ -6,6 +6,7 @@
 #include <GLFW/glfw3.h>
 
 #include <cmath>
+#include <exception>
 #include <stdexcept>
 
 namespace EStudioUI
@@ -141,11 +142,17 @@ OpenGLWidget::OpenGLWidget() : Widget("openglwidget"), m_Impl(std::make_unique<I
 {
 }
 
-OpenGLWidget::~OpenGLWidget() = default;
+OpenGLWidget::~OpenGLWidget()
+{
+    if (!IsOwnerThread())
+        std::terminate();
+}
 
 void OpenGLWidget::SetCallbacks(std::function<void()> initialize, std::function<void(const OpenGLFrame&)> render,
                                 std::function<void()> release)
 {
+    VerifyAccess();
+    const auto ownerLease = RetainOwner();
     auto& self = *m_Impl;
     if (self.m_Context && self.m_Initialized)
     {
@@ -168,53 +175,63 @@ void OpenGLWidget::SetCallbacks(std::function<void()> initialize, std::function<
 
 void OpenGLWidget::SetContinuousRendering(bool enabled)
 {
+    VerifyAccess();
     m_Impl->m_Continuous = enabled;
     RequestFrame();
 }
 
 void OpenGLWidget::RequestFrame()
 {
+    VerifyAccess();
     m_Impl->m_Dirty = true;
     RequestRepaint();
 }
 
 Point OpenGLWidget::GetFramebufferSize() const
 {
+    VerifyAccess();
     return {static_cast<float>(m_Impl->m_Width), static_cast<float>(m_Impl->m_Height)};
 }
 
 std::uintptr_t OpenGLWidget::GetContextIdentity() const
 {
+    VerifyAccess();
     return reinterpret_cast<std::uintptr_t>(m_Impl->m_Context);
 }
 
 Signal<PointerEvent>& OpenGLWidget::PointerPressed()
 {
+    VerifyAccess();
     return m_Impl->m_Pressed;
 }
 
 Signal<PointerEvent>& OpenGLWidget::PointerDragged()
 {
+    VerifyAccess();
     return m_Impl->m_Dragged;
 }
 
 Signal<PointerEvent>& OpenGLWidget::PointerReleased()
 {
+    VerifyAccess();
     return m_Impl->m_Released;
 }
 
 Signal<Point>& OpenGLWidget::Scrolled()
 {
+    VerifyAccess();
     return m_Impl->m_Scrolled;
 }
 
 Signal<KeyboardEvent>& OpenGLWidget::KeyInput()
 {
+    VerifyAccess();
     return m_Impl->m_Keys;
 }
 
 bool OpenGLWidget::IsFocusable() const
 {
+    VerifyAccess();
     return true;
 }
 

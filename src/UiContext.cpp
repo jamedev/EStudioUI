@@ -4,49 +4,135 @@
 
 #include <algorithm>
 #include <cmath>
+#include <exception>
 #include <stdexcept>
 
 namespace EStudioUI
 {
+struct UiContext::PhaseScope
+{
+    const UiContext& m_Context;
+    UiPhase m_Previous;
+
+    PhaseScope(const UiContext& context, UiPhase phase) : m_Context(context), m_Previous(context.m_Phase)
+    {
+        context.m_Phase = phase;
+    }
+
+    ~PhaseScope()
+    {
+        m_Context.m_Phase = m_Previous;
+    }
+};
+
 UiContext::UiContext(FontFace& font)
     : m_Font(font), m_Animations(*this), m_CssMotion(std::make_unique<CssMotion>(*this))
 {
+    m_Font.VerifyAccess();
     m_Root.Attach(this, nullptr);
+    m_Dispatcher.SetDrainGuard([this] { VerifyDispatchPhase(); });
 }
 
 UiContext::~UiContext()
 {
+    if (!IsOwnerThread() || m_Phase != UiPhase::Idle)
+        std::terminate();
+    m_Dispatcher.Close();
     m_Root.Attach(nullptr, nullptr);
+}
+
+void UiContext::VerifyAccess() const
+{
+    m_Affinity.VerifyAccess("UiContext access");
+}
+
+bool UiContext::IsOwnerThread() const noexcept
+{
+    return m_Affinity.IsOwnerThread();
+}
+
+void UiContext::SetOwnerLifetime(std::weak_ptr<void> owner)
+{
+    VerifyAccess();
+    m_OwnerLifetime = owner;
+    m_Dispatcher.SetOwnerLifetime(std::move(owner));
+}
+
+std::shared_ptr<void> UiContext::RetainOwner() const
+{
+    VerifyAccess();
+    return m_OwnerLifetime.lock();
+}
+
+UiDispatcher UiContext::GetDispatcher() const
+{
+    VerifyAccess();
+    return m_Dispatcher;
+}
+
+DispatchReceipt UiContext::Defer(std::function<void(UiContext&)> callback)
+{
+    VerifyAccess();
+    if (!callback)
+        throw std::invalid_argument("A deferred UI commit requires a callback.");
+    return m_Dispatcher.Post([this, callback = std::move(callback)] { callback(*this); });
+}
+
+UiPhase UiContext::GetPhase() const
+{
+    VerifyAccess();
+    return m_Phase;
+}
+
+void UiContext::VerifyStructuralMutation() const
+{
+    VerifyDispatchPhase();
+}
+
+void UiContext::VerifyDispatchPhase() const
+{
+    VerifyAccess();
+    if (m_Phase != UiPhase::Idle)
+        throw std::logic_error(
+            "UI traversal is active; defer structural changes with UiContext::Defer or UiHandle::Post.");
 }
 
 Widget& UiContext::Root()
 {
+    VerifyAccess();
     return m_Root;
 }
 
 void UiContext::Invalidate()
 {
+    VerifyAccess();
     m_Dirty = true;
     m_Repaint = true;
 }
 
 void UiContext::RequestRepaint()
 {
+    VerifyAccess();
     m_Repaint = true;
 }
 
 bool UiContext::NeedsRepaint() const
 {
+    VerifyAccess();
     return m_Repaint;
 }
 
 FontFace& UiContext::GetFont() const
 {
+    VerifyAccess();
     return m_Font;
 }
 
 void UiContext::SetTime(double time)
 {
+    const auto ownerLifetime = RetainOwner();
+    VerifyAccess();
+    VerifyDispatchPhase();
     m_Animations.Update(time);
     m_CssMotion->Update(time);
     if (!m_Dirty)
@@ -55,21 +141,27 @@ void UiContext::SetTime(double time)
 
 double UiContext::GetTime() const
 {
+    VerifyAccess();
     return m_Animations.GetTime();
 }
 
 WidgetRef UiContext::Observe(Widget* widget) const
 {
+    VerifyAccess();
     return WidgetRef(widget);
 }
 
 Widget* UiContext::GetFocus() const
 {
+    VerifyAccess();
     return m_Focus.Get();
 }
 
 bool UiContext::SetStyleSheet(std::string_view css, std::string& error)
 {
+    const auto ownerLifetime = RetainOwner();
+    VerifyAccess();
+    VerifyDispatchPhase();
     if (!m_StyleSheet.Parse(css, error))
         return false;
     m_Animations.Stop(m_StyleTransition, AnimationStopMode::ReleaseStyle);
@@ -80,6 +172,9 @@ bool UiContext::SetStyleSheet(std::string_view css, std::string& error)
 
 bool UiContext::LoadStyleSheet(const std::filesystem::path& path, std::string& error)
 {
+    const auto ownerLifetime = RetainOwner();
+    VerifyAccess();
+    VerifyDispatchPhase();
     if (!m_StyleSheet.LoadFile(path, error))
         return false;
     m_Animations.Stop(m_StyleTransition, AnimationStopMode::ReleaseStyle);
@@ -90,11 +185,15 @@ bool UiContext::LoadStyleSheet(const std::filesystem::path& path, std::string& e
 
 AnimationSystem& UiContext::Animations()
 {
+    VerifyAccess();
     return m_Animations;
 }
 
 AnimationId UiContext::AnimateStyleSheet(std::string_view finalCss, const AnimationOptions& options, std::string& error)
 {
+    const auto ownerLifetime = RetainOwner();
+    VerifyAccess();
+    VerifyDispatchPhase();
     options.Validate();
     StyleSheet final;
     if (!final.Parse(finalCss, error))
@@ -105,6 +204,9 @@ AnimationId UiContext::AnimateStyleSheet(std::string_view finalCss, const Animat
 AnimationId UiContext::AnimateStyleSheet(std::string_view initialCss, std::string_view finalCss,
                                          const AnimationOptions& options, std::string& error)
 {
+    const auto ownerLifetime = RetainOwner();
+    VerifyAccess();
+    VerifyDispatchPhase();
     options.Validate();
     StyleSheet initial;
     StyleSheet final;
@@ -282,6 +384,7 @@ AnimationId UiContext::BeginStyleTransition(std::optional<StyleSheet> initial, S
 
 void UiContext::Restyle(Widget& widget, const Style* parent)
 {
+    const PhaseScope phase(*this, UiPhase::Style);
     widget.m_Node.m_Parent = widget.m_Parent ? &widget.m_Parent->m_Node : nullptr;
     for (const auto& popup : m_OwnedPopups)
         if (popup.m_Popup.Get() == &widget)
@@ -541,6 +644,9 @@ void UiContext::Layout(Widget& widget, Rect bounds, Rect clip)
 
 void UiContext::Prepare(float width, float height)
 {
+    const auto ownerLifetime = RetainOwner();
+    VerifyAccess();
+    VerifyDispatchPhase();
     PruneOwnedPopups();
     width = std::max(1.0f, width);
     height = std::max(1.0f, height);
@@ -610,7 +716,11 @@ void UiContext::Arrange()
     ++m_Stats.m_LayoutPasses;
     m_Measurements.clear();
     m_OverflowingContainers.clear();
-    Measure(m_Root, m_Width, m_Height);
+    {
+        const PhaseScope phase(*this, UiPhase::Measure);
+        Measure(m_Root, m_Width, m_Height);
+    }
+    const PhaseScope phase(*this, UiPhase::Layout);
     Layout(m_Root, {0, 0, m_Width, m_Height}, {0, 0, m_Width, m_Height});
     if (auto* popup = m_Popup.Get(); popup && popup->IsVisible())
     {
@@ -657,19 +767,33 @@ void UiContext::PaintTree(Widget& widget, Renderer& renderer, double time, float
 
 void UiContext::Paint(Renderer& renderer, double time)
 {
-    PaintTree(m_Root, renderer, time, 1);
-    if (auto* popup = m_Popup.Get())
-        PaintTree(*popup, renderer, time, 1);
+    const auto ownerLifetime = RetainOwner();
+    VerifyAccess();
+    VerifyDispatchPhase();
+    const PhaseScope phase(*this, UiPhase::Paint);
     m_Repaint = false;
+    try
+    {
+        PaintTree(m_Root, renderer, time, 1);
+        if (auto* popup = m_Popup.Get())
+            PaintTree(*popup, renderer, time, 1);
+    }
+    catch (...)
+    {
+        m_Repaint = true;
+        throw;
+    }
 }
 
 const UiStats& UiContext::GetStats() const
 {
+    VerifyAccess();
     return m_Stats;
 }
 
 Point UiContext::ToLayoutPoint(const Widget& widget, Point point) const
 {
+    VerifyAccess();
     return MakePointerEvent(widget, point).m_Position;
 }
 
@@ -745,6 +869,9 @@ bool UiContext::RefreshHover()
 
 void UiContext::PointerMove(Point position, Modifiers modifiers)
 {
+    const auto ownerLifetime = RetainOwner();
+    VerifyAccess();
+    VerifyDispatchPhase();
     m_PointerPosition = position;
     Prepare(m_Width, m_Height);
     RefreshHover();
@@ -757,6 +884,9 @@ void UiContext::PointerMove(Point position, Modifiers modifiers)
 
 void UiContext::PointerDown(Point position, Modifiers modifiers, int clicks)
 {
+    const auto ownerLifetime = RetainOwner();
+    VerifyAccess();
+    VerifyDispatchPhase();
     Prepare(m_Width, m_Height);
     if (auto* popup = m_Popup.Get(); popup && !popup->GetBounds().Contains(ToLayoutPoint(*popup, position)))
     {
@@ -783,6 +913,9 @@ void UiContext::PointerDown(Point position, Modifiers modifiers, int clicks)
 
 void UiContext::PointerUp(Point position, Modifiers modifiers)
 {
+    const auto ownerLifetime = RetainOwner();
+    VerifyAccess();
+    VerifyDispatchPhase();
     Prepare(m_Width, m_Height);
     const auto captured = m_Capture;
     m_Capture = {};
@@ -793,6 +926,8 @@ void UiContext::PointerUp(Point position, Modifiers modifiers)
 
 void UiContext::SetFocus(Widget* widget)
 {
+    const auto ownerLifetime = RetainOwner();
+    VerifyAccess();
     if (widget && (!widget->IsEnabled() || !widget->IsFocusable() || widget->m_Context != this || !widget->IsVisible()))
         widget = nullptr;
     if (m_Focus.Get() == widget)
@@ -841,6 +976,9 @@ void UiContext::FocusNext(bool backwards)
 
 void UiContext::KeyEvent(Key key, bool down, bool repeat, Modifiers modifiers)
 {
+    const auto ownerLifetime = RetainOwner();
+    VerifyAccess();
+    VerifyDispatchPhase();
     Prepare(m_Width, m_Height);
     if (down && key == Key::Escape && m_Popup.Get())
     {
@@ -872,6 +1010,9 @@ void UiContext::KeyEvent(Key key, bool down, bool repeat, Modifiers modifiers)
 
 void UiContext::TextInput(std::string_view text)
 {
+    const auto ownerLifetime = RetainOwner();
+    VerifyAccess();
+    VerifyDispatchPhase();
     Prepare(m_Width, m_Height);
     if (auto* focused = m_Focus.Get(); focused && focused->IsEnabled())
         focused->OnText(text);
@@ -879,6 +1020,8 @@ void UiContext::TextInput(std::string_view text)
 
 void UiContext::Deactivate()
 {
+    const auto ownerLifetime = RetainOwner();
+    VerifyAccess();
     ClosePopup();
     if (auto* captured = m_Capture.Get())
         captured->OnCaptureLost();
@@ -893,17 +1036,23 @@ void UiContext::Deactivate()
 
 void UiContext::SetClipboard(std::function<std::string()> get, std::function<void(std::string_view)> set)
 {
+    const auto ownerLifetime = RetainOwner();
+    VerifyAccess();
     m_GetClipboard = std::move(get);
     m_SetClipboard = std::move(set);
 }
 
 std::string UiContext::GetClipboard() const
 {
+    const auto ownerLifetime = RetainOwner();
+    VerifyAccess();
     return m_GetClipboard ? m_GetClipboard() : std::string{};
 }
 
 void UiContext::SetClipboardText(std::string_view text) const
 {
+    const auto ownerLifetime = RetainOwner();
+    VerifyAccess();
     if (m_SetClipboard)
         m_SetClipboard(text);
 }
@@ -913,6 +1062,9 @@ namespace EStudioUI
 {
 void UiContext::Scroll(Point position, Point delta, Modifiers modifiers)
 {
+    const auto ownerLifetime = RetainOwner();
+    VerifyAccess();
+    VerifyDispatchPhase();
     m_PointerPosition = position;
     Prepare(m_Width, m_Height);
     std::vector<WidgetRef> path;
@@ -925,11 +1077,15 @@ void UiContext::Scroll(Point position, Point delta, Modifiers modifiers)
 
 std::optional<Point> UiContext::GetPointerPosition() const
 {
+    VerifyAccess();
     return m_PointerPosition;
 }
 
 void UiContext::ContextMenu(Point position)
 {
+    const auto ownerLifetime = RetainOwner();
+    VerifyAccess();
+    VerifyDispatchPhase();
     ClosePopup();
     Prepare(m_Width, m_Height);
     std::vector<WidgetRef> path;
@@ -945,6 +1101,9 @@ void UiContext::ContextMenu(Point position)
 
 void UiContext::ShowPopup(Widget& popup, Point anchor)
 {
+    const auto ownerLifetime = RetainOwner();
+    VerifyAccess();
+    VerifyDispatchPhase();
     if (!std::isfinite(anchor.m_X) || !std::isfinite(anchor.m_Y))
         throw std::invalid_argument("Popup coordinates must be finite.");
     if (popup.GetContext() != this || &popup == &m_Root || popup.GetParent() != &m_Root)
@@ -966,6 +1125,9 @@ void UiContext::ShowPopup(Widget& popup, Point anchor)
 
 Widget& UiContext::AddOwnedPopup(std::unique_ptr<Widget> popup, Widget& owner)
 {
+    const auto ownerLifetime = RetainOwner();
+    VerifyAccess();
+    VerifyDispatchPhase();
     if (!popup || owner.GetContext() != this)
         throw std::invalid_argument("An owned popup requires a live owner attached to this context.");
     popup->SetVisible(false);
@@ -1014,6 +1176,8 @@ void UiContext::PruneOwnedPopups()
 
 void UiContext::ClosePopup()
 {
+    const auto ownerLifetime = RetainOwner();
+    VerifyAccess();
     const auto popup = m_Popup;
     const auto restore = m_PopupReturnFocus;
     m_Popup = {};
@@ -1035,13 +1199,18 @@ void UiContext::ClosePopup()
 
 Widget* UiContext::GetPopup() const
 {
+    VerifyAccess();
     return m_Popup.Get();
 }
 
 void UiContext::PrepareSurfaces(double time, float scaleX, float scaleY)
 {
+    const auto ownerLifetime = RetainOwner();
+    VerifyAccess();
+    VerifyDispatchPhase();
     if (!std::isfinite(scaleX) || !std::isfinite(scaleY) || scaleX <= 0 || scaleY <= 0)
         throw std::invalid_argument("Surface pixel scales must be finite and positive.");
+    const PhaseScope phase(*this, UiPhase::SurfacePreparation);
     const auto visit = [&](auto&& self, Widget& widget) -> void
     {
         if (!widget.IsVisible() || widget.GetBounds().Intersect(widget.GetClip()).m_Width <= 0 ||
@@ -1056,6 +1225,9 @@ void UiContext::PrepareSurfaces(double time, float scaleX, float scaleY)
 
 bool UiContext::HasAnimations() const
 {
+    const auto ownerLifetime = RetainOwner();
+    VerifyAccess();
+    const PhaseScope phase(*this, UiPhase::Inspection);
     if (m_Animations.HasRunning() || m_CssMotion->HasRunning())
         return true;
     const auto visit = [&](auto&& self, const Widget& widget) -> bool
@@ -1073,6 +1245,10 @@ bool UiContext::HasAnimations() const
 
 void UiContext::FrameSubmitted()
 {
+    const auto ownerLifetime = RetainOwner();
+    VerifyAccess();
+    VerifyDispatchPhase();
+    const PhaseScope phase(*this, UiPhase::Submission);
     const auto visit = [&](auto&& self, Widget& widget) -> void
     {
         if (!widget.IsVisible())
@@ -1086,6 +1262,7 @@ void UiContext::FrameSubmitted()
 
 const std::vector<WidgetRef>& UiContext::GetOverflowingContainers() const
 {
+    VerifyAccess();
     return m_OverflowingContainers;
 }
 } // namespace EStudioUI

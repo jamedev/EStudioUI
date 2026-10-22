@@ -1,7 +1,7 @@
 # Architecture
 
 The current implementation is described here. The source-audited
-[foundation roadmap](FOUNDATIONS_ROADMAP.md) defines proposed hardening work and
+[foundation roadmap](FOUNDATIONS_ROADMAP.md) records implemented and planned hardening work and
 acceptance gates; the [widget roadmap](WIDGET_ROADMAP.md) depends on those gates.
 Proposed classes and APIs in either roadmap are not current capabilities.
 
@@ -10,7 +10,9 @@ without exposing third-party types in its public widget headers.
 
 | Layer | Responsibility |
 | --- | --- |
-| `Window`, `FramePacer` | GLFW lifetime/context, Unicode callbacks, clipboard, sleeping event loop, stable presentation deadlines |
+| `Application`, `Window`, `FramePacer` | Shared native event loop, GLFW lifetime/context, Unicode callbacks, clipboard, stable presentation deadlines |
+| `UiDispatcher`, `UiHandle`, `DispatchReceipt` | Bounded producer queues, owner delivery, target lifetime, coalescing, inspectable outcomes |
+| `BackgroundTasks`, `Task`, `RequestScope` | Cooperative workers, UI continuations, progress, cancellation and stale-request retirement |
 | `UiContext` | Widget tree, CSS resolution, row/column layout, clipping, focus, capture |
 | `Widget`, `Label`, `Button`, `TextBox` | Owned model, cached shaping, behavior, emitted signals |
 | `SizeRule`, `Layout` | Fixed/content/fill contracts, bounded weighted distribution, overflow |
@@ -196,13 +198,37 @@ so callbacks can delete the sender. A signal emission retains its own state and
 slot objects until all nested deliveries finish. New callbacks wait until the
 next emission; a nested emission counts as another emission.
 
-Signal slots and widgets are GUI-thread objects, without mutexes or queued
-execution. Ordinary connection handles are nonowning and do not disconnect by
-destruction. Scoped handles provide receiver lifetime management. A sender can
-be deleted during delivery, and remaining connected slots in that delivery still
-run. Receivers captured by raw pointer/reference must outlive their connection
-or use `WidgetRef`. User exceptions propagate from signals; native GLFW callback
-adapters capture them and rethrow in the C++ event loop.
+Widgets and UI services enforce owner-thread access before reading or mutating
+their state. `WidgetRef` is an owner-side weak observation; `UiHandle<T>` is the
+copyable producer endpoint. It resolves its target only during owner delivery,
+using a process-unique target identity and a lifetime token. Structural mutation
+during style, measurement, layout, paint, scene preparation, or submission is
+rejected before ownership changes. `UiContext::Defer` schedules a safe later turn.
+
+The signal registry supports concurrent connection, disconnection, and emission.
+Direct callbacks run on the emitter thread and own their synchronization needs.
+Receiver-bound connections copy owned arguments and always queue; disconnection,
+sender deletion, or receiver shutdown suppresses pending listener invocation.
+Ordinary connection handles do not disconnect by destruction; scoped handles do.
+User exceptions propagate from direct signals; native GLFW adapters capture them
+and rethrow in the C++ event loop. Queued exceptions settle a receipt instead.
+
+`Application` fairly services every registered window through one GLFW loop,
+including bounded delivery to hidden/inactive windows. Native wakeups coalesce.
+Each window advances its UI clock before draining posted work, then prepares and
+renders when needed under the existing frame pacer. Closing one window retires
+its delivery endpoint; other windows continue. Callback-driven native destruction
+is deferred until active dispatch/frame scopes release their resources.
+
+`UiDispatcher` bounds pending records and per-turn work; it executes callbacks
+outside queue locks. `PostLatest` replaces pending target/key publications with
+an explicit Superseded receipt. `BackgroundTasks` runs owned computations on a
+bounded pool or injected executor, coalesces progress, and returns results through
+typed handles. Receiver and request lifetimes request cooperative stop and retire
+stale delivery. `Application::Tasks()` lazily supplies a common pool. Shutdown
+cancels delivery without waiting; destruction joins owned cooperative workers.
+See [THREADING.md](THREADING.md) for ordering, backpressure, and error semantics,
+and [DEVELOPER_EXPERIENCE.md](DEVELOPER_EXPERIENCE.md) for API acceptance criteria.
 
 ## Validation and future work
 

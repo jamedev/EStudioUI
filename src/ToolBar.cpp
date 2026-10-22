@@ -10,6 +10,7 @@ ToolBar::ToolBar() : Widget("toolbar")
 
 ToolButton& ToolBar::AddButton(std::string text)
 {
+    VerifyStructuralMutation();
     auto& button = Add<ToolButton>(std::move(text));
     button.AddClass("toolbar-button");
     return button;
@@ -17,11 +18,13 @@ ToolButton& ToolBar::AddButton(std::string text)
 
 SplitToolButton& ToolBar::AddSplitButton(std::string text)
 {
+    VerifyStructuralMutation();
     return Add<SplitToolButton>(std::move(text));
 }
 
 Widget& ToolBar::AddSeparator()
 {
+    VerifyStructuralMutation();
     auto& separator = Add<Widget>("separator");
     separator.AddClass("toolbar-separator");
     separator.SetHeight(SizeRule::Fill());

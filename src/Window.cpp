@@ -1,6 +1,9 @@
 #include <EStudioUI/Window.h>
+#include <EStudioUI/Application.h>
 #include <EStudioUI/TextBox.h>
 #include <EStudioUI/FramePacer.h>
+
+#include "ApplicationRuntime.h"
 
 #include <glad/gl.h>
 #define GLFW_INCLUDE_NONE
@@ -104,8 +107,12 @@ std::string EncodeUtf8(unsigned codepoint)
 }
 } // namespace
 
-struct Window::Impl
+struct Window::Impl : std::enable_shared_from_this<Window::Impl>
 {
+    Window* m_Owner = nullptr;
+    const std::uint64_t m_TargetKey = UiDispatcher::AllocateTargetKey();
+    std::stop_source m_TargetLifetime;
+    std::shared_ptr<Detail::ApplicationWindow> m_Registration;
     GLFWwindow* m_Window = nullptr;
     std::unique_ptr<FontFace> m_Font;
     std::unique_ptr<UiContext> m_Ui;
@@ -116,7 +123,12 @@ struct Window::Impl
     bool m_Headless = false;
     bool m_Focused = true;
     bool m_RenderWhenUnfocused = false;
+    bool m_Closed = false;
+    bool m_Rendering = false;
     FramePacer m_Pacer;
+    WidgetRef m_CaretTarget;
+    double m_CaretDeadline = -1;
+    double m_TimeOffset = 0;
     double m_LastClick = -100;
     Point m_LastClickPosition;
     int m_Clicks = 0;
@@ -124,9 +136,15 @@ struct Window::Impl
 
     ~Impl()
     {
+        m_TargetLifetime.request_stop();
+        if (m_Ui)
+            m_Ui->GetDispatcher().Close();
         if (m_Window)
             glfwMakeContextCurrent(m_Window);
         m_Ui.reset();
+        // Widget destruction can run lifetime observers that visit other windows.
+        if (m_Window)
+            glfwMakeContextCurrent(m_Window);
         m_Renderer.reset();
         m_Font.reset();
         if (m_Window)
@@ -137,17 +155,145 @@ struct Window::Impl
 
     template <typename Callback> static void Dispatch(GLFWwindow* window, Callback callback)
     {
-        auto& self = *static_cast<Impl*>(glfwGetWindowUserPointer(window));
+        auto self = static_cast<Impl*>(glfwGetWindowUserPointer(window))->shared_from_this();
+        Detail::ApplicationDispatchScope scope;
         try
         {
-            self.m_Ui->SetTime(glfwGetTime());
-            callback(self);
+            if (!self->m_Owner || self->m_Closed)
+                return;
+            glfwMakeContextCurrent(self->m_Window);
+            self->m_Ui->SetTime(self->GuiTime());
+            if (!self->m_Owner || self->m_Closed)
+                return;
+            glfwMakeContextCurrent(self->m_Window);
+            callback(*self);
         }
         catch (...)
         {
-            self.m_CallbackError = std::current_exception();
-            glfwSetWindowShouldClose(window, GLFW_TRUE);
+            self->m_CallbackError = std::current_exception();
+            self->RequestClose();
         }
+    }
+
+    double GuiTime() const
+    {
+        return std::max(glfwGetTime() + m_TimeOffset, m_Ui->GetTime());
+    }
+
+    bool IsOpen() const
+    {
+        if (m_CallbackError)
+            std::rethrow_exception(m_CallbackError);
+        return m_Owner && !m_Closed && !glfwWindowShouldClose(m_Window);
+    }
+
+    void RequestClose()
+    {
+        m_Closed = true;
+        m_TargetLifetime.request_stop();
+        if (m_Ui)
+            m_Ui->GetDispatcher().Close();
+        if (m_Window)
+            glfwSetWindowShouldClose(m_Window, GLFW_TRUE);
+    }
+
+    void Render(double time, bool drain)
+    {
+        if (m_Rendering)
+            throw std::logic_error("A window cannot render recursively from its own callback.");
+
+        struct RenderingScope
+        {
+            bool& m_Rendering;
+
+            explicit RenderingScope(bool& rendering) : m_Rendering(rendering)
+            {
+                rendering = true;
+            }
+
+            ~RenderingScope()
+            {
+                m_Rendering = false;
+            }
+        } rendering(m_Rendering);
+
+        glfwMakeContextCurrent(m_Window);
+        m_Ui->SetTime(time);
+        if (!m_Owner || m_Closed)
+            return;
+        glfwMakeContextCurrent(m_Window);
+        if (drain)
+            m_Ui->GetDispatcher().Drain();
+        if (!m_Owner || m_Closed)
+            return;
+        glfwMakeContextCurrent(m_Window);
+        int width = 0, height = 0, framebufferWidth = 0, framebufferHeight = 0;
+        glfwGetWindowSize(m_Window, &width, &height);
+        glfwGetFramebufferSize(m_Window, &framebufferWidth, &framebufferHeight);
+        if (width <= 0 || height <= 0 || framebufferWidth <= 0 || framebufferHeight <= 0)
+            return;
+        m_Ui->Prepare(static_cast<float>(width), static_cast<float>(height));
+        m_Ui->PrepareSurfaces(time, static_cast<float>(framebufferWidth) / static_cast<float>(width),
+                              static_cast<float>(framebufferHeight) / static_cast<float>(height));
+        m_Renderer->BeginFrame(static_cast<float>(width), static_cast<float>(height), framebufferWidth,
+                               framebufferHeight, m_Ui->Root().GetStyle().m_Background);
+        m_Ui->Paint(*m_Renderer, time);
+        m_Renderer->EndFrame();
+        m_Ui->FrameSubmitted();
+    }
+
+    double Service()
+    {
+        if (!IsOpen())
+            return -1;
+        glfwMakeContextCurrent(m_Window);
+        m_Ui->SetTime(GuiTime());
+        if (!IsOpen())
+            return -1;
+        glfwMakeContextCurrent(m_Window);
+        auto dispatcher = m_Ui->GetDispatcher();
+        dispatcher.Drain();
+        if (!IsOpen())
+            return -1;
+        glfwMakeContextCurrent(m_Window);
+        const double now = glfwGetTime();
+        const bool active =
+            m_Headless || (glfwGetWindowAttrib(m_Window, GLFW_VISIBLE) &&
+                           !glfwGetWindowAttrib(m_Window, GLFW_ICONIFIED) && (m_Focused || m_RenderWhenUnfocused));
+        double wake = dispatcher.HasPending() ? now : -1;
+        if (!active)
+            return wake;
+
+        const auto* editor = dynamic_cast<TextBox*>(m_Ui->GetFocus());
+        if (editor && !editor->IsReadOnly())
+        {
+            if (m_CaretTarget.Get() == editor && m_CaretDeadline >= 0 && now >= m_CaretDeadline)
+                m_Ui->RequestRepaint();
+            m_CaretTarget = WidgetRef(const_cast<TextBox*>(editor));
+            m_CaretDeadline = editor->NextCaretDeadline(GuiTime()) - m_TimeOffset;
+            if (wake < 0 || m_CaretDeadline < wake)
+                wake = m_CaretDeadline;
+        }
+        else
+        {
+            m_CaretTarget = {};
+            m_CaretDeadline = -1;
+        }
+        if ((m_Ui->NeedsRepaint() || m_Ui->HasAnimations()) && m_Pacer.IsDue(now))
+        {
+            Render(GuiTime(), false);
+            if (!IsOpen())
+                return -1;
+            glfwSwapBuffers(m_Window);
+            m_Pacer.Presented(now, std::max(now, glfwGetTime()));
+        }
+        if (m_Ui->NeedsRepaint() || m_Ui->HasAnimations())
+        {
+            const double frame = m_Pacer.GetDeadline();
+            if (wake < 0 || frame < wake)
+                wake = frame;
+        }
+        return wake;
     }
 
     Point Cursor() const
@@ -177,8 +323,10 @@ struct Window::Impl
     }
 };
 
-Window::Window(const WindowOptions& options, const std::filesystem::path& fontPath) : m_Impl(std::make_unique<Impl>())
+Window::Window(const WindowOptions& options, const std::filesystem::path& fontPath)
 {
+    Detail::VerifyApplicationAccess();
+    m_Impl = std::make_shared<Impl>();
     auto& self = *m_Impl;
     self.m_Headless = options.m_Headless;
     self.m_RenderWhenUnfocused = options.m_RenderWhenUnfocused;
@@ -220,7 +368,9 @@ Window::Window(const WindowOptions& options, const std::filesystem::path& fontPa
     glfwSetWindowUserPointer(self.m_Window, &self);
     self.m_Font = std::make_unique<FontFace>(fontPath);
     self.m_Ui = std::make_unique<UiContext>(*self.m_Font);
+    self.m_Ui->SetOwnerLifetime(m_Impl);
     self.m_Renderer = std::make_unique<Renderer>(*self.m_Font);
+    self.m_Ui->GetDispatcher().SetWakeup([] { glfwPostEmptyEvent(); });
     self.m_Ui->SetClipboard(
         [&self]
         {
@@ -324,8 +474,11 @@ Window::Window(const WindowOptions& options, const std::filesystem::path& fontPa
                                    key == GLFW_KEY_F10 && (modifiers & GLFW_MOD_SHIFT) ? Key::Menu : TranslateKey(key);
                                state.m_Ui->KeyEvent(translated, action != GLFW_RELEASE, action == GLFW_REPEAT,
                                                     TranslateModifiers(modifiers));
-                               if (action == GLFW_PRESS)
+                               if (action == GLFW_PRESS && state.m_Owner && !state.m_Closed)
+                               {
+                                   glfwMakeContextCurrent(state.m_Window);
                                    state.m_KeyPressed.Emit(translated);
+                               }
                            });
         });
     glfwSetCharCallback(
@@ -344,126 +497,159 @@ Window::Window(const WindowOptions& options, const std::filesystem::path& fontPa
                                                           state.m_Ui->RequestRepaint();
                                                   });
                                });
+    glfwSetWindowCloseCallback(self.m_Window, [](GLFWwindow* window)
+                               { Impl::Dispatch(window, [](Impl& state) { state.RequestClose(); }); });
     self.m_Ui->Prepare(static_cast<float>(options.m_Width), static_cast<float>(options.m_Height));
+    self.m_Owner = this;
+    self.m_Registration = std::make_shared<Detail::ApplicationWindow>();
+    const std::weak_ptr<Impl> weak = m_Impl;
+    self.m_Registration->m_IsOpen = [weak]
+    {
+        const auto state = weak.lock();
+        return state && state->IsOpen();
+    };
+    self.m_Registration->m_Service = [weak]
+    {
+        const auto state = weak.lock();
+        return state ? state->Service() : -1;
+    };
+    self.m_Registration->m_Close = [weak]
+    {
+        if (const auto state = weak.lock())
+            state->RequestClose();
+    };
+    Detail::RegisterApplicationWindow(self.m_Registration);
 }
 
-Window::~Window() = default;
+Window::~Window()
+{
+    if (!m_Affinity.IsOwnerThread())
+        std::terminate();
+    if (m_Impl)
+    {
+        m_Impl->m_Owner = nullptr;
+        m_Impl->RequestClose();
+        Detail::RetireApplicationWindow(std::move(m_Impl));
+    }
+}
+
+void Window::VerifyAccess() const
+{
+    m_Affinity.VerifyAccess("Window access");
+    Detail::VerifyApplicationAccess();
+}
 
 UiContext& Window::Ui()
 {
+    VerifyAccess();
     return *m_Impl->m_Ui;
 }
 
 Renderer& Window::Graphics()
 {
+    VerifyAccess();
     return *m_Impl->m_Renderer;
 }
 
 std::uintptr_t Window::GetContextIdentity() const
 {
+    VerifyAccess();
     return reinterpret_cast<std::uintptr_t>(m_Impl->m_Window);
 }
 
 bool Window::IsHeadless() const
 {
+    VerifyAccess();
     return m_Impl->m_Headless;
 }
 
 Signal<Key>& Window::KeyPressed()
 {
+    VerifyAccess();
     return m_Impl->m_KeyPressed;
 }
 
 void Window::RenderFrame()
 {
-    RenderFrame(glfwGetTime());
+    VerifyAccess();
+    RenderFrame(m_Impl->GuiTime());
 }
 
 void Window::RenderFrame(double time)
 {
-    auto& self = *m_Impl;
-    glfwMakeContextCurrent(self.m_Window);
-    self.m_Ui->SetTime(time);
-    int width = 0;
-    int height = 0;
-    int framebufferWidth = 0;
-    int framebufferHeight = 0;
-    glfwGetWindowSize(self.m_Window, &width, &height);
-    glfwGetFramebufferSize(self.m_Window, &framebufferWidth, &framebufferHeight);
-    if (width <= 0 || height <= 0 || framebufferWidth <= 0 || framebufferHeight <= 0)
-        return;
-    self.m_Ui->Prepare(static_cast<float>(width), static_cast<float>(height));
-    const double now = time;
-    self.m_Ui->PrepareSurfaces(now, static_cast<float>(framebufferWidth) / static_cast<float>(width),
-                               static_cast<float>(framebufferHeight) / static_cast<float>(height));
-    self.m_Renderer->BeginFrame(static_cast<float>(width), static_cast<float>(height), framebufferWidth,
-                                framebufferHeight, self.m_Ui->Root().GetStyle().m_Background);
-    self.m_Ui->Paint(*self.m_Renderer, now);
-    self.m_Renderer->EndFrame();
-    self.m_Ui->FrameSubmitted();
+    VerifyAccess();
+    {
+        const auto self = m_Impl;
+        Detail::ApplicationDispatchScope scope;
+        self->Render(time, true);
+        self->m_TimeOffset = time - glfwGetTime();
+    }
+    Detail::FlushRetiredWindows();
 }
 
 int Window::Run()
 {
-    auto& self = *m_Impl;
-    while (!glfwWindowShouldClose(self.m_Window))
-    {
-        const bool active = glfwGetWindowAttrib(self.m_Window, GLFW_VISIBLE) &&
-                            !glfwGetWindowAttrib(self.m_Window, GLFW_ICONIFIED) &&
-                            (self.m_Focused || self.m_RenderWhenUnfocused);
-        if (active)
+    VerifyAccess();
+    return Application::RunWindows();
+}
+
+UiHandle<Window> Window::GetHandle()
+{
+    VerifyAccess();
+    const std::weak_ptr<Impl> weak = m_Impl;
+    return UiHandle<Window>::ForTarget(
+        m_Impl->m_Ui->GetDispatcher(), m_Impl->m_TargetKey,
+        [weak]() -> Window*
         {
-            const double started = glfwGetTime();
-            if ((self.m_Ui->NeedsRepaint() || self.m_Ui->HasAnimations()) && self.m_Pacer.IsDue(started))
-            {
-                RenderFrame(started);
-                glfwSwapBuffers(self.m_Window);
-                self.m_Pacer.Presented(started, glfwGetTime());
-            }
-            double wake = -1;
-            if (self.m_Ui->NeedsRepaint() || self.m_Ui->HasAnimations())
-                wake = self.m_Pacer.GetDeadline();
-            if (const auto* editor = dynamic_cast<TextBox*>(self.m_Ui->GetFocus()); editor && !editor->IsReadOnly())
-            {
-                const double now = glfwGetTime();
-                const double caret = editor->NextCaretDeadline(now);
-                if (wake < 0 || caret < wake)
-                    wake = caret;
-            }
-            if (wake >= 0)
-            {
-                const double now = glfwGetTime();
-                glfwWaitEventsTimeout(std::max(0.0001, wake - now));
-                if (const auto* editor = dynamic_cast<TextBox*>(self.m_Ui->GetFocus());
-                    editor && !editor->IsReadOnly() && glfwGetTime() >= wake && !self.m_Ui->HasAnimations())
-                    self.m_Ui->RequestRepaint();
-            }
-            else
-                glfwWaitEvents();
-        }
-        else
-            glfwWaitEvents();
-        if (self.m_CallbackError)
-            std::rethrow_exception(self.m_CallbackError);
-    }
-    return 0;
+            const auto self = weak.lock();
+            if (!self || self->m_Closed || !self->m_Owner)
+                return nullptr;
+            glfwMakeContextCurrent(self->m_Window);
+            return self->m_Owner;
+        },
+        m_Impl->m_TargetLifetime.get_token());
+}
+
+UiDispatcher Window::GetDispatcher() const
+{
+    VerifyAccess();
+    return m_Impl->m_Ui->GetDispatcher();
+}
+
+bool Window::IsClosed() const
+{
+    VerifyAccess();
+    return m_Impl->m_Closed || glfwWindowShouldClose(m_Impl->m_Window);
 }
 
 void Window::RequestRepaint()
 {
+    VerifyAccess();
     m_Impl->m_Ui->RequestRepaint();
     glfwPostEmptyEvent();
 }
 
 void Window::Close()
 {
-    glfwSetWindowShouldClose(m_Impl->m_Window, GLFW_TRUE);
-    glfwPostEmptyEvent();
+    VerifyAccess();
+    {
+        const auto self = m_Impl;
+        Detail::ApplicationDispatchScope scope;
+        self->RequestClose();
+    }
+    Detail::FlushRetiredWindows();
 }
 
 void Window::SetSize(int width, int height)
 {
-    glfwSetWindowSize(m_Impl->m_Window, std::max(1, width), std::max(1, height));
-    m_Impl->m_Ui->Invalidate();
+    VerifyAccess();
+    {
+        const auto self = m_Impl;
+        Detail::ApplicationDispatchScope scope;
+        glfwSetWindowSize(self->m_Window, std::max(1, width), std::max(1, height));
+        if (self->m_Owner && !self->m_Closed)
+            self->m_Ui->Invalidate();
+    }
+    Detail::FlushRetiredWindows();
 }
 } // namespace EStudioUI

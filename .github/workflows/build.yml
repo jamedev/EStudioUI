@@ -66,3 +66,10 @@ jobs:
           "$VCPKG_ROOT/bootstrap-vcpkg.sh" -disableMetrics
       - name: Build and run core and real GL framebuffer tests
         run: ./scripts/Build-Linux.sh Release
+      - name: Build and run isolated CPU ThreadSanitizer checks
+        run: |
+          cmake -S . -B build/linux-thread-sanitizer -G Ninja \
+            -DCMAKE_BUILD_TYPE=Debug \
+            -DESTUDIOUI_BUILD_THREAD_TESTS=ON
+          cmake --build build/linux-thread-sanitizer --parallel 2
+          ctest --test-dir build/linux-thread-sanitizer --output-on-failure --no-tests=error

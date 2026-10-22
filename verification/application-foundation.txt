@@ -1,0 +1,11 @@
+Application foundation: PASS
+Driver: llvmpipe (LLVM 17.0.6, 256 bits) | 4.5 (Core Profile) Mesa 24.0.5-1ubuntu1
+One native loop serviced two independently changing UI windows plus a transient window.
+Worker publication woke idle delivery; removed widget delivery expired safely.
+The lazy application-owned task pool computed off-thread and delivered its owned result.
+Callback-driven window destruction was deferred; its endpoint rejected later work.
+A cancellation observer safely destroyed its directly closing native window.
+Direct animation setters safely destroyed their owning window without postponing tree cleanup.
+Manual dispatcher draining retained deleted-window receivers through callback completion.
+First-window closure preserved second-window responsiveness and actual framebuffer updates.
+Owner-thread diagnostics, nested-loop rejection, deterministic-clock continuation passed.

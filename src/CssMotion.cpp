@@ -1,6 +1,7 @@
 #include <EStudioUI/CssMotion.h>
 #include <EStudioUI/UiContext.h>
 
+#include <exception>
 #include <algorithm>
 #include <cmath>
 #include <map>
@@ -192,17 +193,24 @@ struct CssMotion::Impl
 
 CssMotion::CssMotion(UiContext& context) : m_Impl(std::make_unique<Impl>(context))
 {
+    context.VerifyAccess();
 }
 
-CssMotion::~CssMotion() = default;
+CssMotion::~CssMotion()
+{
+    if (!m_Affinity.IsOwnerThread())
+        std::terminate();
+}
 
 void CssMotion::Reset()
 {
+    m_Affinity.VerifyAccess("CssMotion::Reset");
     m_Impl->m_Entries.clear();
 }
 
 const Style& CssMotion::Resolve(Widget& widget, int layerIndex, Style base, const StyleSheet& sheet)
 {
+    m_Affinity.VerifyAccess("CssMotion::Resolve");
     auto& self = *m_Impl;
     auto& entry = self.m_Entries[&widget];
     if (entry.m_Widget.Get() != &widget)
@@ -289,6 +297,7 @@ const Style& CssMotion::Resolve(Widget& widget, int layerIndex, Style base, cons
 
 const Style& CssMotion::Rebase(Widget& widget, int layerIndex, Style base)
 {
+    m_Affinity.VerifyAccess("CssMotion::Rebase");
     if (layerIndex < 3 || layerIndex >= 35)
         throw std::out_of_range("Only bounded named part layers can be rebased.");
     auto& entry = m_Impl->m_Entries[&widget];
@@ -310,6 +319,7 @@ const Style& CssMotion::Rebase(Widget& widget, int layerIndex, Style base)
 
 void CssMotion::Update(double time)
 {
+    m_Affinity.VerifyAccess("CssMotion::Update");
     auto& self = *m_Impl;
     std::erase_if(self.m_Entries,
                   [&](const auto& item)
@@ -384,6 +394,7 @@ void CssMotion::Update(double time)
 
 const Style* CssMotion::Decoration(const Widget& widget, int layerIndex) const
 {
+    m_Affinity.VerifyAccess("CssMotion::Decoration");
     const auto found = m_Impl->m_Entries.find(&widget);
     if (found == m_Impl->m_Entries.end() || found->second.m_Widget.Get() != &widget || layerIndex < 1 ||
         layerIndex > 2 || found->second.m_Layers.size() <= static_cast<std::size_t>(layerIndex))
@@ -396,6 +407,7 @@ const Style* CssMotion::Decoration(const Widget& widget, int layerIndex) const
 
 bool CssMotion::HasRunning() const
 {
+    m_Affinity.VerifyAccess("CssMotion::HasRunning");
     for (const auto& [address, entry] : m_Impl->m_Entries)
     {
         const auto* widget = entry.m_Widget.Get();

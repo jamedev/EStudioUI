@@ -42,12 +42,25 @@ TableWidget::TableWidget() : ScrollWidget("tablewidget")
     m_Editor->AddClass("cell-editor");
     m_Editor->SetVisible(false);
     m_Editor->SetFloatingBounds({});
-    m_Editor->Submitted().Connect([this](const std::string&) { CommitEdit(); });
-    m_Editor->FocusLost().Connect([this] { EndEdit(true, false); });
+    const WidgetRef owner(this);
+    m_Editor->Submitted().Connect(
+        [owner](const std::string&)
+        {
+            if (auto* live = dynamic_cast<TableWidget*>(owner.Get()))
+                live->CommitEdit();
+        });
+    m_Editor->FocusLost().Connect(
+        [owner]
+        {
+            if (auto* live = dynamic_cast<TableWidget*>(owner.Get()))
+                live->EndEdit(true, false);
+        });
 }
 
 void TableWidget::SetColumns(std::vector<TableColumn> columns)
 {
+    VerifyStructuralMutation();
+    const auto ownerLease = RetainOwner();
     for (auto& column : columns)
     {
         column.m_Size.Validate();
@@ -73,6 +86,8 @@ void TableWidget::SetColumns(std::vector<TableColumn> columns)
 
 void TableWidget::SetRows(std::vector<std::vector<std::string>> rows)
 {
+    VerifyStructuralMutation();
+    const auto ownerLease = RetainOwner();
     for (auto& row : rows)
     {
         if (row.size() != m_Columns.size())
@@ -98,6 +113,7 @@ void TableWidget::SetRows(std::vector<std::vector<std::string>> rows)
 
 int TableWidget::AddRow(std::vector<std::string> cells)
 {
+    VerifyStructuralMutation();
     if (cells.size() != m_Columns.size())
         throw std::invalid_argument("Every table row must match the column count.");
     for (auto& cell : cells)
@@ -111,16 +127,19 @@ int TableWidget::AddRow(std::vector<std::string> cells)
 
 int TableWidget::GetRowCount() const
 {
+    VerifyAccess();
     return static_cast<int>(m_Rows.size());
 }
 
 int TableWidget::GetColumnCount() const
 {
+    VerifyAccess();
     return static_cast<int>(m_Columns.size());
 }
 
 const std::string& TableWidget::GetCell(int row, int column) const
 {
+    VerifyAccess();
     if (row < 0 || row >= GetRowCount() || column < 0 || column >= GetColumnCount())
         throw std::out_of_range("Invalid table cell.");
     return m_Rows[static_cast<std::size_t>(row)][static_cast<std::size_t>(column)];
@@ -128,6 +147,8 @@ const std::string& TableWidget::GetCell(int row, int column) const
 
 void TableWidget::SetCell(int row, int column, std::string text)
 {
+    VerifyStructuralMutation();
+    const auto ownerLease = RetainOwner();
     (void)GetCell(row, column);
     text = TextBuffer::Sanitize(text);
     auto& cell = m_Rows[static_cast<std::size_t>(row)][static_cast<std::size_t>(column)];
@@ -142,6 +163,8 @@ void TableWidget::SetCell(int row, int column, std::string text)
 
 void TableWidget::SetCurrentCell(int row, int column)
 {
+    VerifyAccess();
+    const auto ownerLease = RetainOwner();
     if (row != -1 || column != -1)
         (void)GetCell(row, column);
     if (row >= 0)
@@ -162,11 +185,14 @@ void TableWidget::SetCurrentCell(int row, int column)
 
 std::pair<int, int> TableWidget::GetCurrentCell() const
 {
+    VerifyAccess();
     return {m_CurrentRow, m_CurrentColumn};
 }
 
 void TableWidget::SortByColumn(int column, bool ascending)
 {
+    VerifyStructuralMutation();
+    const auto ownerLease = RetainOwner();
     if (column < 0 || column >= GetColumnCount())
         throw std::out_of_range("Invalid table sort column.");
     EndEdit(false, false);
@@ -198,6 +224,7 @@ void TableWidget::SortByColumn(int column, bool ascending)
 
 void TableWidget::SetEditable(bool editable)
 {
+    VerifyAccess();
     m_Editable = editable;
     SetState(ReadOnly, !editable);
     if (!editable)
@@ -206,11 +233,13 @@ void TableWidget::SetEditable(bool editable)
 
 void TableWidget::SetSortingEnabled(bool enabled)
 {
+    VerifyAccess();
     m_SortingEnabled = enabled;
 }
 
 void TableWidget::SetColumnWidth(int column, float pixels)
 {
+    VerifyAccess();
     if (column < 0 || column >= GetColumnCount())
         throw std::out_of_range("Invalid table column.");
     (void)SizeRule::Fixed(pixels);
@@ -220,6 +249,7 @@ void TableWidget::SetColumnWidth(int column, float pixels)
 
 std::vector<float> TableWidget::GetColumnWidths() const
 {
+    VerifyAccess();
     const auto& cell = GetPartStyle("cell", 0);
     const auto& header = GetPartStyle("header", 0);
     const float cellInset = cell.m_Padding.m_Left + cell.m_Padding.m_Right + 2 * cell.m_BorderWidth;
@@ -261,6 +291,7 @@ std::vector<float> TableWidget::GetColumnWidths() const
 
 Rect TableWidget::GetCellBounds(int row, int column) const
 {
+    VerifyAccess();
     (void)GetCell(row, column);
     const auto widths = GetColumnWidths();
     const auto viewport = GetViewport();
@@ -274,6 +305,8 @@ Rect TableWidget::GetCellBounds(int row, int column) const
 
 void TableWidget::BeginEdit(int row, int column)
 {
+    VerifyAccess();
+    const auto ownerLease = RetainOwner();
     (void)GetCell(row, column);
     if (!m_Editable || !IsEnabled() || !GetContext())
         return;
@@ -296,6 +329,7 @@ void TableWidget::BeginEdit(int row, int column)
 
 void TableWidget::EndEdit(bool commit, bool restoreFocus)
 {
+    const auto ownerLease = RetainOwner();
     if (m_EditRow < 0)
         return;
     const int row = m_EditRow;
@@ -315,31 +349,37 @@ void TableWidget::EndEdit(bool commit, bool restoreFocus)
 
 void TableWidget::CommitEdit()
 {
+    VerifyAccess();
     EndEdit(true, true);
 }
 
 void TableWidget::CancelEdit()
 {
+    VerifyAccess();
     EndEdit(false, true);
 }
 
 Signal<int, int>& TableWidget::CellChanged()
 {
+    VerifyAccess();
     return m_CellChanged;
 }
 
 Signal<int, int>& TableWidget::CurrentCellChanged()
 {
+    VerifyAccess();
     return m_CurrentCellChanged;
 }
 
 bool TableWidget::IsFocusable() const
 {
+    VerifyAccess();
     return true;
 }
 
 Rect TableWidget::GetViewport() const
 {
+    VerifyAccess();
     auto viewport = ScrollWidget::GetViewport();
     viewport.m_Y += GetStyle().m_RowHeight;
     viewport.m_Height = std::max(0.0f, viewport.m_Height - GetStyle().m_RowHeight);

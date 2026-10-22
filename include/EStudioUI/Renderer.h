@@ -2,6 +2,7 @@
 
 #include "FontFace.h"
 #include "Style.h"
+#include "ThreadAffinity.h"
 
 #include <cstddef>
 #include <cstdint>
@@ -144,6 +145,9 @@ class Renderer
     std::string GetDriverDescription() const;
 
   private:
+    //! Enforces access before any renderer state or OpenGL command is touched.
+    ThreadAffinity m_Affinity;
+
     //! Owns GL state, glyph buffers, and ordered frame batches.
     struct Impl;
 

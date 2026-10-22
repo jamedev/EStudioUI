@@ -44,6 +44,7 @@ ContextMenu* SplitToolButton::Menu() const
 
 ToolButton& SplitToolButton::AddAction(std::string text)
 {
+    VerifyStructuralMutation();
     auto* menu = Menu();
     if (!menu)
         throw std::logic_error("The tool chooser's context-owned menu was removed.");
@@ -64,11 +65,13 @@ ToolButton& SplitToolButton::AddAction(std::string text)
 
 std::size_t SplitToolButton::GetActionCount() const
 {
+    VerifyAccess();
     return m_Actions.size();
 }
 
 ToolButton& SplitToolButton::GetAction(std::size_t index)
 {
+    VerifyAccess();
     if (index >= m_Actions.size())
         throw std::out_of_range("Tool action index is outside the chooser.");
     auto* action = dynamic_cast<ToolButton*>(m_Actions[index].Get());
@@ -79,6 +82,7 @@ ToolButton& SplitToolButton::GetAction(std::size_t index)
 
 void SplitToolButton::SetDefaultAction(std::size_t index)
 {
+    VerifyAccess();
     auto& action = GetAction(index);
     m_Default = index;
     m_Primary->SetText(action.GetText());
@@ -86,6 +90,7 @@ void SplitToolButton::SetDefaultAction(std::size_t index)
 
 std::size_t SplitToolButton::GetDefaultActionIndex() const
 {
+    VerifyAccess();
     return m_Default;
 }
 
@@ -102,6 +107,8 @@ void SplitToolButton::Choose(std::size_t index)
 
 void SplitToolButton::TriggerDefault()
 {
+    VerifyAccess();
+    const auto ownerLease = RetainOwner();
     if (!IsEnabled() || m_Default >= m_Actions.size())
         return;
     auto* action = dynamic_cast<ToolButton*>(m_Actions[m_Default].Get());
@@ -111,6 +118,7 @@ void SplitToolButton::TriggerDefault()
 
 void SplitToolButton::OpenMenu()
 {
+    VerifyStructuralMutation();
     auto* context = GetContext();
     if (!context || !IsEnabled() || m_Actions.empty())
         return;
@@ -128,17 +136,20 @@ void SplitToolButton::OpenMenu()
 
 bool SplitToolButton::IsMenuOpen() const
 {
+    VerifyAccess();
     const auto* menu = Menu();
     return menu && menu->IsOpen();
 }
 
 ToolButton& SplitToolButton::GetPrimaryButton()
 {
+    VerifyAccess();
     return *m_Primary;
 }
 
 Signal<std::size_t>& SplitToolButton::Triggered()
 {
+    VerifyAccess();
     return m_Triggered;
 }
 

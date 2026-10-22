@@ -6,6 +6,7 @@
 #include "SketchGallery.h"
 #include "CustomWidgetGallery.h"
 #include "WidgetStylesGallery.h"
+#include "FoundationGallery.h"
 
 #include <EStudioUI/ContextMenu.h>
 #include <EStudioUI/ListWidget.h>
@@ -120,5 +121,8 @@ class WidgetGallery
 
     //! Owns rich CSS examples for every existing widget family.
     std::unique_ptr<WidgetStylesGallery> m_WidgetStyles;
+
+    //! Owns the background task and safe UI publication examples.
+    std::unique_ptr<FoundationGallery> m_Foundation;
 };
 } // namespace EStudioUI

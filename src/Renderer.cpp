@@ -1,5 +1,6 @@
 #include <EStudioUI/Renderer.h>
 
+#include <exception>
 #include <glad/gl.h>
 
 #include <algorithm>
@@ -999,8 +1000,10 @@ struct Renderer::Impl
     }
 };
 
-Renderer::Renderer(FontFace& font) : m_Impl(std::make_unique<Impl>(font))
+Renderer::Renderer(FontFace& font)
 {
+    font.VerifyAccess();
+    m_Impl = std::make_unique<Impl>(font);
     static_assert(sizeof(Impl::Instance) == 128 && sizeof(int) == 4,
                   "The GL vertex attribute stream requires a packed 128-byte instance and 32-bit integers.");
     if (!GLAD_GL_VERSION_3_3)
@@ -1026,10 +1029,15 @@ Renderer::Renderer(FontFace& font) : m_Impl(std::make_unique<Impl>(font))
     glGenTextures(1, &m_Impl->m_BandTexture);
 }
 
-Renderer::~Renderer() = default;
+Renderer::~Renderer()
+{
+    if (!m_Affinity.IsOwnerThread())
+        std::terminate();
+}
 
 void Renderer::BeginFrame(float width, float height, int framebufferWidth, int framebufferHeight, Color clear)
 {
+    m_Affinity.VerifyAccess("Renderer::BeginFrame");
     auto& self = *m_Impl;
     self.PollTimers();
     self.m_Clear = clear;
@@ -1060,6 +1068,7 @@ void Renderer::BeginFrame(float width, float height, int framebufferWidth, int f
 
 void Renderer::PushState(Affine local)
 {
+    m_Affinity.VerifyAccess("Renderer::PushState");
     auto& self = *m_Impl;
     auto state = self.m_States.back();
     state.m_Before = nullptr;
@@ -1078,6 +1087,7 @@ void Renderer::PushState(Affine local)
 
 void Renderer::PopState()
 {
+    m_Affinity.VerifyAccess("Renderer::PopState");
     if (m_Impl->m_States.size() <= 1)
         throw std::logic_error("Unbalanced renderer state stack.");
     m_Impl->m_States.pop_back();
@@ -1085,6 +1095,7 @@ void Renderer::PopState()
 
 void Renderer::PushClip(Rect bounds, float radius)
 {
+    m_Affinity.VerifyAccess("Renderer::PushClip");
     auto& self = *m_Impl;
     auto& state = self.m_States.back();
     if (radius <= 0 && state.m_Transform.m_B == 0 && state.m_Transform.m_C == 0)
@@ -1099,6 +1110,7 @@ void Renderer::PushClip(Rect bounds, float radius)
 void Renderer::SetWidgetPaint(Rect bounds, Rect inheritedClip, const Style* before, bool rounded, float radius,
                               std::uintptr_t ownerIdentity)
 {
+    m_Affinity.VerifyAccess("Renderer::SetWidgetPaint");
     auto& state = m_Impl->m_States.back();
     state.m_Owner = bounds;
     state.m_OwnerIdentity = ownerIdentity;
@@ -1114,6 +1126,7 @@ void Renderer::SetWidgetPaint(Rect bounds, Rect inheritedClip, const Style* befo
 
 void Renderer::SetPaintIdentity(std::uintptr_t ownerIdentity, std::uint64_t subIdentity)
 {
+    m_Affinity.VerifyAccess("Renderer::SetPaintIdentity");
     auto& state = m_Impl->m_States.back();
     state.m_OwnerIdentity = ownerIdentity;
     state.m_SubIdentity = subIdentity;
@@ -1123,6 +1136,7 @@ void Renderer::SetPaintIdentity(std::uintptr_t ownerIdentity, std::uint64_t subI
 
 void Renderer::DrawDecoration(Rect owner, const Style& style, Rect clip, float opacity, unsigned layer)
 {
+    m_Affinity.VerifyAccess("Renderer::DrawDecoration");
     if (layer < 1 || layer > 2)
         throw std::invalid_argument("Decoration layer must be 1 (before) or 2 (after).");
     const auto& edges = style.m_Anchors;
@@ -1154,6 +1168,7 @@ void Renderer::DrawDecoration(Rect owner, const Style& style, Rect clip, float o
 
 void Renderer::DrawBox(Rect bounds, const Style& style, Rect clip, float opacity)
 {
+    m_Affinity.VerifyAccess("Renderer::DrawBox");
     auto& self = *m_Impl;
     auto fill = style.m_Background;
     auto border = style.m_BorderColor;
@@ -1224,6 +1239,7 @@ void Renderer::DrawBox(Rect bounds, const Style& style, Rect clip, float opacity
 
 void Renderer::DrawSolid(Rect bounds, Color color, Rect clip)
 {
+    m_Affinity.VerifyAccess("Renderer::DrawSolid");
     if (color.m_A > 0)
         m_Impl->Shape(bounds, color, {}, {0, 0, 0, 1}, clip);
     else
@@ -1234,6 +1250,7 @@ void Renderer::DrawSolid(Rect bounds, Color color, Rect clip)
 
 void Renderer::DrawLine(Point from, Point to, Color color, float width, Rect clip)
 {
+    m_Affinity.VerifyAccess("Renderer::DrawLine");
     if (!std::isfinite(from.m_X) || !std::isfinite(from.m_Y) || !std::isfinite(to.m_X) || !std::isfinite(to.m_Y) ||
         !std::isfinite(width))
         throw std::invalid_argument("Line coordinates and width must be finite.");
@@ -1267,6 +1284,7 @@ void Renderer::DrawLine(Point from, Point to, Color color, float width, Rect cli
 
 void Renderer::DrawCircle(Point center, float radius, const Style& style, Rect clip, float opacity)
 {
+    m_Affinity.VerifyAccess("Renderer::DrawCircle");
     if (!std::isfinite(center.m_X) || !std::isfinite(center.m_Y) || !std::isfinite(radius))
         throw std::invalid_argument("Circle coordinates and radius must be finite.");
     if (radius <= 0)
@@ -1278,6 +1296,7 @@ void Renderer::DrawCircle(Point center, float radius, const Style& style, Rect c
 
 void Renderer::DrawText(const TextLayout& layout, Point baseline, Color color, Rect clip)
 {
+    m_Affinity.VerifyAccess("Renderer::DrawText");
     if (clip.m_Width <= 0 || clip.m_Height <= 0 || color.m_A <= 0 || layout.m_FontSize <= 0)
         return;
     auto& self = *m_Impl;
@@ -1314,6 +1333,7 @@ void Renderer::DrawText(const TextLayout& layout, Point baseline, Color color, R
 
 void Renderer::DrawTexture(Rect bounds, std::uint32_t texture, Rect clip, float opacity, std::uint64_t revision)
 {
+    m_Affinity.VerifyAccess("Renderer::DrawTexture");
     if (!texture || bounds.m_Width <= 0 || bounds.m_Height <= 0)
         return;
     auto& self = *m_Impl;
@@ -1326,6 +1346,7 @@ void Renderer::DrawTexture(Rect bounds, std::uint32_t texture, Rect clip, float 
 
 void Renderer::SetPartialRedrawEnabled(bool enabled)
 {
+    m_Affinity.VerifyAccess("Renderer::SetPartialRedrawEnabled");
     if (m_Impl->m_PartialRedraw != enabled)
     {
         m_Impl->m_PartialRedraw = enabled;
@@ -1335,11 +1356,13 @@ void Renderer::SetPartialRedrawEnabled(bool enabled)
 
 bool Renderer::IsPartialRedrawEnabled() const
 {
+    m_Affinity.VerifyAccess("Renderer::IsPartialRedrawEnabled");
     return m_Impl->m_PartialRedraw;
 }
 
 void Renderer::SetGpuTimingEnabled(bool enabled)
 {
+    m_Affinity.VerifyAccess("Renderer::SetGpuTimingEnabled");
     auto& self = *m_Impl;
     if (enabled && !self.m_Queries[0])
         glGenQueries(static_cast<GLsizei>(self.m_Queries.size()), self.m_Queries.data());
@@ -1348,6 +1371,7 @@ void Renderer::SetGpuTimingEnabled(bool enabled)
 
 void Renderer::EndFrame()
 {
+    m_Affinity.VerifyAccess("Renderer::EndFrame");
     auto& self = *m_Impl;
     self.EnsureRetainedTarget();
     self.BuildDamage();
@@ -1478,6 +1502,7 @@ void Renderer::EndFrame()
 
 Color Renderer::ReadPixel(Point point) const
 {
+    m_Affinity.VerifyAccess("Renderer::ReadPixel");
     const auto& self = *m_Impl;
     const int x = std::clamp(static_cast<int>(point.m_X * static_cast<float>(self.m_FramebufferWidth) / self.m_Width),
                              0, self.m_FramebufferWidth - 1);
@@ -1492,6 +1517,7 @@ Color Renderer::ReadPixel(Point point) const
 
 void Renderer::SavePpm(const std::filesystem::path& path) const
 {
+    m_Affinity.VerifyAccess("Renderer::SavePpm");
     const auto& self = *m_Impl;
     std::vector<unsigned char> pixels(static_cast<std::size_t>(self.m_FramebufferWidth) *
                                       static_cast<std::size_t>(self.m_FramebufferHeight) * 3);
@@ -1511,11 +1537,13 @@ void Renderer::SavePpm(const std::filesystem::path& path) const
 
 const RenderStats& Renderer::GetStats() const
 {
+    m_Affinity.VerifyAccess("Renderer::GetStats");
     return m_Impl->m_Stats;
 }
 
 std::string Renderer::GetDriverDescription() const
 {
+    m_Affinity.VerifyAccess("Renderer::GetDriverDescription");
     const auto* renderer = reinterpret_cast<const char*>(glGetString(GL_RENDERER));
     const auto* version = reinterpret_cast<const char*>(glGetString(GL_VERSION));
     return std::string(renderer ? renderer : "unknown") + " | " + (version ? version : "unknown");

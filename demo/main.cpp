@@ -6,6 +6,7 @@
 #include "PainterProbe.h"
 #include "InputControlsProbe.h"
 #include "WidgetStylesProbe.h"
+#include "ApplicationProbe.h"
 
 #include <EStudioUI/Button.h>
 #include <EStudioUI/TextBox.h>
@@ -232,7 +233,7 @@ class Demo
             });
         if (!LoadCss(m_CurrentCss))
             throw std::runtime_error("Initial CSS could not be loaded.");
-        m_Tabs->SetCurrentIndex(8);
+        m_Tabs->SetCurrentIndex(9);
     }
 
     ~Demo()
@@ -515,6 +516,8 @@ int main(int argc, char** argv)
             ProfileCanvas(assets, output, options.m_Headless);
             return 0;
         }
+        if (selfTest)
+            VerifyApplication(assets, output, options.m_Headless);
         Window window(options, font);
         Demo demo(window, assets, css);
         if (selfTest)

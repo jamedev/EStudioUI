@@ -1,6 +1,7 @@
 #include <EStudioUI/FontFace.h>
 #include <EStudioUI/TextBuffer.h>
 
+#include <exception>
 #include <ft2build.h>
 #include FT_FREETYPE_H
 #include FT_OUTLINE_H
@@ -158,10 +159,15 @@ FontFace::FontFace(const std::filesystem::path& path) : m_Impl(std::make_unique<
     hb_font_set_scale(m_Impl->m_Font, units, units);
 }
 
-FontFace::~FontFace() = default;
+FontFace::~FontFace()
+{
+    if (!m_Affinity.IsOwnerThread())
+        std::terminate();
+}
 
 TextLayout FontFace::Shape(std::string_view text, float size, bool editable) const
 {
+    m_Affinity.VerifyAccess("FontFace::Shape");
     if (!std::isfinite(size) || size < 0 || text.size() > static_cast<std::size_t>(std::numeric_limits<int>::max()))
         throw std::invalid_argument("Invalid font size or text run length.");
     TextLayout layout;
@@ -222,6 +228,7 @@ TextLayout FontFace::Shape(std::string_view text, float size, bool editable) con
 
 const GlyphGeometry& FontFace::GetGlyph(std::uint32_t id)
 {
+    m_Affinity.VerifyAccess("FontFace::GetGlyph");
     if (const auto found = m_Impl->m_Glyphs.find(id); found != m_Impl->m_Glyphs.end())
         return found->second;
     GlyphGeometry geometry;
@@ -264,5 +271,10 @@ float TextLayout::CaretPosition(std::size_t offset) const
     const auto end = std::upper_bound(m_Offsets.begin(), m_Offsets.end(), offset);
     const auto index = end == m_Offsets.begin() ? 0 : static_cast<std::size_t>(std::prev(end) - m_Offsets.begin());
     return m_Carets[index];
+}
+
+void FontFace::VerifyAccess() const
+{
+    m_Affinity.VerifyAccess("FontFace");
 }
 } // namespace EStudioUI

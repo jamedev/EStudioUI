@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.24)
-project(EStudioUI VERSION 0.8.0 LANGUAGES C CXX)
+project(EStudioUI VERSION 0.9.0 LANGUAGES C CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -10,10 +10,56 @@ option(ESTUDIOUI_BUILD_TESTS "Build core and GPU integration checks" ON)
 option(ESTUDIOUI_BUILD_DEMO "Build the interactive widget gallery" ON)
 option(ESTUDIOUI_GPU_TESTS "Enable Linux OSMesa integration checks in CTest" ON)
 option(ESTUDIOUI_ENABLE_SANITIZERS "Enable address and undefined behavior sanitizers" OFF)
+option(ESTUDIOUI_BUILD_THREAD_TESTS "Build only isolated CPU ThreadSanitizer checks, without UI dependencies" OFF)
+
+# A separate build directory exercises the actual concurrency sources without
+# loading GLFW, font services, GL, or uninstrumented third-party dependencies.
+if(ESTUDIOUI_BUILD_THREAD_TESTS)
+    if(ESTUDIOUI_ENABLE_SANITIZERS)
+        message(FATAL_ERROR "ThreadSanitizer and address/undefined sanitizers require separate build directories.")
+    endif()
+    if(WIN32 OR NOT CMAKE_CXX_COMPILER_ID MATCHES "^(GNU|Clang|AppleClang)$" OR CMAKE_SIZEOF_VOID_P LESS 8)
+        message(FATAL_ERROR "Isolated ThreadSanitizer checks require a supported 64-bit GCC/Clang platform.")
+    endif()
+    find_package(Threads REQUIRED)
+    include(CheckCXXSourceCompiles)
+    include(CMakePushCheckState)
+    cmake_push_check_state(RESET)
+    set(CMAKE_REQUIRED_FLAGS "-fsanitize=thread -fno-omit-frame-pointer")
+    set(CMAKE_REQUIRED_LINK_OPTIONS -fsanitize=thread)
+    set(CMAKE_REQUIRED_LIBRARIES Threads::Threads)
+    check_cxx_source_compiles(
+        "#include <thread>\nint main() { std::thread([] {}).join(); return 0; }"
+        ESTUDIOUI_HAS_THREAD_SANITIZER)
+    cmake_pop_check_state()
+    if(NOT ESTUDIOUI_HAS_THREAD_SANITIZER)
+        message(FATAL_ERROR "The selected compiler cannot compile and link ThreadSanitizer executables.")
+    endif()
+
+    add_library(EStudioUIThreadRuntime STATIC
+        src/DispatchReceipt.cpp src/UiDispatcher.cpp src/UiHandle.cpp
+        src/Task.cpp src/BackgroundTasks.cpp)
+    target_include_directories(EStudioUIThreadRuntime PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/include")
+    target_link_libraries(EStudioUIThreadRuntime PUBLIC Threads::Threads)
+    target_compile_options(EStudioUIThreadRuntime PUBLIC -fsanitize=thread -fno-omit-frame-pointer -O1 -g1)
+    target_link_options(EStudioUIThreadRuntime PUBLIC -fsanitize=thread)
+    target_compile_options(EStudioUIThreadRuntime PRIVATE -Wall -Wextra -Wpedantic -Wconversion -Wshadow)
+
+    enable_testing()
+    foreach(suite Dispatch QueuedSignal Task)
+        add_executable(EStudioUIThread${suite}Tests tests/${suite}Tests.cpp)
+        target_link_libraries(EStudioUIThread${suite}Tests PRIVATE EStudioUIThreadRuntime)
+        add_test(NAME Thread${suite} COMMAND EStudioUIThread${suite}Tests)
+        set_tests_properties(Thread${suite} PROPERTIES
+            LABELS ThreadSanitizer TIMEOUT 120 ENVIRONMENT "TSAN_OPTIONS=halt_on_error=1")
+    endforeach()
+    return()
+endif()
 
 # Runtime libraries are supplied by the pinned vcpkg manifest. Optional package
 # features are disabled there; the generated GL loader remains a small source file.
 find_package(glfw3 3.4 CONFIG REQUIRED)
+find_package(Threads REQUIRED)
 find_package(Freetype 2.13 REQUIRED)
 find_package(harfbuzz CONFIG REQUIRED)
 
@@ -39,11 +85,14 @@ add_library(EStudioUI STATIC
     src/CanvasScene.cpp src/CanvasGeometry.cpp src/CanvasWidget.cpp src/SketchDocument.cpp src/SketchWidget.cpp
     src/InputValidator.cpp src/NumericInput.cpp src/Slider.cpp src/SplitToolButton.cpp
     src/Painter.cpp src/PainterPath.cpp src/PaintWidget.cpp
+    src/ThreadAffinity.cpp src/DispatchReceipt.cpp src/UiDispatcher.cpp src/UiHandle.cpp
+    src/Task.cpp src/BackgroundTasks.cpp src/Application.cpp
 )
 add_library(EStudioUI::EStudioUI ALIAS EStudioUI)
 target_compile_features(EStudioUI PUBLIC cxx_std_20)
 target_include_directories(EStudioUI PUBLIC include)
 target_link_libraries(EStudioUI PRIVATE EStudioUIGl glfw Freetype::Freetype harfbuzz::harfbuzz ${ESTUDIOUI_UTF8PROC_TARGET})
+target_link_libraries(EStudioUI PUBLIC Threads::Threads)
 if(MSVC)
     target_compile_options(EStudioUI PRIVATE /W4 /permissive- /utf-8)
 else()
@@ -59,7 +108,7 @@ if(ESTUDIOUI_BUILD_DEMO)
     add_executable(EStudioUIDemo demo/main.cpp demo/WidgetGallery.cpp demo/DemoScene.cpp demo/AnimationGallery.cpp demo/RichCssGallery.cpp demo/GpuWorkload.cpp
         demo/SketchGallery.cpp demo/CanvasPrimitiveProbe.cpp demo/CanvasProbe.cpp demo/CanvasCurvesProbe.cpp
         demo/CustomWidgetGallery.cpp demo/PainterProbe.cpp demo/InputControlsProbe.cpp
-        demo/WidgetStylesGallery.cpp demo/WidgetStylesProbe.cpp)
+        demo/WidgetStylesGallery.cpp demo/WidgetStylesProbe.cpp demo/ApplicationProbe.cpp demo/FoundationGallery.cpp)
     target_link_libraries(EStudioUIDemo PRIVATE EStudioUI::EStudioUI EStudioUIGl glfw)
     if(MSVC)
         target_compile_options(EStudioUIDemo PRIVATE /utf-8)
@@ -129,7 +178,8 @@ if(ESTUDIOUI_BUILD_TESTS)
     add_test(NAME RichCss COMMAND EStudioUIRichCssTests)
 
     foreach(suite CanvasScene CanvasGeometry SketchDocument CanvasWidget InputControls SplitToolButton Painter
-                  StyleParts StyledCollections StyledScroll CompositeStyle)
+                  StyleParts StyledCollections StyledScroll CompositeStyle
+                  Dispatch ThreadAffinity Task QueuedSignal ControlAffinity ServiceAffinity)
         add_executable(EStudioUI${suite}Tests tests/${suite}Tests.cpp)
         target_link_libraries(EStudioUI${suite}Tests PRIVATE EStudioUI::EStudioUI)
         target_compile_definitions(EStudioUI${suite}Tests PRIVATE

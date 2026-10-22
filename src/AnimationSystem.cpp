@@ -1,6 +1,7 @@
 #include <EStudioUI/AnimationSystem.h>
 #include <EStudioUI/UiContext.h>
 
+#include <exception>
 #include <cmath>
 #include <limits>
 #include <stdexcept>
@@ -177,12 +178,19 @@ struct AnimationSystem::Impl
 
 AnimationSystem::AnimationSystem(UiContext& context) : m_Impl(std::make_unique<Impl>(context))
 {
+    context.VerifyAccess();
 }
 
-AnimationSystem::~AnimationSystem() = default;
+AnimationSystem::~AnimationSystem()
+{
+    if (!m_Affinity.IsOwnerThread())
+        std::terminate();
+}
 
 AnimationId AnimationSystem::Play(Animation animation)
 {
+    m_Affinity.VerifyAccess("AnimationSystem::Play");
+    const auto ownerLifetime = m_Impl->m_Context.RetainOwner();
     auto& self = *m_Impl;
     animation.m_Options.Validate();
     if (animation.m_Tracks.empty())
@@ -221,6 +229,7 @@ AnimationId AnimationSystem::Play(Animation animation)
 
 bool AnimationSystem::Pause(AnimationId id)
 {
+    m_Affinity.VerifyAccess("AnimationSystem::Pause");
     auto& self = *m_Impl;
     const auto entry = self.Find(id);
     if (!entry || entry->m_State != AnimationState::Running)
@@ -233,6 +242,7 @@ bool AnimationSystem::Pause(AnimationId id)
 
 bool AnimationSystem::Resume(AnimationId id)
 {
+    m_Affinity.VerifyAccess("AnimationSystem::Resume");
     auto& self = *m_Impl;
     const auto entry = self.Find(id);
     if (!entry || entry->m_State != AnimationState::Paused)
@@ -245,6 +255,8 @@ bool AnimationSystem::Resume(AnimationId id)
 
 bool AnimationSystem::Seek(AnimationId id, double seconds)
 {
+    m_Affinity.VerifyAccess("AnimationSystem::Seek");
+    const auto ownerLifetime = m_Impl->m_Context.RetainOwner();
     if (!std::isfinite(seconds) || seconds < 0)
         throw std::invalid_argument("Animation seek time must be finite and nonnegative.");
     auto& self = *m_Impl;
@@ -260,6 +272,8 @@ bool AnimationSystem::Seek(AnimationId id, double seconds)
 
 bool AnimationSystem::Stop(AnimationId id, AnimationStopMode mode)
 {
+    m_Affinity.VerifyAccess("AnimationSystem::Stop");
+    const auto ownerLifetime = m_Impl->m_Context.RetainOwner();
     auto& self = *m_Impl;
     const auto entry = self.Find(id);
     if (!entry)
@@ -274,6 +288,8 @@ bool AnimationSystem::Stop(AnimationId id, AnimationStopMode mode)
 
 void AnimationSystem::StopAll(AnimationStopMode mode)
 {
+    m_Affinity.VerifyAccess("AnimationSystem::StopAll");
+    const auto ownerLifetime = m_Impl->m_Context.RetainOwner();
     auto& self = *m_Impl;
     Impl::Dispatch dispatch(self);
     const auto count = self.m_Entries.size();
@@ -283,12 +299,14 @@ void AnimationSystem::StopAll(AnimationStopMode mode)
 
 AnimationState AnimationSystem::GetState(AnimationId id) const
 {
+    m_Affinity.VerifyAccess("AnimationSystem::GetState");
     const auto entry = m_Impl->Find(id);
     return entry ? entry->m_State : AnimationState::Stopped;
 }
 
 bool AnimationSystem::HasRunning() const
 {
+    m_Affinity.VerifyAccess("AnimationSystem::HasRunning");
     const auto& self = *m_Impl;
     return std::any_of(self.m_Entries.begin(), self.m_Entries.end(), [&](const auto& entry)
                        { return entry->m_State == AnimationState::Running && self.HasTargets(*entry); });
@@ -296,6 +314,8 @@ bool AnimationSystem::HasRunning() const
 
 void AnimationSystem::Update(double time)
 {
+    m_Affinity.VerifyAccess("AnimationSystem::Update");
+    const auto ownerLifetime = m_Impl->m_Context.RetainOwner();
     auto& self = *m_Impl;
     if (!std::isfinite(time) || time < self.m_Time)
         throw std::invalid_argument("Animation time must be finite and nondecreasing.");
@@ -334,16 +354,19 @@ void AnimationSystem::Update(double time)
 
 Signal<AnimationId>& AnimationSystem::Finished()
 {
+    m_Affinity.VerifyAccess("AnimationSystem::Finished");
     return m_Impl->m_Finished;
 }
 
 double AnimationSystem::GetTime() const
 {
+    m_Affinity.VerifyAccess("AnimationSystem::GetTime");
     return m_Impl->m_Time;
 }
 
 Signal<AnimationId>& AnimationSystem::Cancelled()
 {
+    m_Affinity.VerifyAccess("AnimationSystem::Cancelled");
     return m_Impl->m_Cancelled;
 }
 } // namespace EStudioUI

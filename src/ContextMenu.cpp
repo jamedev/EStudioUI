@@ -12,6 +12,7 @@ ContextMenu::ContextMenu() : Widget("contextmenu")
 
 ToolButton& ContextMenu::AddAction(std::string text, bool enabled)
 {
+    VerifyStructuralMutation();
     auto& action = Add<ToolButton>(std::move(text));
     action.AddClass("menu-action");
     action.SetEnabled(enabled);
@@ -27,12 +28,14 @@ ToolButton& ContextMenu::AddAction(std::string text, bool enabled)
 
 void ContextMenu::AddSeparator()
 {
+    VerifyStructuralMutation();
     auto& separator = Add<Widget>("separator");
     separator.AddClass("menu-separator");
 }
 
 void ContextMenu::Open(Point position)
 {
+    VerifyAccess();
     if (!GetContext())
         throw std::logic_error("Attach a context menu to the UI root before opening it.");
     GetContext()->ShowPopup(*this, position);
@@ -40,17 +43,20 @@ void ContextMenu::Open(Point position)
 
 void ContextMenu::Close()
 {
+    VerifyAccess();
     if (IsOpen())
         GetContext()->ClosePopup();
 }
 
 bool ContextMenu::IsOpen() const
 {
+    VerifyAccess();
     return GetContext() && GetContext()->GetPopup() == this;
 }
 
 bool ContextMenu::IsFocusable() const
 {
+    VerifyAccess();
     return true;
 }
 

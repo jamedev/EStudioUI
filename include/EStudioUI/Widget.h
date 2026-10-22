@@ -5,10 +5,12 @@
 #include "Layout.h"
 #include "SizeRule.h"
 #include "StyleProperty.h"
+#include "ThreadAffinity.h"
 
 #include <memory>
 #include <map>
 #include <optional>
+#include <stop_token>
 #include <string>
 #include <utility>
 #include <vector>
@@ -36,9 +38,17 @@ class Widget
     //! Widget addresses remain stable while attached to a tree.
     Widget& operator=(const Widget&) = delete;
 
+    //! Throws before unsupported direct access from a thread other than the owner.
+    void VerifyAccess() const;
+
+    //! Returns whether the current thread owns this widget.
+    bool IsOwnerThread() const noexcept;
+
     //! Appends an owned child and returns its concrete type.
     template <typename T, typename... Args> T& Add(Args&&... args)
     {
+        VerifyStructuralMutation();
+        const auto ownerLease = RetainOwner();
         auto child = std::make_unique<T>(std::forward<Args>(args)...);
         auto* result = child.get();
         AddChild(std::move(child));
@@ -154,6 +164,12 @@ class Widget
     friend class UiContext;
     friend class WidgetRef;
 
+    //! Rejects tree mutation during style, measurement, layout, surfaces, or painting.
+    void VerifyStructuralMutation() const;
+
+    //! Retains containing window services across callbacks without retaining this widget.
+    std::shared_ptr<void> RetainOwner() const;
+
     //! Returns intrinsic content size before padding, border, and explicit CSS.
     virtual Point Measure(FontFace& font) const;
 
@@ -217,6 +233,12 @@ class Widget
 
   private:
     friend class CssMotion;
+
+    //! Captures the owner before any widget state is initialized.
+    ThreadAffinity m_Affinity;
+
+    //! Distinguishes target handles even when allocation addresses are reused.
+    const std::uint64_t m_TargetKey;
 
     //! Attaches or detaches a complete subtree.
     void Attach(UiContext* context, Widget* parent);
@@ -282,6 +304,9 @@ class Widget
     //! Invalidates observed widget references at destruction.
     std::shared_ptr<int> m_Lifetime = std::make_shared<int>(0);
 
+    //! Cooperatively cancels receiver-bound work after weak observation expires.
+    std::stop_source m_LifetimeStop;
+
     //! Stores local enabled state.
     bool m_Enabled = true;
 
@@ -320,7 +345,7 @@ class WidgetRef
     //! Observes a widget with an expiring lifetime token.
     explicit WidgetRef(Widget* widget);
 
-    //! Returns null after the observed widget has been destroyed.
+    //! Returns null after destruction; direct access remains restricted to the copied owner thread.
     Widget* Get() const;
 
   private:
@@ -331,5 +356,8 @@ class WidgetRef
 
     //! Detects destruction even if another widget reuses the same address.
     std::weak_ptr<int> m_Lifetime;
+
+    //! Allows rejection of cross-thread dereference without touching the observed widget.
+    std::thread::id m_OwnerThread;
 };
 } // namespace EStudioUI

@@ -64,6 +64,7 @@ Slider::Slider(Axis orientation) : Widget("slider"), m_Orientation(orientation)
 
 void Slider::SetRange(double minimum, double maximum)
 {
+    VerifyAccess();
     if (!std::isfinite(minimum) || !std::isfinite(maximum) || minimum > maximum)
         throw std::invalid_argument("Slider bounds must be finite and ordered.");
     m_Minimum = minimum;
@@ -74,16 +75,19 @@ void Slider::SetRange(double minimum, double maximum)
 
 double Slider::GetMinimum() const
 {
+    VerifyAccess();
     return m_Minimum;
 }
 
 double Slider::GetMaximum() const
 {
+    VerifyAccess();
     return m_Maximum;
 }
 
 void Slider::SetStep(double step)
 {
+    VerifyAccess();
     if (!std::isfinite(step) || step <= 0)
         throw std::invalid_argument("Slider step must be finite and positive.");
     m_Step = step;
@@ -91,11 +95,14 @@ void Slider::SetStep(double step)
 
 double Slider::GetStep() const
 {
+    VerifyAccess();
     return m_Step;
 }
 
 void Slider::SetValue(double value)
 {
+    VerifyAccess();
+    const auto ownerLease = RetainOwner();
     if (!std::isfinite(value))
         throw std::invalid_argument("Slider value must be finite.");
     value = std::clamp(value, m_Minimum, m_Maximum);
@@ -108,11 +115,13 @@ void Slider::SetValue(double value)
 
 double Slider::GetValue() const
 {
+    VerifyAccess();
     return m_Value;
 }
 
 void Slider::SetOrientation(Axis orientation)
 {
+    VerifyAccess();
     if (m_Orientation == orientation)
         return;
     m_Orientation = orientation;
@@ -133,21 +142,25 @@ void Slider::UpdateOrientationState()
 
 Axis Slider::GetOrientation() const
 {
+    VerifyAccess();
     return m_Orientation;
 }
 
 Signal<double>& Slider::ValueChanged()
 {
+    VerifyAccess();
     return m_ValueChanged;
 }
 
 Signal<>& Slider::SliderReleased()
 {
+    VerifyAccess();
     return m_SliderReleased;
 }
 
 bool Slider::IsFocusable() const
 {
+    VerifyAccess();
     return true;
 }
 

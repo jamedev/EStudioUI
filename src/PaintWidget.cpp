@@ -12,12 +12,14 @@ void PaintWidget::PaintContent(Painter&) const
 
 Rect PaintWidget::GetPaintBounds() const
 {
+    VerifyAccess();
     const auto content = GetContentBounds();
     return {0, 0, content.m_Width, content.m_Height};
 }
 
 void PaintWidget::InvalidatePainting()
 {
+    VerifyAccess();
     RequestRepaint();
 }
 

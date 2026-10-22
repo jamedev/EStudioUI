@@ -18,6 +18,17 @@ signal, and caches its paths and shaped text. `LabeledNumericInput` composes a
 label and a standard validated editor. A slider, number input, and dial share one
 value in the **Custom widgets** demo tab.
 
+## Callback lifetime and owner access
+
+Public custom-control methods must call `VerifyAccess()` before reading or
+changing widget state. Keep `const auto ownerLease = RetainOwner();` across an
+operation that invokes application callbacks, including signals or custom policy
+hooks. The lease keeps the containing window's context, fonts, and other services
+alive until the operation unwinds if a callback destroys its `Window` wrapper.
+It does not retain the widget itself. Continue using `WidgetRef` when a callback
+can remove the control, and check that observer before further access to members.
+Direct widget methods remain owner-thread operations; workers use UI handles.
+
 ## Derive a painted control
 
 For example, create `LevelMeter.h`:
@@ -65,6 +76,7 @@ LevelMeter::LevelMeter() : PaintWidget("level-meter")
 
 void LevelMeter::SetLevel(float value)
 {
+    VerifyAccess();
     if (!std::isfinite(value))
         throw std::invalid_argument("Meter level must be finite.");
     value = std::clamp(value, 0.0f, 1.0f);

@@ -64,6 +64,8 @@ NumericInput::NumericInput(double value) : Widget("numericinput")
 
 void NumericInput::SetRange(double minimum, double maximum)
 {
+    VerifyAccess();
+    const auto ownerLease = RetainOwner();
     if (!std::isfinite(minimum) || !std::isfinite(maximum) || minimum > maximum)
         throw std::invalid_argument("Numeric input bounds must be finite and ordered.");
     m_Minimum = minimum;
@@ -77,16 +79,19 @@ void NumericInput::SetRange(double minimum, double maximum)
 
 double NumericInput::GetMinimum() const
 {
+    VerifyAccess();
     return m_Minimum;
 }
 
 double NumericInput::GetMaximum() const
 {
+    VerifyAccess();
     return m_Maximum;
 }
 
 void NumericInput::SetStep(double step)
 {
+    VerifyAccess();
     if (!std::isfinite(step) || step <= 0)
         throw std::invalid_argument("Numeric input step must be finite and positive.");
     m_Step = step;
@@ -94,11 +99,14 @@ void NumericInput::SetStep(double step)
 
 double NumericInput::GetStep() const
 {
+    VerifyAccess();
     return m_Step;
 }
 
 void NumericInput::SetDecimals(int decimals)
 {
+    VerifyAccess();
+    const auto ownerLease = RetainOwner();
     if (decimals < 0 || decimals > 12)
         throw std::invalid_argument("Numeric input decimals must lie between zero and twelve.");
     if (m_Decimals == decimals)
@@ -110,11 +118,14 @@ void NumericInput::SetDecimals(int decimals)
 
 int NumericInput::GetDecimals() const
 {
+    VerifyAccess();
     return m_Decimals;
 }
 
 void NumericInput::SetValue(double value)
 {
+    VerifyAccess();
+    const auto ownerLease = RetainOwner();
     if (!std::isfinite(value))
         throw std::invalid_argument("Numeric input value must be finite.");
     value = std::clamp(value, m_Minimum, m_Maximum);
@@ -129,16 +140,19 @@ void NumericInput::SetValue(double value)
 
 double NumericInput::GetValue() const
 {
+    VerifyAccess();
     return m_Value;
 }
 
 TextBox& NumericInput::GetEditor()
 {
+    VerifyAccess();
     return *m_Editor;
 }
 
 const TextBox& NumericInput::GetEditor() const
 {
+    VerifyAccess();
     return *m_Editor;
 }
 
@@ -177,6 +191,8 @@ void NumericInput::UpdateValidationState(ValidationState state)
 
 bool NumericInput::Commit()
 {
+    VerifyAccess();
+    const auto ownerLease = RetainOwner();
     double value = m_Value;
     const auto text = m_Editor->GetText();
     const bool unchangedPresentation = text == FormatValue();
@@ -195,6 +211,7 @@ bool NumericInput::Commit()
 
 void NumericInput::StepBy(int steps)
 {
+    VerifyAccess();
     const double distance = m_Step * std::abs(static_cast<double>(steps));
     if (steps > 0)
         SetValue(!std::isfinite(distance) || m_Value >= m_Maximum - distance ? m_Maximum : m_Value + distance);
@@ -204,11 +221,13 @@ void NumericInput::StepBy(int steps)
 
 Signal<double>& NumericInput::ValueChanged()
 {
+    VerifyAccess();
     return m_ValueChanged;
 }
 
 Signal<double>& NumericInput::EditingFinished()
 {
+    VerifyAccess();
     return m_EditingFinished;
 }
 

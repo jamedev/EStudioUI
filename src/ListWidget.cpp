@@ -29,6 +29,8 @@ ListWidget::ListWidget() : ScrollWidget("listwidget")
 
 void ListWidget::SetItems(std::vector<std::string> items)
 {
+    VerifyStructuralMutation();
+    const auto ownerLease = RetainOwner();
     for (auto& text : items)
         text = TextBuffer::Sanitize(text);
     m_Items = std::move(items);
@@ -45,6 +47,7 @@ void ListWidget::SetItems(std::vector<std::string> items)
 
 int ListWidget::AddItem(std::string text)
 {
+    VerifyStructuralMutation();
     m_Items.push_back(TextBuffer::Sanitize(text));
     Invalidate();
     return GetItemCount() - 1;
@@ -52,6 +55,8 @@ int ListWidget::AddItem(std::string text)
 
 void ListWidget::RemoveItem(int index)
 {
+    VerifyStructuralMutation();
+    const auto ownerLease = RetainOwner();
     (void)GetItem(index);
     m_Items.erase(m_Items.begin() + index);
     const int next = m_Current == index ? -1 : m_Current > index ? m_Current - 1 : m_Current;
@@ -68,6 +73,7 @@ void ListWidget::RemoveItem(int index)
 
 const std::string& ListWidget::GetItem(int index) const
 {
+    VerifyAccess();
     if (index < 0 || index >= GetItemCount())
         throw std::out_of_range("Invalid list item index.");
     return m_Items[static_cast<std::size_t>(index)];
@@ -75,11 +81,14 @@ const std::string& ListWidget::GetItem(int index) const
 
 int ListWidget::GetItemCount() const
 {
+    VerifyAccess();
     return static_cast<int>(m_Items.size());
 }
 
 void ListWidget::SetCurrentIndex(int index)
 {
+    VerifyAccess();
+    const auto ownerLease = RetainOwner();
     if (index != -1)
         (void)GetItem(index);
     if (index >= 0)
@@ -93,21 +102,25 @@ void ListWidget::SetCurrentIndex(int index)
 
 int ListWidget::GetCurrentIndex() const
 {
+    VerifyAccess();
     return m_Current;
 }
 
 Signal<int>& ListWidget::CurrentChanged()
 {
+    VerifyAccess();
     return m_CurrentChanged;
 }
 
 Signal<int>& ListWidget::Activated()
 {
+    VerifyAccess();
     return m_Activated;
 }
 
 bool ListWidget::IsFocusable() const
 {
+    VerifyAccess();
     return true;
 }
 

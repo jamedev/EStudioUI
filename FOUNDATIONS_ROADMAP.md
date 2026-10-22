@@ -1,16 +1,42 @@
 # EStudioUI foundation audit and hardening roadmap
 
 Audit date: 2026-10-22. Audited baseline: 0.8.0, commit `dc14170`.
-Status: proposed engineering plan; none of the new APIs below is implemented by
-this document. This audit changes documentation only and does not re-run or
-extend the previous runtime verification.
+The original audit below describes the 0.8.0 baseline. The implementation status
+section records subsequent work; historical gap descriptions are not statements
+about the current source.
 
 The goal is a dependable C++ GUI foundation for the applications described in
 [WIDGET_ROADMAP.md](WIDGET_ROADMAP.md). Settle common execution, lifetime, state,
 input, layout, text, and resource contracts before many controls depend on
 different local solutions. Retain the working GPU renderer and existing tests.
 
-## Assessment of the current implementation
+## Implementation status: 0.9
+
+**Gate A is implemented.** F01-F04 now have public APIs, lifetime/phase/error
+contracts, concurrency tests, and actual multiwindow/framebuffer probes.
+[THREADING.md](THREADING.md) documents the shipped signatures and policies;
+[verification/FOUNDATIONS_0_9.md](verification/FOUNDATIONS_0_9.md) records the
+measured evidence and platform limits. The original illustrative `Task::ThenOnUi`
+proposal became receiver-bound `BackgroundTasks::Run` / `RunLatest`.
+
+| Topics | Current status |
+| --- | --- |
+| F01-F04 | Implemented: shared application loop, bounded dispatch, typed handles, receiver-bound signals, cooperative tasks, progress, stale-request suppression |
+| F13 | Gate A baseline implemented: owner checks, traversal phase guards, deferred mutation, receipt/task failures, queue counters; visual inspector remains planned |
+| F15 | Gate A concurrency/lifetime/framebuffer coverage implemented; native hardware and broader platform coverage remain open |
+| F05-F12, F14, F16 | Planned, with the existing baseline capabilities described below |
+
+Ease of use is a standing acceptance criterion, not a separate polish phase.
+[DEVELOPER_EXPERIENCE.md](DEVELOPER_EXPERIENCE.md) defines the review rules:
+concise common paths, safe lifetime defaults, clear errors, and explicit advanced
+control. No runtime dependency was added for Gate A.
+
+**Next: Gate B, beginning with F05/F07.** Define typed observable state and batched
+transactions alongside precise invalidation impacts. Prove coherent updates and
+unrelated-cache reuse before external models, layout strategies, input/semantic
+contracts, and package integration. Broad widget expansion remains gated.
+
+## Original assessment of the 0.8 implementation
 
 | Area | Existing foundation | Source-visible gap |
 | --- | --- | --- |
@@ -33,7 +59,7 @@ native accessibility, or Windows hardware throughput.
 
 ## Priority topics
 
-All entries start as **planned**. A contract is complete when it has a documented
+At the audit baseline all entries started as **planned**. A contract is complete when it has a documented
 public behavior, an implementation, and the relevant acceptance evidence.
 
 | ID | Topic | Required result | Gate |
@@ -294,7 +320,7 @@ stable IDs, with migration and malformed-state handling.
 
 ## Delivery gates and evidence
 
-These are proposed acceptance fixtures, not measured results from this audit.
+These are acceptance fixtures; the 0.9 status/evidence above records Gate A results.
 Record observed work and named hardware; avoid arbitrary FPS claims.
 
 | Gate | Work to close | Acceptance evidence | Widget work unlocked |
@@ -323,7 +349,7 @@ Additional fixture details:
   resize/minimize/restore, clipboard/drag/drop, multiple-window focus, and screen
   reader checks in a platform capability matrix. Mark untested platforms clearly.
 
-## Recommended immediate iteration
+## Original sequencing recommendation
 
 Start with **Gate A**: owner-thread contract/assertions; Application loop; bounded
 dispatcher and typed handles; then task continuations, receiver-bound delivery,

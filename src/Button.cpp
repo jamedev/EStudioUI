@@ -8,11 +8,13 @@ Button::Button(std::string text, std::string type) : Label(std::move(text), std:
 
 bool Button::IsFocusable() const
 {
+    VerifyAccess();
     return true;
 }
 
 Signal<>& Button::Clicked()
 {
+    VerifyAccess();
     return m_Clicked;
 }
 
