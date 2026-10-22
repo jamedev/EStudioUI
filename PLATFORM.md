@@ -191,7 +191,9 @@ RangeValue and Toggle patterns. Client-thread requests cross typed dispatcher
 handles; they never read widgets from a worker. Queries/synchronous value edits
 have a one-second bounded dispatch wait. Pending timed-out requests are cancelled;
 an already-running callback cannot be interrupted. Invoke enqueues canonical activation; Toggle and value/focus requests commit
-through the synchronous owner path. Closed queues/windows expire retained providers before native teardown.
+through the synchronous owner path. Closed queues/windows expire live provider access before native teardown. Native
+clients may retain copied/cached property values after disconnect; that data does
+not grant access to the UI.
 
 The bridge tracks at most 64 previously queried nodes for initial name/value/
 enabled/offscreen/range/toggle events and actual focus changes. It checks a cheap

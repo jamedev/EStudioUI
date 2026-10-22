@@ -8,6 +8,7 @@
 #include <GLFW/glfw3.h>
 
 #include <fstream>
+#include <cmath>
 #include <iterator>
 #include <stdexcept>
 
@@ -119,9 +120,12 @@ void VerifyNativeCallbacks(Window& owner, const std::filesystem::path& assets)
     auto motion = glfwSetCursorPosCallback(native, nullptr);
     glfwSetCursorPosCallback(native, motion);
     const auto point = Center(probe);
-    motion(native, point.m_X, point.m_Y);
+    const auto scale = window.Platform().GetWindowMetrics().m_InputScale;
+    motion(native, static_cast<double>(point.m_X) * scale.m_X, static_cast<double>(point.m_Y) * scale.m_Y);
     Check(probe.m_Pointer && probe.m_Pointer->m_Type == PointerEventType::Move &&
-              probe.m_Pointer->m_Device == PointerDevice::Mouse && probe.m_Pointer->m_Timestamp >= 0,
+              probe.m_Pointer->m_Device == PointerDevice::Mouse && probe.m_Pointer->m_Timestamp >= 0 &&
+              std::abs(probe.m_Pointer->m_Position.m_X - point.m_X) < 0.01f &&
+              std::abs(probe.m_Pointer->m_Position.m_Y - point.m_Y) < 0.01f,
           "production pointer callback delivers normalized metadata");
     probe.m_Next = [&]
     {

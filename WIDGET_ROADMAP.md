@@ -19,8 +19,10 @@ implemented. Keep the C++20, GPU drawing, permissive dependencies, explicit
 ownership, CSS, and low idle-work requirements.
 
 F09 input/actions/focus is delivered in 0.14, including shared command presentations
-and nested menus on existing controls. The next foundations are F11 platform/
-accessibility services and F10a essential text/input for controls. F10b document editing and
+and nested menus on existing controls. The initial 0.15 F11 platform/semantic
+increment is documented in [PLATFORM.md](PLATFORM.md); F11 remains in progress.
+Continue its native/composition/accessibility acceptance work and F10a essential
+text/input for controls. F10b document editing and
 W04/W05 remain a later dedicated track; basic forms and workspaces do not wait
 for a document engine. These are sequencing changes, not new shipped features.
 
@@ -190,6 +192,7 @@ visual variation.
 - [Qt rich text architecture](https://doc.qt.io/qt-6/richtext.html): document,
   cursor, and layout separation as a reference design.
 - [W3C interaction patterns](https://www.w3.org/WAI/ARIA/apg/patterns/): useful
-  keyboard/semantic patterns; native desktop accessibility still needs adapters.
+  keyboard/semantic patterns; the initial Windows accessibility adapter still needs
+  virtualized providers, broader patterns and real assistive-technology evidence.
 - [Current architecture](ARCHITECTURE.md), [CSS contract](CSS.md), and
   [0.8 verification](verification/WIDGET_STYLING_0_8.md).

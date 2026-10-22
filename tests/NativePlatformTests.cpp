@@ -206,11 +206,13 @@ void Accessibility(UiContext& ui, HWND window)
                 readyToClose = true;
                 while (!closed)
                     SwitchToThread();
-                BSTR stale = nullptr;
-                const auto expired = value->get_CurrentValue(&stale);
-                SysFreeString(stale);
+                BSTR denied = SysAllocString(L"Denied after closure");
+                if (!denied)
+                    throw std::bad_alloc();
+                const auto expired = value->SetValue(denied);
+                SysFreeString(denied);
                 if (SUCCEEDED(expired))
-                    throw std::runtime_error("Retained native provider survived bridge closure");
+                    throw std::runtime_error("Retained native provider accepted an edit after bridge closure");
             }
             catch (...)
             {
