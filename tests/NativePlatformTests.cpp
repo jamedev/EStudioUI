@@ -329,10 +329,21 @@ void TraceElement(IUIAutomationElement& element, const char* label)
     std::cout << std::endl;
 }
 
-void TraceSelection(IUIAutomation& automation, IUIAutomationSelectionPattern& selection, IUIAutomationElement& first,
-                    IUIAutomationElement& second, IUIAutomationSelectionItemPattern& firstPattern,
-                    IUIAutomationSelectionItemPattern& secondPattern, const std::atomic<int>& canonicalCurrent,
-                    const char* label)
+struct SelectionSnapshot
+{
+    bool m_First = false;
+    bool m_Second = false;
+    int m_Count = 0;
+    bool m_MatchesFirst = false;
+    bool m_MatchesSecond = false;
+    int m_Current = -1;
+};
+
+SelectionSnapshot TraceSelection(IUIAutomation& automation, IUIAutomationSelectionPattern& selection,
+                                 IUIAutomationElement& first, IUIAutomationElement& second,
+                                 IUIAutomationSelectionItemPattern& firstPattern,
+                                 IUIAutomationSelectionItemPattern& secondPattern,
+                                 const std::atomic<int>& canonicalCurrent, const char* label)
 {
     BOOL firstSelected = FALSE, secondSelected = FALSE;
     Require(firstPattern.get_CurrentIsSelected(&firstSelected), "Read first diagnostic selected state");
@@ -352,12 +363,71 @@ void TraceSelection(IUIAutomation& automation, IUIAutomationSelectionPattern& se
     std::cout << "Native selection " << label << ": first=" << firstSelected << " second=" << secondSelected
               << " count=" << count << " matchesFirst=" << matchesFirst << " matchesSecond=" << matchesSecond
               << " canonicalCurrent=" << canonicalCurrent.load() << std::endl;
+    return {firstSelected != FALSE, secondSelected != FALSE, count,
+            matchesFirst != FALSE,  matchesSecond != FALSE,  canonicalCurrent.load()};
+}
+
+class ScopedAutoFocus
+{
+  public:
+    explicit ScopedAutoFocus(IUIAutomation& automation)
+    {
+        Require(automation.QueryInterface(IID_PPV_ARGS(&m_Automation)), "Obtain native client focus policy");
+        Require(m_Automation->get_AutoSetFocus(&m_Previous), "Read native automatic focus policy");
+        Require(m_Automation->put_AutoSetFocus(FALSE), "Isolate native pattern actions from automatic focus");
+    }
+
+    ~ScopedAutoFocus()
+    {
+        m_Automation->put_AutoSetFocus(m_Previous);
+    }
+
+    ScopedAutoFocus(const ScopedAutoFocus&) = delete;
+    ScopedAutoFocus& operator=(const ScopedAutoFocus&) = delete;
+
+  private:
+    ComPtr<IUIAutomation2> m_Automation;
+    BOOL m_Previous = TRUE;
+};
+
+void NativeDefaultFocus(IUIAutomation& automation, IUIAutomationElement& root, const std::atomic<int>& canonicalCurrent)
+{
+    Trace("UI Automation default automatic focus");
+    ComPtr<IUIAutomation2> options;
+    Require(automation.QueryInterface(IID_PPV_ARGS(&options)), "Obtain native client automatic focus options");
+    BOOL autoFocus = FALSE;
+    Require(options->get_AutoSetFocus(&autoFocus), "Read default native client automatic focus");
+    Check(autoFocus, "Native client starts with its documented automatic focus behavior");
+    auto list = Find(automation, root, L"list");
+    ComPtr<IUIAutomationTreeWalker> walker;
+    Require(automation.get_ControlViewWalker(&walker), "Obtain default-focus tree walker");
+    ComPtr<IUIAutomationElement> first, second;
+    Require(walker->GetFirstChildElement(list.Get(), &first), "Read first default-focus row");
+    Require(walker->GetNextSiblingElement(first.Get(), &second), "Read second default-focus row");
+    ComPtr<IUIAutomationSelectionItemPattern> firstSelection, secondSelection;
+    Require(first->GetCurrentPatternAs(UIA_SelectionItemPatternId, IID_PPV_ARGS(&firstSelection)),
+            "Obtain first default-focus selection pattern");
+    Require(second->GetCurrentPatternAs(UIA_SelectionItemPatternId, IID_PPV_ARGS(&secondSelection)),
+            "Obtain second default-focus selection pattern");
+    ComPtr<IUIAutomationSelectionPattern> selection;
+    Require(list->GetCurrentPatternAs(UIA_SelectionPatternId, IID_PPV_ARGS(&selection)),
+            "Obtain default-focus selection container");
+    Require(firstSelection->Select(), "Select first row using default automatic focus");
+    Require(secondSelection->AddToSelection(), "Default client focuses the second row before its additive action");
+    const auto state = TraceSelection(automation, *selection.Get(), *first.Get(), *second.Get(), *firstSelection.Get(),
+                                      *secondSelection.Get(), canonicalCurrent, "with default automatic focus");
+    Check(!state.m_First && state.m_Second && state.m_Count == 1 && state.m_MatchesSecond && state.m_Current == 1,
+          "Default native automatic focus updates canonical current selection before the pattern action");
 }
 
 void NativeCollections(IUIAutomation& automation, IUIAutomationElement& root, EventSubscriptions& subscriptions,
                        const std::atomic<int>& canonicalCurrent)
 {
     Trace("UI Automation virtual list");
+    // Native automatic focus canonically selects a row before AddToSelection.
+    // Obtain fresh collection elements under the isolated client policy so the
+    // following assertions exercise each provider action's own preconditions.
+    const ScopedAutoFocus focusPolicy(automation);
     ComPtr<IUIAutomationTreeWalker> walker;
     Require(automation.get_ControlViewWalker(&walker), "Obtain native control tree walker");
     auto list = Find(automation, root, L"list");
@@ -394,16 +464,26 @@ void NativeCollections(IUIAutomation& automation, IUIAutomationElement& root, Ev
     TraceSelection(automation, *selection.Get(), *first.Get(), *second.Get(), *firstSelection.Get(),
                    *secondSelection.Get(), canonicalCurrent, "after Select(second)");
     Require(secondSelection->RemoveFromSelection(), "Clear virtual row selection");
-    TraceSelection(automation, *selection.Get(), *first.Get(), *second.Get(), *firstSelection.Get(),
-                   *secondSelection.Get(), canonicalCurrent, "after Remove(second)");
+    const auto removed =
+        TraceSelection(automation, *selection.Get(), *first.Get(), *second.Get(), *firstSelection.Get(),
+                       *secondSelection.Get(), canonicalCurrent, "after Remove(second)");
+    Check(!removed.m_First && !removed.m_Second && removed.m_Count == 0 && removed.m_Current == -1,
+          "Pattern-only removal clears the canonical single selection");
     Require(firstSelection->AddToSelection(), "Add a virtual row to an empty selection");
-    TraceSelection(automation, *selection.Get(), *first.Get(), *second.Get(), *firstSelection.Get(),
-                   *secondSelection.Get(), canonicalCurrent, "after Add(first)");
+    const auto firstAdded =
+        TraceSelection(automation, *selection.Get(), *first.Get(), *second.Get(), *firstSelection.Get(),
+                       *secondSelection.Get(), canonicalCurrent, "after Add(first)");
+    Check(firstAdded.m_First && !firstAdded.m_Second && firstAdded.m_Count == 1 && firstAdded.m_MatchesFirst &&
+              firstAdded.m_Current == 0,
+          "Pattern-only addition selects the first row without preselecting another target");
     const auto addition = secondSelection->AddToSelection();
     std::cout << "Native Add(second) HRESULT=" << addition << std::endl;
-    TraceSelection(automation, *selection.Get(), *first.Get(), *second.Get(), *firstSelection.Get(),
-                   *secondSelection.Get(), canonicalCurrent, "after Add(second)");
-    const bool additionRejected = FAILED(addition);
+    const auto secondAdded =
+        TraceSelection(automation, *selection.Get(), *first.Get(), *second.Get(), *firstSelection.Get(),
+                       *secondSelection.Get(), canonicalCurrent, "after Add(second)");
+    const bool additionRejected = addition == static_cast<HRESULT>(UIA_E_INVALIDOPERATION) && secondAdded.m_First &&
+                                  !secondAdded.m_Second && secondAdded.m_Count == 1 && secondAdded.m_MatchesFirst &&
+                                  secondAdded.m_Current == 0;
     ComPtr<IUIAutomationVirtualizedItemPattern> realization;
     Require(last->GetCurrentPatternAs(UIA_VirtualizedItemPatternId, IID_PPV_ARGS(&realization)),
             "Obtain offscreen virtual row realization pattern");
@@ -697,9 +777,9 @@ void Accessibility(UiContext& ui, HWND window)
             {
                 Require(initialized, "Initialize native automation client MTA");
                 ComPtr<IUIAutomation> automation;
-                Require(
-                    CoCreateInstance(__uuidof(CUIAutomation), nullptr, CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&automation)),
-                    "Create real Windows automation client");
+                Require(CoCreateInstance(__uuidof(CUIAutomation8), nullptr, CLSCTX_INPROC_SERVER,
+                                         IID_PPV_ARGS(&automation)),
+                        "Create real Windows automation client");
                 ComPtr<IUIAutomationElement> root;
                 Require(automation->ElementFromHandle(window, &root), "Obtain native HWND automation root");
                 Trace("UI Automation root connected");
@@ -770,8 +850,15 @@ void Accessibility(UiContext& ui, HWND window)
                         failures += std::string(label) + ": " + failure.what();
                     }
                 };
+                probe("default focus",
+                      [&] { NativeDefaultFocus(*automation.Get(), *root.Get(), canonicalListCurrent); });
                 probe("collections",
                       [&] { NativeCollections(*automation.Get(), *root.Get(), subscriptions, canonicalListCurrent); });
+                ComPtr<IUIAutomation2> options;
+                Require(automation.As(&options), "Read restored native client focus options");
+                BOOL automaticFocus = FALSE;
+                Require(options->get_AutoSetFocus(&automaticFocus), "Read restored native client automatic focus");
+                Check(automaticFocus, "Pattern-only collection scope restores default focus before text probes");
                 ComPtr<IUIAutomationTextRange> retainedRange;
                 probe("text",
                       [&] { NativeText(*valueElement.Get(), *value.Get(), subscriptions.Events(), retainedRange); });
