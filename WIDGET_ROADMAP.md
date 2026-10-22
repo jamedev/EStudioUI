@@ -2,17 +2,26 @@
 
 Recorded: 2026-10-22. Baseline: EStudioUI 0.8.0, commit `dc14170`.
 
-This is the agreed widget coverage roadmap for developing EStudioUI into a
-capable C++ desktop UI toolkit. Entries below describe planned work, not shipped
+This is the agreed widget coverage roadmap within EStudioUI's complete C++
+application framework. Entries below describe planned work, not shipped
 APIs. Complete the applicable gates in [FOUNDATIONS_ROADMAP.md](FOUNDATIONS_ROADMAP.md)
 before expanding the catalog. Update an entry only with implementation and
 verification evidence; a styled demonstration alone does not complete a library
 control.
 
-The long-term target is to replace the Qt GUI layer for our applications. This
-does not imply reproducing Qt's networking, database, multimedia, or every other
-module. Keep the C++20, GPU drawing, permissive dependencies, explicit ownership,
-CSS, and low idle-work requirements.
+The long-term target includes complete application workspaces and reusable
+framework services for applications with or without a UI. First build broad,
+usable widget coverage; then extract reusable modules using real consumers to
+establish their boundaries. F14 modularization/SDK packaging is deferred and
+does not block widgets. Specific networking, database, multimedia, or other
+systems require their own scoped roadmap; this scope change does not mark them
+implemented. Keep the C++20, GPU drawing, permissive dependencies, explicit
+ownership, CSS, and low idle-work requirements.
+
+The next foundations are F09 input/actions/focus, F11 platform/accessibility
+services, and F10a essential text/input for controls. F10b document editing and
+W04/W05 remain a later dedicated track; basic forms and workspaces do not wait
+for a document engine. These are sequencing changes, not new shipped features.
 
 ## Current coverage
 
@@ -37,8 +46,8 @@ controls. All catalog entries below are **planned** at this baseline.
 | W01 | CheckBox | Two-state and indeterminate state, label/icon, keyboard operation | Essential |
 | W02 | RadioButton and grouping | Exclusive selection and reusable grouping policy | Essential |
 | W03 | ComboBox | Read-only/editable modes, virtualized popup, keyboard search, completion hooks | Essential |
-| W04 | PlainTextEditor | Multiline text, wrapping, cross-line selection, scrolling, history, search/replace | Essential |
-| W05 | RichTextEditor / RichTextView | Editable/read-only presentations of one structured document model | Essential |
+| W04 | PlainTextEditor | Multiline text, wrapping, cross-line selection, scrolling, history, search/replace | Later document track; essential there |
+| W05 | RichTextEditor / RichTextView | Editable/read-only presentations of one structured document model | Later document track; essential there |
 | W06 | ImageView / image and icon display | Aspect fit/fill, alignment, scaling, DPI-aware resources | Essential |
 | W07 | ProgressBar / BusyIndicator | Determinate/indeterminate progress; hidden indicators stop requesting frames | Essential |
 | W08 | SearchBox / CompletionPopup | Search/clear actions, reusable suggestions, cancellable asynchronous results | High |
@@ -110,8 +119,11 @@ with common Action/Command objects. These are extensions to shipped controls.
 
 ## Text documents
 
-W04/W05 share text/font/input services, but a document editor needs a separate
-storage/layout/editing layer from the existing single-line `TextBuffer`.
+F10a first supplies font identity/fallback, shaped control text, selection/caret
+mapping, composition, and wrapping display text for ordinary widgets. W04/W05
+later reuse those services through F10b, with document storage/layout/editing
+separate from the existing single-line `TextBuffer`.
+Document-editor completion does not gate the first controls or workspaces.
 
 | Stage | Scope |
 | --- | --- |
@@ -144,17 +156,19 @@ canvas/sketcher layer rather than becoming mandatory core form controls.
 
 ## Delivery order and completion rules
 
-1. Complete foundation Gates A/B for common controls, as described in
-   [FOUNDATIONS_ROADMAP.md](FOUNDATIONS_ROADMAP.md). Establish text, platform,
-   accessibility, and resource interfaces early; Gate C progresses with the
-   text and application tracks.
+1. Complete the remaining common-control foundations F09, F11, and F10a and the
+   Gate B evidence in [FOUNDATIONS_ROADMAP.md](FOUNDATIONS_ROADMAP.md). Carry the
+   relevant F12 resource limits, F13 diagnostics, and F15 checks with each feature.
+   Deferred F14 packaging and F10b document editing are not prerequisites.
 2. First common-control batch: W01, W02, W03, W14, W16, W18, W07, W25.
    Build the shared popup/scroll/grouping mechanisms once.
-3. Develop the document foundation and W04/W05 as a substantial track with their
-   own text/input/layout acceptance gates.
-4. Deliver application commands, dialogs, and native services; then docking,
-   property editing, and stronger data views.
-5. Add optional engineering modules according to actual application needs.
+3. Expand common application coverage: commands/menus, dialogs and native-service
+   widgets, then main windows, docking, property editing, and stronger data views.
+   Develop F16 history/workspace services with their application consumers.
+4. After broad widget/workspace use establishes the boundaries, revisit F14 to
+   extract reusable framework modules and prove installed UI/headless consumers.
+5. Develop F10b and W04/W05 later with their own document/input/layout acceptance
+   gates. Add optional engineering modules according to actual application needs.
 
 Every delivered family requires consistent CSS parts/states, focus/keyboard and
 accessibility semantics, lifetime-safe callbacks, documented threading, and

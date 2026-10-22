@@ -11,6 +11,14 @@ This contract guides implementation and review. Feature status and verification
 evidence belong in the roadmaps; an API proposed there is not automatically
 available here.
 
+The target is an application framework whose shared services can eventually be
+used without a UI. Prioritize working controls and application workspaces before
+F14 module extraction and SDK packaging. Preserve clear responsibilities and
+injectable adapters now; keep generic data/algorithms independent of widget,
+GLFW, and GL types where practical. Choose final module/target boundaries using
+real consumers later. This deferral does not relax public API ergonomics,
+extension contracts, lifetime rules, or per-feature performance evidence.
+
 ## Keep the common path small
 
 - A basic application can create a window, add controls, connect callbacks, and

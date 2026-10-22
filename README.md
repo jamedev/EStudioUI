@@ -1,7 +1,8 @@
 # EStudioUI
 
-A C++20 GUI toolkit prototype with GLFW windows, analytic GPU shapes and text,
-typed signals, and CSS styling. Controls include buttons, single-line UTF-8 text boxes, tabs, lists, trees,
+A C++20 application framework prototype, currently centered on GLFW windows,
+analytic GPU shapes and text, typed signals, and CSS styling. Controls include
+buttons, single-line UTF-8 text boxes, tabs, lists, trees,
 editable tables, toolbars/tool buttons, popup menus, and embedded 3D surfaces. Dependencies are managed with a pinned vcpkg
 manifest; no Qt or commercial SDK is required.
 
@@ -11,6 +12,13 @@ the planned controls, document editor, and application workspace. Both distingui
 current capabilities from proposed work and define delivery prerequisites.
 The [developer experience principles](DEVELOPER_EXPERIENCE.md) make simple,
 safe application code an acceptance requirement for every foundation change.
+
+The current priority is F09 input/actions/focus, F11 platform/accessibility, and
+F10a essential widget text/input, followed by broad controls and application
+workspaces. F10b document editing is a later track. F14 module extraction and SDK
+packaging are deferred until that use informs reusable boundaries, including
+services for applications without a UI. Standalone modules are planned, not
+current package capabilities; see the roadmaps for acceptance criteria.
 
 ## Linear constraints and live resizing (0.13)
 

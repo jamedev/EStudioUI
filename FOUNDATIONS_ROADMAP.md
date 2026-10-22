@@ -5,10 +5,35 @@ The original audit below describes the 0.8.0 baseline. The implementation status
 section records subsequent work; historical gap descriptions are not statements
 about the current source.
 
-The goal is a dependable C++ GUI foundation for the applications described in
-[WIDGET_ROADMAP.md](WIDGET_ROADMAP.md). Settle common execution, lifetime, state,
-input, layout, text, and resource contracts before many controls depend on
-different local solutions. Retain the working GPU renderer and existing tests.
+The goal is a complete C++ application framework, with a GPU-drawn UI and shared
+application services that can eventually also serve applications without a UI.
+[WIDGET_ROADMAP.md](WIDGET_ROADMAP.md) describes the immediate control and workspace
+coverage. Settle common execution, lifetime, state, input, layout, text, and
+resource contracts before many controls depend on different local solutions.
+Retain the working GPU renderer and existing tests.
+
+## Agreed scope and sequencing: 2026-10-22
+
+Prioritize the foundations needed for a useful, broad widget catalog and complete
+application workspaces. Then use those real consumers to identify and extract
+reusable modules, including services for applications without windows or a GPU.
+F14 module extraction and SDK packaging are deferred and no longer block widget
+development. This changes the plan, not the delivered 0.13 API or build targets.
+
+The next sequence is F09 input/actions/focus, F11 platform/accessibility services,
+and F10a essential control text/input. Complete the relevant Gate B integration
+evidence, then expand common controls, dialogs, data views, and workspaces. F10b
+document editing is a later dedicated track; it does not block those widgets.
+F12 resource limits, F13 diagnostics, and F15 evidence accompany each feature
+that needs them rather than becoming an unrelated final cleanup phase.
+
+Preserve clear responsibilities and injectable boundaries now. Keep generic
+algorithms/data independent of widget, GLFW, and GL types where practical, but
+defer new package names, target splits, and compatibility commitments until the
+module extraction stage. Candidates include tasks/signals, state/models,
+command history, geometry, and persistence; these are not promised modules or
+current standalone SDKs. Public API usability and supported extension points
+remain acceptance criteria throughout.
 
 ## Implementation status: 0.13, constraints and live resizing
 
@@ -35,8 +60,9 @@ and its remaining platform limits.
 | F15 | Gate A concurrency/lifetime/framebuffer coverage implemented; native hardware and broader platform coverage remain open |
 | F06 | Core implemented: typed external snapshot models, stable IDs, batched edits/structural changes, shared selection, prevalidated sort/filter chains, delegates, worker publication, bounded content sizing, and expanded-branch row maps; integration evidence recorded with 0.11 |
 | F08 | Implemented in 0.12: width-first constrained measurement, baselines and composition sources, shared box/grid/form/flow strategies, bounded caches, percentage-cycle fallback, owned child/track diagnostics; verification recorded below |
-| F09, F11, F14 | Remaining Gate B work: input/focus/commands, semantic/platform interfaces, and install/export consumer integration |
-| F10, F12, F16 | Planned, with the existing baseline capabilities described below |
+| F09, F11, F10a | Remaining Gate B work: input/focus/actions, platform/accessibility contracts and representative native services, and essential text/input for ordinary controls |
+| F10b, F12, F16 | Planned: later document editing, feature-driven resource hardening, and reusable history/workspace services |
+| F14 | Deferred until broad widget/workspace use informs reusable module extraction and SDK packaging; not a Gate B prerequisite |
 
 Ease of use is a standing acceptance criterion, not a separate polish phase.
 [DEVELOPER_EXPERIENCE.md](DEVELOPER_EXPERIENCE.md) defines the review rules:
@@ -62,8 +88,8 @@ callbacks and a Win32 system-modal-loop timer present safe paced frames while
 resizing. [verification/CONSTRAINTS_0_13.md](verification/CONSTRAINTS_0_13.md)
 records CPU, framebuffer, sanitizer and platform evidence with explicit limits.
 This adds private header-only Kiwi under permissive licenses; Box/Grid/Form/Flow
-remain independent of the strategy. Continue F09 input/focus/commands, F11
-interfaces and F14 consumer packaging.
+remain independent of the strategy. Continue F09 input/focus/actions, F11
+platform/accessibility services, and F10a essential control text/input.
 Gate B remains open and broad widget expansion remains gated.
 
 ## Original assessment of the 0.8 implementation
@@ -103,11 +129,12 @@ public behavior, an implementation, and the relevant acceptance evidence.
 | F07 | Incremental invalidation | Separate style/measure/arrange/hit-test/paint changes; retain unaffected caches | B |
 | F08 | Layout measurement and diagnostics | Constraint-aware measure, height-for-width, baselines, layout strategy interface | B |
 | F09 | Input, commands, popup/modal scopes | Shared event envelope, actions/shortcuts, focus and popup stack | B |
-| F10 | Text/font/document service boundaries | Font identity/fallback/styled runs, composition client, paragraph/edit model | C |
-| F11 | Platform and accessibility services | Semantic nodes and native adapter/capability contracts; real platform probes | B/C |
-| F12 | Resource budgets and render lifecycle | Bounded font/image/GPU caches, safe retirement, diagnostics and recovery policy | C |
+| F10a | Essential text/font/input for controls | Font identity/fallback, short shaped runs, selection/caret mapping, composition client, wrapping display text | B |
+| F10b | Document text and editing | Multiline storage, paragraph layout/invalidation, structured editing and rich documents | C/document track |
+| F11 | Platform and accessibility services | Semantic nodes, injectable native adapters/capabilities, representative Windows integrations and real platform probes | B/C |
+| F12 | Resource budgets and render lifecycle | Feature-required font/image/GPU limits and safe retirement first; extended budgets, diagnostics and recovery policy follow | B/C |
 | F13 | Errors, phases, and developer diagnostics | Deterministic mutation/error rules, inspectable invalidation/queue/layout work | A/B |
-| F14 | Public API and package integration | Relocatable CMake package, independent consumer, version and extension contracts | B |
+| F14 | Reusable module extraction and SDK integration | Evidence-led module boundaries, headless consumers, relocatable packages and independent consumer tests | Deferred: after widget/workspace coverage |
 | F15 | Verification and performance gates | Concurrency, lifetime, platform, work-count, memory, and actual framebuffer checks | A/B/C |
 | F16 | Commands, undo, and persisted workspace state | Reusable history/change grouping, stable serialized identities, versioned restore | C/application track |
 
@@ -293,23 +320,56 @@ owned windows, and accessibility. Keep headless adapters deterministic and make
 unsupported features visible. GLFW remains useful for windows/GL; native text
 composition and accessibility need additional platform integration.
 
-## F10: text foundations before document controls
+F11 delivery requires working representative services on the initial Windows
+target as well as the contracts: composition connected to F10a, clipboard,
+file/folder dialogs, drag/drop, scaling/owned-window behavior, and a native
+accessibility bridge for existing control semantics. Record actual capabilities
+and native evidence per adapter. Test doubles alone do not finish F11. Extend
+semantic roles and adapter checks as each new widget family arrives; additional
+platforms and broader hardware coverage remain explicit F15 work.
+
+## F10a: essential text and input before common controls
 
 The current TextBuffer intentionally sanitizes line breaks/tabs to spaces and
 keeps full-string history snapshots. FontFace shapes one LTR run from one face.
-Do not grow a document editor by removing the newline restriction alone.
+The following work is planned, not a description of shipped text capabilities.
 
-Define font identity/resolution/fallback, styled runs, script/direction
-segmentation, logical-to-visual caret mapping, paragraph layout, and a
-TextInputClient/platform composition protocol. Composition needs preedit,
-commit/cancel, surrounding text/selection, and screen-space caret geometry.
-Changing one HarfBuzz direction flag does not implement bidirectional documents.
+F10a supplies the common services required by labels, buttons, menus, text and
+numeric fields, editable combos, and collection editors:
+
+- Stable font identity and resolution, CSS family/size/style selection, fallback,
+  DPI-aware metrics, and renderer glyph keys that include the actual font instance.
+- Shaped control text with script/direction segmentation, grapheme-safe selection,
+  hit testing, and logical-to-visual caret mapping. Define supported scripts and
+  directions explicitly and prove representative mixed-direction control text.
+- A shared TextInputClient/platform composition protocol: preedit, commit/cancel,
+  surrounding text/selection, screen-space caret geometry, and focus/popup teardown.
+- Consistent single-line editing, clipboard and validation behavior, plus reusable
+  wrapping/measurement for display labels and help text. Preserve the existing
+  TextBuffer contract rather than silently turning it into a document store.
+
+Acceptance includes fallback and mixed-script captions, selection/navigation in
+single-line editors, native IME candidate placement after DPI/scroll/transform
+changes, AltGr/shortcut interaction with F09, and cancellation on focus/owner loss.
+Verify real pixels and unaffected layout/paint caches. Multi-font cache identity
+and the necessary F12 budget/retirement policy accompany this slice; document
+features are not required to exercise it.
+
+## F10b: later multiline and structured document editing
+
+Build a separate document layer using F10a services. Do not grow a document editor
+by removing the newline restriction alone. Changing one HarfBuzz direction flag
+does not implement bidirectional documents.
 
 Define separate multiline/document storage, positions, edit commands, byte-bounded
-history and paragraph invalidation. Share layout between editing and viewing.
-Full paragraph implementation belongs to the document track; settle the service
-boundaries and prove a representative text/input slice first. Evolve CSS font
-selection and GPU glyph keys together so font-local glyph IDs do not collide.
+history, cross-line selection, search/replace, paragraph layout and incremental
+invalidation. Add document-level direction/line breaking and scroll/caret reveal.
+Share layout between editing and viewing, and reuse the F10a composition client.
+
+Then add structured styles, lists, links, inline content, tables, and formatting
+tools according to the document roadmap. PlainTextEditor and RichTextEditor/View
+(W04/W05), code editing, and publishing depend on this later track. Basic wrapping
+labels and ordinary form controls do not require its storage or editing engine.
 
 ## F12-F16: bounded resources and a consumable framework
 
@@ -338,10 +398,18 @@ Add a debug inspector for ownership/focus/capture, computed style and precedence
 layout constraints/overflow, invalidation causes, queue/task state, and cache
 work. Keep structured diagnostics usable without the visual inspector.
 
-Ship relocatable CMake install/export/package files, public-header checks, a
-separate installed-SDK consumer test, asset/notices rules, and a clear source/API
-compatibility policy. Consider separating CPU model/core from native/render
-targets so consumers/tests need only their actual capabilities.
+F14 is deferred until broad widget/workspace use supplies evidence for reusable
+module boundaries. Extract appropriate services from the framework, with headless
+consumers that need no widget/native/GL initialization or graphics dependencies.
+Keep UI owner-delivery and native/render adapters attached through explicit
+interfaces. Tasks/signals, state/models, command history, geometry, and persistence
+are candidates to evaluate, not a prescribed target graph.
+
+At that stage ship relocatable CMake install/export/package files, public-header
+checks, independent installed-SDK UI and headless consumer tests, asset/notices
+rules, and a clear source/API compatibility policy. Until then retain readable
+public APIs, extension contracts, and dependency direction on every milestone;
+deferring packaging does not defer those everyday design requirements.
 
 Generalize reusable command grouping/history and versioned workspace state at
 the application track. Reuse lessons from SketchDocument; do not couple all
@@ -357,9 +425,10 @@ Record observed work and named hardware; avoid arbitrary FPS claims.
 | Gate | Work to close | Acceptance evidence | Widget work unlocked |
 | --- | --- | --- | --- |
 | A: execution and lifetime | F01-F04, phase/error baseline from F13, relevant F15 | Two changing windows under one loop; worker posting during sleep/render/resize/close; dead/reused receivers and stale revisions rejected; bounded overload; exactly-once settlement; shutdown has no UI-worker wait cycle | Prerequisite for adopting background/UI APIs; no broad widget expansion yet |
-| B: shared widget contracts | F05-F09; semantic/platform interfaces in F11; F14; relevant F13/F15 | Model shared by multiple views; sort/filter preserves identity; transaction yields coherent state; isolated edits retain unrelated caches; constrained wrapping/baseline tests; nested popup/focus cases; installed consumer builds | First common-control batch, with role/style/input contracts reused |
-| C: text, resources, native readiness | F10/F12; concrete F11 adapters; remaining F15 | Mixed scripts/fallback and IME reference cases; bounded font/resource churn; real Windows clipboard/DPI/focus/accessibility scenarios; reference GPU measurements | Multiline/rich-text track and stronger application-readiness claims |
+| B: shared widget contracts | F05-F09; F10a; F11 contracts and representative native services; relevant F12/F13/F15 | Shared models/selection and coherent transactions; unrelated caches retained; constrained wrapping/baselines; nested popup/focus; fallback/composition/caret cases; native service/accessibility evidence for existing controls | First common-control batch, with role/style/input contracts reused; F14 is not required |
+| C: document text, resources, broader native readiness | F10b; remaining F12; extended F11/F15 coverage | Incremental paragraphs and document direction/selection; bounded font/resource churn; broader Windows clipboard/DPI/focus/accessibility scenarios; reference GPU measurements | Multiline/rich-text track and stronger application-readiness claims |
 | Application track | F16 and completed window/input/platform contracts | Workspace versioned restore; close/save cancellation; docking/document lifecycle tests | MainWindow/docking/document workspace maturity |
+| Later module/SDK extraction | Deferred F14 after broad widget/workspace use | Reusable boundaries justified by consumers; installed UI application and headless application build independently; headless consumer has no graphics/window dependency | Reusable framework modules for UI and non-UI applications |
 
 Additional fixture details:
 
@@ -380,7 +449,7 @@ Additional fixture details:
   resize/minimize/restore, clipboard/drag/drop, multiple-window focus, and screen
   reader checks in a platform capability matrix. Mark untested platforms clearly.
 
-## Original sequencing recommendation
+## Delivery sequence
 
 Start with **Gate A**: owner-thread contract/assertions; Application loop; bounded
 dispatcher and typed handles; then task continuations, receiver-bound delivery,
@@ -392,11 +461,14 @@ geometry in a worker, bind progress, replace an earlier request, close the targe
 and keep a second window interactive. This validates developer ergonomics and
 the actual failure paths before they spread into new widgets.
 
-Then complete Gate B, followed by the first widget batch. Develop Gate C with the
-text/application track. Set the text, accessibility, platform, and resource
-interfaces early, and implement their representative vertical slices before many
-controls depend on them. Full rich-document/publishing features remain on their
-own roadmap; an optional constraint solver and render thread follow measured need.
+Gate A, the F05/F07 first slice, F06 core, F08, and the optional constraint-layout
+increment are now delivered as recorded above. Next finish F09, F11's initial
+platform services and semantic pipeline, and F10a, with relevant F12/F13/F15 work.
+Review Gate B integration, then expand the widget catalog and application
+workspaces. Keep the document-editor track F10b later and develop F16 with the
+workspaces that need it. Schedule F14 module extraction/package integration once
+real widget/workspace consumers establish useful boundaries, including non-UI
+use. A dedicated render thread remains subject to measured need.
 
 ## Evidence map and external references
 
