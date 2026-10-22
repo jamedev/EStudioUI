@@ -17,6 +17,7 @@
 #include <atomic>
 #include <chrono>
 #include <cstdlib>
+#include <cstring>
 #include <iostream>
 #include <stdexcept>
 #include <thread>
@@ -174,7 +175,12 @@ void Accessibility(UiContext& ui, HWND window)
                 ComPtr<IUIAutomationValuePattern> value;
                 Require(valueElement->GetCurrentPatternAs(UIA_ValuePatternId, IID_PPV_ARGS(&value)),
                         "Obtain value pattern");
-                Require(value->SetValue(L"After Ω"), "Native Unicode value edit");
+                BSTR replacement = SysAllocString(L"After Ω");
+                if (!replacement)
+                    throw std::bad_alloc();
+                const auto editedValue = value->SetValue(replacement);
+                SysFreeString(replacement);
+                Require(editedValue, "Native Unicode value edit");
                 BSTR contents = nullptr;
                 Require(value->get_CurrentValue(&contents), "Read native edited value");
                 const bool edited = contents && std::wstring_view(contents) == L"After Ω";
@@ -228,6 +234,26 @@ void Accessibility(UiContext& ui, HWND window)
     Check(true, "Retained native value provider expires before HWND teardown");
 }
 
+void PublishNativeBytes(UINT format, const void* bytes, std::size_t count)
+{
+    const auto block = GlobalAlloc(GMEM_MOVEABLE, count);
+    if (!block)
+        throw std::bad_alloc();
+    auto* destination = GlobalLock(block);
+    if (!destination)
+    {
+        GlobalFree(block);
+        throw std::runtime_error("Lock native clipboard test block");
+    }
+    std::memcpy(destination, bytes, count);
+    GlobalUnlock(block);
+    if (!SetClipboardData(format, block))
+    {
+        GlobalFree(block);
+        throw std::runtime_error("Publish native clipboard test block");
+    }
+}
+
 void Clipboard(UiContext& ui)
 {
     auto& services = ui.Platform();
@@ -237,6 +263,8 @@ void Clipboard(UiContext& ui)
     data.m_Files = {std::filesystem::temp_directory_path() / L"EStudioUI Ω.txt"};
     data.m_Custom["application/x-estudioui-test"] = {0, 1, 0, 255};
     data.m_Custom["application/x-estudioui-empty"] = {};
+    Check(RegisterClipboardFormatW(L"estudioui.mime:APPLICATION/X-ESTUDIOUI-TEST") != 0,
+          "External native application can register equivalent format spelling first");
     Check(static_cast<bool>(services.WriteClipboard(data)), "Publish real Windows clipboard formats");
     const auto read = services.ReadClipboard();
     Check(read.m_Result && read.m_Data.m_Text == data.m_Text && read.m_Data.m_Html == data.m_Html &&
@@ -276,6 +304,17 @@ void Clipboard(UiContext& ui)
     CloseClipboard();
     Check(services.ReadClipboard().m_Result.m_Status == PlatformStatus::Failed,
           "Malformed external HTML is bounded and diagnosed");
+    Check(OpenClipboard(nullptr) != FALSE, "Open native clipboard for aggregate budget probe");
+    EmptyClipboard();
+    {
+        const std::wstring text(5 * 1024 * 1024, L'x');
+        const std::string html = "<!--StartFragment-->" + std::string(5 * 1024 * 1024, 'h') + "<!--EndFragment-->";
+        PublishNativeBytes(CF_UNICODETEXT, text.c_str(), (text.size() + 1) * sizeof(wchar_t));
+        PublishNativeBytes(RegisterClipboardFormatW(L"HTML Format"), html.c_str(), html.size() + 1);
+    }
+    CloseClipboard();
+    Check(services.ReadClipboard().m_Result.m_Status == PlatformStatus::Failed,
+          "Combined external formats obey the aggregate native payload budget");
     services.SetClipboardText("");
 }
 

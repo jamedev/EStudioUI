@@ -44,7 +44,10 @@ Windows native text uses UTF-16/CRLF. HTML is an owned fragment, not a trusted
 rendering instruction. Registered application formats use
 `EStudioUI.MIME:<mime>` with a bounded binary envelope and explicit byte length,
 including empty/binary-zero payloads. They are an EStudioUI interchange contract,
-not automatic support for arbitrary registered clipboard formats.
+not automatic support for arbitrary registered clipboard formats. MIME keys use
+canonical ASCII lowercase on reads/writes; case-insensitive duplicates and reserved
+text names are rejected before publication. Keys are a token type/subtype without
+parameters. Native reads also tolerate the registered prefix's original case.
 
 Validation happens before native mutation. The aggregate budget is 8 MiB, with
 at most 512 file paths and 32 custom formats. Windows file paths must be absolute;
@@ -81,7 +84,8 @@ Invalid combinations fail before opening anything. The compiled
 A session settles once as Accepted, Cancelled, Unsupported, Busy, OwnerClosed,
 or Failed. `Cancel()` requests native stop and immediately settles the logical
 result. Native cleanup continues asynchronously. Late observers run immediately
-on the owner; observer errors are contained and available through
+on the owner. Callback references last through that callback; copy the result or
+its paths to retain them. Observer errors are contained and available through
 `GetCallbackError()`. Sessions have no blocking Wait and create no nested framework
 event loop. Completion observers should observe widgets weakly or use typed UI
 handles. There are at most eight pending sessions per adapter and 256 observers
@@ -101,7 +105,9 @@ instead of joining an active native picker on the UI owner. The ordinary
 `Application` loop handles this. Advanced manual hosts must keep pumping native
 messages and `ui.PumpPlatformServices()` until `ui.HasPendingPlatformWork()` is
 false before destroying their native owner or context. They must not destroy a
-standalone UiContext with outstanding native work.
+standalone UiContext with outstanding native work. Custom native adapters must
+call Close while their derived cancellation state remains alive, and accurately
+report NativeWorkPending until all native-owner-dependent work has unwound.
 
 ## File drops, cursors, metrics and ownership
 
@@ -136,7 +142,10 @@ native parent is later destroyed.
 ## Semantic queries and custom controls
 
 ```cpp
+#include <EStudioUI/SemanticTree.h>
+
 editor.SetAccessibleName("Project title");
+
 auto& tree = window.Ui().Semantics();
 auto node = tree.GetNode(tree.GetId(editor));
 ```

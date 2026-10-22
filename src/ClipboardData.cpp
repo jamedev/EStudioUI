@@ -4,6 +4,7 @@
 
 #include <algorithm>
 #include <stdexcept>
+#include <set>
 
 namespace EStudioUI
 {
@@ -48,12 +49,26 @@ void ClipboardData::Validate() const
         consume(encoded.size());
         ValidatePlatformText({reinterpret_cast<const char*>(encoded.data()), encoded.size()});
     }
+    std::set<std::string> names;
     for (const auto& [format, bytes] : m_Custom)
     {
-        if (format.empty() || format.size() > 128 || format.find('/') == std::string::npos ||
-            !std::all_of(format.begin(), format.end(), [](unsigned char c) { return c > 32 && c < 127; }) ||
-            format == "text/plain" || format == "text/html")
-            throw std::invalid_argument("Custom clipboard formats require a distinct printable ASCII MIME name.");
+        const auto slash = format.find('/');
+        const auto token = [](unsigned char c)
+        {
+            return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') ||
+                   std::string_view("!#$%&'*+-.^_`|~").find(static_cast<char>(c)) != std::string_view::npos || c == '/';
+        };
+        if (format.size() > 128 || slash == std::string::npos || slash == 0 || slash + 1 == format.size() ||
+            format.find('/', slash + 1) != std::string::npos || !std::all_of(format.begin(), format.end(), token))
+            throw std::invalid_argument(
+                "Custom clipboard formats require an ASCII MIME type/subtype without parameters.");
+        auto canonical = format;
+        for (auto& c : canonical)
+            if (c >= 'A' && c <= 'Z')
+                c = static_cast<char>(c + ('a' - 'A'));
+        if (canonical == "text/plain" || canonical == "text/html" || !names.insert(canonical).second)
+            throw std::invalid_argument(
+                "Custom clipboard MIME names must be distinct ignoring ASCII case and cannot replace text formats.");
         consume(format.size());
         consume(bytes.size());
     }

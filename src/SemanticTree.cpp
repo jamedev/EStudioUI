@@ -248,7 +248,7 @@ SemanticStatus SemanticTree::Perform(SemanticId id, const SemanticCommand& comma
     {
         ValidatePlatformText(command.m_Text);
     }
-    catch (const std::invalid_argument&)
+    catch (const std::logic_error&)
     {
         return SemanticStatus::InvalidValue;
     }

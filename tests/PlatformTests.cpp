@@ -90,6 +90,12 @@ void VerifyData()
     invalid = data;
     invalid.m_Custom["not a MIME name"] = {};
     Throws([&] { invalid.Validate(); }, "invalid MIME names are rejected");
+    invalid = data;
+    invalid.m_Custom["APPLICATION/X-ESTUDIOUI-TEST"] = {};
+    Throws([&] { invalid.Validate(); }, "case-insensitive MIME collisions rejected before native publication");
+    invalid = {};
+    invalid.m_Custom["TEXT/PLAIN"] = {};
+    Throws([&] { invalid.Validate(); }, "reserved text MIME names are case insensitive");
     invalid = {};
     invalid.m_Custom["application/big"] = std::vector<std::uint8_t>(ClipboardData::s_MaxBytes + 1);
     Throws([&] { invalid.Validate(); }, "aggregate native clipboard data is bounded");
@@ -149,12 +155,14 @@ void VerifyMemory()
     ClipboardData data;
     data.m_Text = "first\r\nsecond\rthird";
     data.m_Html = "<p>first</p>";
-    data.m_Custom["application/x-example"] = {1, 0, 2};
+    data.m_Custom["APPLICATION/X-EXAMPLE"] = {1, 0, 2};
     Check(static_cast<bool>(services.WriteClipboard(data)), "memory clipboard publication succeeds");
     data.m_Html = "caller changed";
     auto read = services.ReadClipboard();
     Check(read.m_Data.m_Text == "first\nsecond\nthird" && read.m_Data.m_Html == "<p>first</p>",
           "clipboard snapshots own data and preserve canonical document newlines");
+    Check(read.m_Data.m_Custom.contains("application/x-example"),
+          "custom MIME names use canonical lowercase across adapters");
     read.m_Data.m_Custom.clear();
     Check(!services.ReadClipboard().m_Data.m_Custom.empty(), "caller snapshots cannot mutate the clipboard");
     services.QueueFileDialogResult({FileDialogStatus::Accepted, {"selected.txt"}});

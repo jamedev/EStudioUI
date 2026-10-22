@@ -129,8 +129,14 @@ std::string HtmlPayload(std::string_view fragment)
     return header + prefix + std::string(fragment) + suffix + '\0';
 }
 
-std::string HtmlFragment(std::string_view payload)
+std::string HtmlFragment(std::string_view payload, std::size_t budget)
 {
+    const auto copy = [budget](std::string_view fragment)
+    {
+        if (fragment.size() > budget)
+            throw std::length_error("Native clipboard formats exceed their aggregate payload budget.");
+        return std::string(fragment);
+    };
     const auto offset = [&](std::string_view field) -> std::optional<std::size_t>
     {
         const auto header = payload.substr(0, std::min<std::size_t>(payload.size(), 4096));
@@ -146,14 +152,14 @@ std::string HtmlFragment(std::string_view payload)
     };
     const auto from = offset("StartFragment:"), to = offset("EndFragment:");
     if (from && to && *from <= *to && *to <= payload.size())
-        return std::string(payload.substr(*from, *to - *from));
+        return copy(payload.substr(*from, *to - *from));
     constexpr std::string_view start = "<!--StartFragment-->", end = "<!--EndFragment-->";
     const auto begin = payload.find(start);
     const auto finish =
         begin == std::string_view::npos ? std::string_view::npos : payload.find(end, begin + start.size());
     if (finish == std::string_view::npos)
         throw std::invalid_argument("The native HTML clipboard format has invalid fragment offsets.");
-    return std::string(payload.substr(begin + start.size(), finish - begin - start.size()));
+    return copy(payload.substr(begin + start.size(), finish - begin - start.size()));
 }
 
 std::wstring WindowsLines(std::string_view text)
@@ -181,6 +187,13 @@ ClipboardResult ReadWindowsClipboard(HWND owner)
         return {std::move(error), {}};
     }
     ClipboardData result;
+    std::size_t remaining = ClipboardData::s_MaxBytes;
+    const auto consume = [&](std::size_t count)
+    {
+        if (count > remaining)
+            throw std::length_error("Native clipboard formats exceed their aggregate payload budget.");
+        remaining -= count;
+    };
     try
     {
         if (const auto handle = GetClipboardData(CF_UNICODETEXT))
@@ -209,13 +222,15 @@ ClipboardResult ReadWindowsClipboard(HWND owner)
                     throw std::length_error("Native clipboard text exceeds its canonical character budget.");
             }
             result.m_Text = FromWindowsText(canonical);
+            consume(result.m_Text->size());
         }
         if (const auto handle = GetClipboardData(HtmlFormat()))
         {
             const GlobalView view(handle);
             if (!view.m_Size)
                 throw std::invalid_argument("The native HTML clipboard format is empty.");
-            result.m_Html = HtmlFragment({reinterpret_cast<const char*>(view.m_Bytes), view.m_Size});
+            result.m_Html = HtmlFragment({reinterpret_cast<const char*>(view.m_Bytes), view.m_Size}, remaining);
+            consume(result.m_Html->size());
         }
         if (const auto handle = GetClipboardData(CF_HDROP))
         {
@@ -234,6 +249,9 @@ ClipboardResult ReadWindowsClipboard(HWND owner)
                 const auto* terminator = std::find(current, end, L'\0');
                 if (terminator == end || terminator - current > 32768 || result.m_Files.size() >= 512)
                     throw std::length_error("A native clipboard file list is unterminated or exceeds its budget.");
+                const auto encodedPath =
+                    FromWindowsText(std::wstring_view(current, static_cast<std::size_t>(terminator - current)));
+                consume(encodedPath.size());
                 result.m_Files.emplace_back(std::wstring(current, terminator));
                 current = terminator + 1;
             }
@@ -248,7 +266,13 @@ ClipboardResult ReadWindowsClipboard(HWND owner)
             if (count <= 0)
                 continue;
             const std::wstring_view nativeName(name, static_cast<std::size_t>(count));
-            if (!nativeName.starts_with(L"EStudioUI.MIME:"))
+            constexpr std::wstring_view prefix = L"estudioui.mime:";
+            const bool matches =
+                nativeName.size() >= prefix.size() &&
+                std::equal(
+                    prefix.begin(), prefix.end(), nativeName.begin(), [](wchar_t expected, wchar_t actual)
+                    { return expected == (actual >= L'A' && actual <= L'Z' ? actual + (L'a' - L'A') : actual); });
+            if (!matches)
                 continue;
             const auto encoded = FromWindowsText(nativeName);
             if (result.m_Custom.size() >= 32)
@@ -261,6 +285,8 @@ ClipboardResult ReadWindowsClipboard(HWND owner)
             std::memcpy(&length, view.m_Bytes + 8, sizeof(length));
             if (magic != s_CustomMagic || length > ClipboardData::s_MaxBytes || length > view.m_Size - 16)
                 throw std::invalid_argument("A native custom clipboard payload has an invalid envelope.");
+            consume(encoded.size() - s_CustomPrefix.size());
+            consume(static_cast<std::size_t>(length));
             result.m_Custom.emplace(
                 encoded.substr(s_CustomPrefix.size()),
                 std::vector<std::uint8_t>(view.m_Bytes + 16, view.m_Bytes + 16 + static_cast<std::size_t>(length)));

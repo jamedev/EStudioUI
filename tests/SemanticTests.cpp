@@ -115,6 +115,10 @@ void Semantics(FontFace& font)
     Check(tree.Perform(tree.GetId(text), {SemanticAction::SetText, "Renamed Ω"}) == SemanticStatus::Succeeded &&
               text.GetText() == "Renamed Ω",
           "Unicode value action");
+    Check(tree.Perform(tree.GetId(text), {SemanticAction::SetText, std::string(ClipboardData::s_MaxBytes + 1, 'x')}) ==
+                  SemanticStatus::InvalidValue &&
+              text.GetText() == "Renamed Ω",
+          "oversized semantic values reject atomically");
     text.SetReadOnly(true);
     Check(tree.GetNode(tree.GetId(text))->m_Info.m_ReadOnly &&
               tree.Perform(tree.GetId(text), {SemanticAction::SetText, "Denied"}) == SemanticStatus::Unsupported,

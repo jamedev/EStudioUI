@@ -21,6 +21,25 @@ PlatformResult Unsupported()
     return {PlatformStatus::Unsupported, "This operation is unavailable on the current platform adapter."};
 }
 
+void CanonicalFormats(ClipboardData& data)
+{
+    const bool needsCaseFold = std::any_of(
+        data.m_Custom.begin(), data.m_Custom.end(), [](const auto& entry)
+        { return std::any_of(entry.first.begin(), entry.first.end(), [](char c) { return c >= 'A' && c <= 'Z'; }); });
+    if (!needsCaseFold)
+        return;
+    decltype(data.m_Custom) canonical;
+    for (auto& [name, bytes] : data.m_Custom)
+    {
+        auto folded = name;
+        for (auto& c : folded)
+            if (c >= 'A' && c <= 'Z')
+                c = static_cast<char>(c + ('a' - 'A'));
+        canonical.emplace(std::move(folded), std::move(bytes));
+    }
+    data.m_Custom = std::move(canonical);
+}
+
 std::string CanonicalText(std::string_view text)
 {
     std::string result;
@@ -194,6 +213,7 @@ ClipboardResult PlatformServices::ReadClipboard()
         if (result.m_Result)
         {
             result.m_Data.Validate();
+            CanonicalFormats(result.m_Data);
             if (result.m_Data.m_Text)
                 result.m_Data.m_Text = CanonicalText(*result.m_Data.m_Text);
         }
@@ -215,6 +235,7 @@ PlatformResult PlatformServices::WriteClipboard(const ClipboardData& content)
         return data->m_LastResult = Closed();
     content.Validate();
     auto prepared = content;
+    CanonicalFormats(prepared);
     if (prepared.m_Text)
         prepared.m_Text = CanonicalText(*prepared.m_Text);
     try
