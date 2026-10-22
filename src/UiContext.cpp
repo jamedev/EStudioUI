@@ -134,12 +134,21 @@ AnimationId UiContext::BeginStyleTransition(std::optional<StyleSheet> initial, S
         WidgetRef m_Widget;
         Style m_Style;
         Rect m_Bounds;
+        std::vector<std::vector<Style>> m_Parts;
     };
 
     std::vector<Snapshot> snapshots;
     const auto capture = [&](auto&& self, Widget& widget) -> void
     {
-        snapshots.push_back({WidgetRef(&widget), widget.m_Style, widget.m_Bounds});
+        Snapshot snapshot{WidgetRef(&widget), widget.m_Style, widget.m_Bounds, {}};
+        for (const auto& part : widget.m_StyleParts)
+        {
+            auto palette = part.m_Palette;
+            if (part.m_Animated)
+                palette[Widget::PartIndex(part.m_StateMask, part.m_ActiveState)] = part.m_Presentation;
+            snapshot.m_Parts.push_back(std::move(palette));
+        }
+        snapshots.push_back(std::move(snapshot));
         for (const auto& child : widget.m_Children)
             self(self, *child);
     };
@@ -185,6 +194,76 @@ AnimationId UiContext::BeginStyleTransition(std::optional<StyleSheet> initial, S
             if (first != last || (fixedMainAxis && property == StyleProperty::FlexGrow))
                 animation.AddStyleProperty(*widget, property, std::move(first), std::move(last), true);
         }
+
+        // Each registered palette gets at most two tracks, independently of model row count.
+        // Discrete values use the scheduler's endpoint progress, unaffected by easing overshoot.
+        struct PartTween
+        {
+            std::size_t m_Variant;
+            StyleProperty m_Property;
+            StyleValue m_From, m_To;
+        };
+
+        for (std::size_t partIndex = 0; partIndex < snapshot.m_Parts.size(); ++partIndex)
+        {
+            auto& part = widget->m_StyleParts[partIndex];
+            std::vector<PartTween> continuous, discrete;
+            for (std::size_t variant = 0; variant < part.m_Palette.size(); ++variant)
+            {
+                const auto& firstStyle = snapshot.m_Parts[partIndex][variant];
+                const auto& lastStyle = part.m_Palette[variant];
+                for (int i = 0; i < static_cast<int>(StyleProperty::Count); ++i)
+                {
+                    const auto property = static_cast<StyleProperty>(i);
+                    auto first = GetStyleValue(firstStyle, property);
+                    auto last = GetStyleValue(lastStyle, property);
+                    if (first == last)
+                        continue;
+                    bool isDiscrete = std::holds_alternative<bool>(first) || std::holds_alternative<std::string>(first);
+                    if (const auto* length = std::get_if<Length>(&first))
+                        isDiscrete = length->m_Unit != std::get<Length>(last).m_Unit;
+                    (isDiscrete ? discrete : continuous)
+                        .push_back({variant, property, std::move(first), std::move(last)});
+                }
+            }
+            const auto addTrack = [&](std::vector<PartTween> values, bool isDiscrete)
+            {
+                if (values.empty())
+                    return;
+                auto tracks = std::make_shared<std::vector<PartTween>>(std::move(values));
+                animation.AddCustom(*widget,
+                                    "stylesheet-part:" + part.m_Name + (isDiscrete ? ":discrete" : ":continuous"),
+                                    [this, partIndex, tracks](Widget& target, double progress)
+                                    {
+                                        auto& current = target.m_StyleParts[partIndex];
+                                        bool geometryChanged = false;
+                                        for (const auto& track : *tracks)
+                                        {
+                                            auto value = InterpolateStyleValue(track.m_From, track.m_To, progress);
+                                            geometryChanged |= !IsPaintOnlyProperty(track.m_Property) &&
+                                                               GetStyleValue(current.m_Palette[track.m_Variant],
+                                                                             track.m_Property) != value;
+                                            current.m_Overrides[track.m_Variant][track.m_Property] = std::move(value);
+                                        }
+                                        ApplyPartOverrides(target);
+                                        if (geometryChanged)
+                                            Invalidate();
+                                        else
+                                            RequestRepaint();
+                                    });
+                auto& track = animation.m_Tracks.back();
+                track.m_Discrete = isDiscrete;
+                track.m_ReleaseOnFinish = true;
+                track.m_Release = [partIndex, tracks](Widget& target)
+                {
+                    for (const auto& item : *tracks)
+                        target.m_StyleParts[partIndex].m_Overrides[item.m_Variant].erase(item.m_Property);
+                    target.Invalidate();
+                };
+            };
+            addTrack(std::move(continuous), false);
+            addTrack(std::move(discrete), true);
+        }
     }
     if (options.m_Alternate && options.m_Iterations && options.m_Iterations % 2 == 0)
         animation.m_OnFinish = [this, initialSheet]
@@ -203,6 +282,29 @@ AnimationId UiContext::BeginStyleTransition(std::optional<StyleSheet> initial, S
 
 void UiContext::Restyle(Widget& widget, const Style* parent)
 {
+    widget.m_Node.m_Parent = widget.m_Parent ? &widget.m_Parent->m_Node : nullptr;
+    for (const auto& popup : m_OwnedPopups)
+        if (popup.m_Popup.Get() == &widget)
+            if (auto* owner = popup.m_Owner.Get(); owner && owner->GetContext() == this)
+            {
+                widget.m_Node.m_Parent = &owner->m_Node;
+                parent = &owner->m_Style;
+            }
+    widget.m_Node.m_State &= ~FocusWithin;
+    for (auto* focused = m_Focus.Get(); focused;)
+    {
+        if (focused == &widget)
+        {
+            widget.m_Node.m_State |= FocusWithin;
+            break;
+        }
+        auto* next = focused->m_Parent;
+        for (const auto& popup : m_OwnedPopups)
+            if (popup.m_Popup.Get() == focused)
+                if (auto* owner = popup.m_Owner.Get())
+                    next = owner;
+        focused = next;
+    }
     if (!widget.m_Visible)
     {
         widget.m_Style.m_Displayed = false;
@@ -237,8 +339,77 @@ void UiContext::Restyle(Widget& widget, const Style* parent)
         widget.m_Style.m_Row = *widget.m_Direction == Axis::Horizontal;
     if (widget.m_Gap)
         widget.m_Style.m_Gap = *widget.m_Gap;
+    constexpr unsigned inherited =
+        Disabled | Focus | FocusWithin | ReadOnly | Valid | Invalid | Intermediate | PlaceholderShown | Empty;
+    for (std::size_t partIndex = 0; partIndex < widget.m_StyleParts.size(); ++partIndex)
+    {
+        auto& part = widget.m_StyleParts[partIndex];
+        const unsigned common = widget.m_Node.m_State & (inherited | (part.m_Animated ? Hover | Pressed : 0u));
+        part.m_ActiveState = part.m_State | common;
+        for (std::size_t variant = 0; variant < part.m_States.size(); ++variant)
+        {
+            const unsigned state = part.m_States[variant] | common;
+            part.m_Assignments[variant] = m_StyleSheet.CompilePart(widget.m_Node, part.m_Name, state);
+            auto style = part.m_Defaults(widget.m_Style, state);
+            part.m_Assignments[variant](style);
+            if (!part.m_Animated)
+            {
+                style.m_Transitions.clear();
+                style.m_Animations.clear();
+            }
+            part.m_Palette[variant] = std::move(style);
+            ++m_Stats.m_StyleResolutions;
+        }
+        if (part.m_Animated)
+            part.m_Presentation = m_CssMotion->Resolve(
+                widget, static_cast<int>(partIndex + 3),
+                part.m_Palette[Widget::PartIndex(part.m_StateMask, part.m_ActiveState)], m_StyleSheet);
+    }
+    ApplyPartOverrides(widget);
     for (auto& child : widget.m_Children)
         Restyle(*child, &widget.m_Style);
+}
+
+void UiContext::RefreshStyleParts(Widget& widget)
+{
+    constexpr unsigned inherited =
+        Disabled | Focus | FocusWithin | ReadOnly | Valid | Invalid | Intermediate | PlaceholderShown | Empty;
+    for (std::size_t partIndex = 0; partIndex < widget.m_StyleParts.size(); ++partIndex)
+    {
+        auto& part = widget.m_StyleParts[partIndex];
+        const unsigned common = widget.m_Node.m_State & (inherited | (part.m_Animated ? Hover | Pressed : 0u));
+        for (std::size_t variant = 0; variant < part.m_States.size(); ++variant)
+        {
+            auto style = part.m_Defaults(widget.m_Style, part.m_States[variant] | common);
+            if (part.m_Assignments[variant])
+                part.m_Assignments[variant](style);
+            if (!part.m_Animated)
+            {
+                style.m_Transitions.clear();
+                style.m_Animations.clear();
+            }
+            part.m_Palette[variant] = std::move(style);
+        }
+        if (part.m_Animated)
+            part.m_Presentation =
+                m_CssMotion->Rebase(widget, static_cast<int>(partIndex + 3),
+                                    part.m_Palette[Widget::PartIndex(part.m_StateMask, part.m_ActiveState)]);
+    }
+    ApplyPartOverrides(widget);
+}
+
+void UiContext::ApplyPartOverrides(Widget& widget)
+{
+    for (auto& part : widget.m_StyleParts)
+    {
+        for (std::size_t variant = 0; variant < part.m_Overrides.size(); ++variant)
+            for (const auto& [property, value] : part.m_Overrides[variant])
+                SetStyleValue(part.m_Palette[variant], property, value);
+        if (part.m_Animated)
+            for (const auto& [property, value] :
+                 part.m_Overrides[Widget::PartIndex(part.m_StateMask, part.m_ActiveState)])
+                SetStyleValue(part.m_Presentation, property, value);
+    }
 }
 
 Point UiContext::Measure(Widget& widget, float parentWidth, float parentHeight)
@@ -629,6 +800,7 @@ void UiContext::SetFocus(Widget* widget)
     const WidgetRef next(widget);
     const auto previousFocus = m_Focus;
     m_Focus = next;
+    Invalidate();
     if (auto* previous = previousFocus.Get())
     {
         previous->SetState(Focus, false);
@@ -800,7 +972,16 @@ Widget& UiContext::AddOwnedPopup(std::unique_ptr<Widget> popup, Widget& owner)
     popup->m_Overlay = true;
     auto& result = m_Root.AddChild(std::move(popup));
     m_OwnedPopups.push_back({WidgetRef(&owner), WidgetRef(&result)});
+    result.m_Node.m_Parent = &owner.m_Node;
     return result;
+}
+
+void UiContext::ReleaseSelectorOwner(const Widget& owner)
+{
+    for (const auto& entry : m_OwnedPopups)
+        if (entry.m_Owner.Get() == &owner)
+            if (auto* popup = entry.m_Popup.Get())
+                popup->m_Node.m_Parent = popup->m_Parent ? &popup->m_Parent->m_Node : nullptr;
 }
 
 void UiContext::PruneOwnedPopups()

@@ -32,6 +32,39 @@ std::string Lower(std::string value)
     return value;
 }
 
+void ParsePseudo(std::string word, unsigned& required, unsigned& forbidden)
+{
+    word = Lower(std::move(word));
+    if (word == "enabled")
+    {
+        forbidden |= Disabled;
+        return;
+    }
+    static const std::map<std::string, unsigned, std::less<>> states{{"hover", Hover},
+                                                                     {"pressed", Pressed},
+                                                                     {"active", Pressed},
+                                                                     {"focus", Focus},
+                                                                     {"disabled", Disabled},
+                                                                     {"read-only", ReadOnly},
+                                                                     {"selected", Selected},
+                                                                     {"checked", Selected},
+                                                                     {"focus-within", FocusWithin},
+                                                                     {"valid", Valid},
+                                                                     {"invalid", Invalid},
+                                                                     {"intermediate", Intermediate},
+                                                                     {"placeholder-shown", PlaceholderShown},
+                                                                     {"horizontal", Horizontal},
+                                                                     {"vertical", Vertical},
+                                                                     {"alternate", Alternate},
+                                                                     {"expanded", Expanded},
+                                                                     {"sorted", Sorted},
+                                                                     {"empty", Empty}};
+    const auto found = states.find(word);
+    if (found == states.end())
+        throw std::runtime_error("Unsupported pseudo-class: " + word);
+    required |= found->second;
+}
+
 std::vector<std::string> Words(std::string_view text)
 {
     std::vector<std::string> result;
@@ -1228,10 +1261,43 @@ bool StyleSheet::Parse(std::string_view css, std::string& error)
                 if (selector.empty())
                     throw std::runtime_error("Empty CSS selector.");
                 Rule rule;
-                if (selector.ends_with("::before") || selector.ends_with("::after"))
+                const auto partStart = selector.find("::");
+                if (partStart != std::string::npos)
                 {
-                    rule.m_PseudoElement = selector.ends_with("::before") ? 1 : 2;
-                    selector.resize(selector.size() - (rule.m_PseudoElement == 1 ? 8 : 7));
+                    const auto suffix = selector.substr(partStart + 2);
+                    std::size_t cursor = 0;
+                    while (cursor < suffix.size() && IdentifierCharacter(suffix[cursor]))
+                        ++cursor;
+                    if (cursor == 0)
+                        throw std::runtime_error("Missing paint part name.");
+                    const auto name = Lower(suffix.substr(0, cursor));
+                    if (name == "before" || name == "after")
+                    {
+                        if (cursor != suffix.size())
+                            throw std::runtime_error("Decorative before/after selectors must be terminal.");
+                        rule.m_PseudoElement = name == "before" ? 1 : 2;
+                    }
+                    else
+                    {
+                        rule.m_Part = name;
+                        for (const auto& declaration : declarations)
+                            if (declaration.m_Name == "content")
+                                throw std::runtime_error("Content is supported only on before/after decorations.");
+                        while (cursor < suffix.size())
+                        {
+                            if (suffix[cursor++] != ':')
+                                throw std::runtime_error("Only state pseudo-classes may follow a paint part.");
+                            const auto start = cursor;
+                            while (cursor < suffix.size() && IdentifierCharacter(suffix[cursor]))
+                                ++cursor;
+                            if (start == cursor)
+                                throw std::runtime_error("Missing paint part state.");
+                            ParsePseudo(suffix.substr(start, cursor - start), rule.m_PartRequired,
+                                        rule.m_PartForbidden);
+                            rule.m_Specificity += 100;
+                        }
+                    }
+                    selector.resize(partStart);
                     ++rule.m_Specificity;
                 }
                 rule.m_Declarations = declarations;
@@ -1286,23 +1352,7 @@ bool StyleSheet::Parse(std::string_view css, std::string& error)
                         }
                         else if (prefix == ':')
                         {
-                            word = Lower(word);
-                            if (word == "hover")
-                                part.m_Required |= Hover;
-                            else if (word == "pressed" || word == "active")
-                                part.m_Required |= Pressed;
-                            else if (word == "focus")
-                                part.m_Required |= Focus;
-                            else if (word == "disabled")
-                                part.m_Required |= Disabled;
-                            else if (word == "enabled")
-                                part.m_Forbidden |= Disabled;
-                            else if (word == "read-only")
-                                part.m_Required |= ReadOnly;
-                            else if (word == "selected" || word == "checked")
-                                part.m_Required |= Selected;
-                            else
-                                throw std::runtime_error("Unsupported pseudo-class: " + word);
+                            ParsePseudo(word, part.m_Required, part.m_Forbidden);
                             rule.m_Specificity += 100;
                         }
                         else
@@ -1402,6 +1452,27 @@ Style StyleSheet::Compute(const StyleNode& node, const Style* inherited, int pse
             style.m_TextAlign = "center";
     }
 
+    if (pseudoElement == 0)
+    {
+        if (node.m_Type == "toolbar")
+            style.m_Gap = 6;
+        else if (node.m_Type == "contextmenu" || node.m_Type == "numericinput")
+            style.m_Gap = 3;
+        else if (node.m_Type == "tabbar")
+            style.m_Gap = 4;
+        for (const auto& name : node.m_Classes)
+        {
+            if (name == "toolbar-separator")
+                style.m_Width = {Length::Unit::Pixels, 1};
+            else if (name == "menu-separator")
+                style.m_Height = {Length::Unit::Pixels, 1};
+            else if (name == "split-arrow")
+                style.m_Width = {Length::Unit::Pixels, 26};
+            else if (name == "numeric-increment" || name == "numeric-decrement")
+                style.m_Width = {Length::Unit::Pixels, 28};
+        }
+    }
+
     struct Match
     {
         const Declaration* m_Declaration;
@@ -1410,7 +1481,7 @@ Style StyleSheet::Compute(const StyleNode& node, const Style* inherited, int pse
 
     std::vector<Match> matches;
     for (const auto& rule : m_Rules)
-        if (rule.m_PseudoElement == pseudoElement && Matches(rule, node))
+        if (rule.m_Part.empty() && rule.m_PseudoElement == pseudoElement && Matches(rule, node))
             for (const auto& declaration : rule.m_Declarations)
                 matches.push_back({&declaration, rule.m_Specificity});
     std::stable_sort(matches.begin(), matches.end(),
@@ -1425,6 +1496,52 @@ Style StyleSheet::Compute(const StyleNode& node, const Style* inherited, int pse
     style.m_MaxWidth = std::max(style.m_MaxWidth, style.m_MinWidth);
     style.m_MaxHeight = std::max(style.m_MaxHeight, style.m_MinHeight);
     return style;
+}
+
+Style StyleSheet::ComputePart(const StyleNode& owner, std::string_view name, unsigned state,
+                              const Style& fallback) const
+{
+    Style result = fallback;
+    CompilePart(owner, name, state)(result);
+    return result;
+}
+
+std::function<void(Style&)> StyleSheet::CompilePart(const StyleNode& owner, std::string_view name, unsigned state) const
+{
+    constexpr unsigned inherited =
+        Disabled | Focus | FocusWithin | ReadOnly | Valid | Invalid | Intermediate | PlaceholderShown | Empty;
+    state |= owner.m_State & inherited;
+
+    struct Match
+    {
+        const Declaration* m_Declaration;
+        unsigned m_Specificity;
+    };
+
+    std::vector<Match> matches;
+    for (const auto& rule : m_Rules)
+        if (!rule.m_Part.empty() && rule.m_Part == name && (state & rule.m_PartRequired) == rule.m_PartRequired &&
+            !(state & rule.m_PartForbidden) && Matches(rule, owner))
+            for (const auto& declaration : rule.m_Declarations)
+                matches.push_back({&declaration, rule.m_Specificity});
+    std::stable_sort(matches.begin(), matches.end(),
+                     [](const auto& a, const auto& b)
+                     {
+                         if (a.m_Declaration->m_Important != b.m_Declaration->m_Important)
+                             return !a.m_Declaration->m_Important;
+                         return a.m_Specificity < b.m_Specificity;
+                     });
+    std::vector<std::function<void(Style&)>> assignments;
+    assignments.reserve(matches.size());
+    for (const auto& match : matches)
+        assignments.push_back(match.m_Declaration->m_Apply);
+    return [assignments = std::move(assignments)](Style& style)
+    {
+        for (const auto& apply : assignments)
+            apply(style);
+        style.m_MaxWidth = std::max(style.m_MaxWidth, style.m_MinWidth);
+        style.m_MaxHeight = std::max(style.m_MaxHeight, style.m_MinHeight);
+    };
 }
 
 const std::vector<StyleSheet::Keyframe>* StyleSheet::FindKeyframes(std::string_view name) const

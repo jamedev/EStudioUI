@@ -1,8 +1,13 @@
-# Scalar inputs and tool choosers / EStudioUI 0.7
+# Scalar inputs and tool choosers / EStudioUI 0.8
 
 The Sketcher and Custom widgets pages use the same public controls available to
 applications. They add no dependencies. All input, validation, and signals stay
 on the GUI thread; painting uses the existing GPU renderer.
+
+Controls expose named CSS parts and validation/focus-within/orientation states.
+See [WIDGET_STYLING.md](WIDGET_STYLING.md) for complete selectors and geometry
+contracts. `TextBox::ValidationChanged()` reports classification changes;
+`NumericInput` mirrors its editor's classification on the composite owner.
 
 ## Numeric input
 

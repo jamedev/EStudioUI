@@ -57,6 +57,12 @@ class ListWidget final : public ScrollWidget
     //! Updates row hover or the active scrollbar drag.
     void OnPointerMove(const PointerEvent& event) override;
 
+    //! Releases the active row press and scrollbar capture.
+    void OnPointerUp(const PointerEvent& event) override;
+
+    //! Clears a cancelled row press.
+    void OnCaptureLost() override;
+
     //! Navigates, activates, and copies the current item.
     void OnKey(Key key, bool down, bool repeat, Modifiers modifiers) override;
 
@@ -67,6 +73,9 @@ class ListWidget final : public ScrollWidget
     //! Converts a window-coordinate point into a visible item index.
     int ItemAt(Point position) const;
 
+    //! Returns the cached style-state key for a visible row.
+    unsigned ItemState(int index, int hover) const;
+
     //! Stores UTF-8 captions independently of widget children.
     std::vector<std::string> m_Items;
 
@@ -74,7 +83,13 @@ class ListWidget final : public ScrollWidget
     int m_Current = -1;
 
     //! Stores the row under the pointer.
-    int m_Hover = -1;
+    mutable int m_Hover = -1;
+
+    //! Remembers layout coordinates so hover follows rows while scrolling.
+    Point m_HoverPosition;
+
+    //! Stores the captured pressed row.
+    int m_Pressed = -1;
 
     //! Reports committed selection changes.
     Signal<int> m_CurrentChanged;

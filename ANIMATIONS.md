@@ -1,4 +1,4 @@
-# Animation system / EStudioUI 0.5
+# Animation system / EStudioUI 0.8
 
 The animation system drives current computed CSS properties and arbitrary
 application properties on one GUI-thread timeline. It adds no runtime dependency.
@@ -52,6 +52,18 @@ Natural completion releases those overrides, so subsequent states and theme
 reloads use normal CSS again. New widgets use the current underlying sheet and
 normal inherited presentation; they are not retroactively added to the snapshot.
 Interaction-state changes still affect properties not currently owned by a track.
+
+Named widget parts participate in whole-stylesheet transitions, including shared
+collection state palettes. The scheduler uses at most two tracks per registered
+part, independently of model size. Different part length units switch at the
+endpoint because parts have no independent layout box for measuring auto sizes.
+`ClearStyleProperties()` also releases retained part overrides after stopping a
+transition with `KeepCurrent`.
+
+Automatic CSS transitions/keyframes run on fixed animated parts such as slider
+handles. Virtualized row/cell, scrollbar, and editor parts keep shared static
+variants; use the explicit whole-stylesheet API to animate their palettes as a
+group. See [WIDGET_STYLING.md](WIDGET_STYLING.md) for the complete contract.
 
 ## Synchronized typed properties
 

@@ -50,6 +50,9 @@ class TextBox : public Widget
     //! Returns the signal for programmatic or user text changes.
     Signal<const std::string&>& TextChanged();
 
+    //! Reports a changed validation classification after the corresponding CSS states are updated.
+    Signal<ValidationState>& ValidationChanged();
+
     //! Returns the signal emitted on Enter only while validation is Acceptable.
     Signal<const std::string&>& Submitted();
 
@@ -97,6 +100,15 @@ class TextBox : public Widget
     //! Invalidates presentation and emits committed text changes safely.
     void AfterEdit(bool changed);
 
+    //! Updates validation and placeholder CSS states and reports classification changes.
+    bool UpdatePresentationState(ValidationState state);
+
+    //! Resolves the styled caret width within the content box.
+    float CaretWidth() const;
+
+    //! Resolves alignment and scrolling for painting and pointer selection.
+    float TextOriginX() const;
+
     //! Keeps the caret inside the horizontal viewport.
     void EnsureCaretVisible() const;
 
@@ -108,6 +120,12 @@ class TextBox : public Widget
 
     //! Validates complete candidate edits before their text or undo history becomes observable.
     std::shared_ptr<const InputValidator> m_Validator;
+
+    //! Last published classification of the immutable validation policy.
+    ValidationState m_ValidationState = ValidationState::Acceptable;
+
+    //! Detects callback-driven changes before delivering a stale text notification.
+    std::uint64_t m_EditRevision = 0;
 
     //! Stores empty-editor hint text.
     std::string m_Placeholder;
@@ -133,11 +151,17 @@ class TextBox : public Widget
     //! Records the last shaped CSS font size.
     mutable float m_LayoutSize = -1;
 
+    //! Records the independently styled placeholder font size.
+    mutable float m_PlaceholderLayoutSize = -1;
+
     //! Stores horizontal content scrolling in logical pixels.
     mutable float m_ScrollX = 0;
 
     //! Delivers committed text changes.
     Signal<const std::string&> m_TextChanged;
+
+    //! Delivers classification changes independently of text changes.
+    Signal<ValidationState> m_ValidationChanged;
 
     //! Delivers Enter-key submissions.
     Signal<const std::string&> m_Submitted;

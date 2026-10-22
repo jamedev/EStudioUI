@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.24)
-project(EStudioUI VERSION 0.7.0 LANGUAGES C CXX)
+project(EStudioUI VERSION 0.8.0 LANGUAGES C CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -58,7 +58,8 @@ endif()
 if(ESTUDIOUI_BUILD_DEMO)
     add_executable(EStudioUIDemo demo/main.cpp demo/WidgetGallery.cpp demo/DemoScene.cpp demo/AnimationGallery.cpp demo/RichCssGallery.cpp demo/GpuWorkload.cpp
         demo/SketchGallery.cpp demo/CanvasPrimitiveProbe.cpp demo/CanvasProbe.cpp demo/CanvasCurvesProbe.cpp
-        demo/CustomWidgetGallery.cpp demo/PainterProbe.cpp demo/InputControlsProbe.cpp)
+        demo/CustomWidgetGallery.cpp demo/PainterProbe.cpp demo/InputControlsProbe.cpp
+        demo/WidgetStylesGallery.cpp demo/WidgetStylesProbe.cpp)
     target_link_libraries(EStudioUIDemo PRIVATE EStudioUI::EStudioUI EStudioUIGl glfw)
     if(MSVC)
         target_compile_options(EStudioUIDemo PRIVATE /utf-8)
@@ -127,7 +128,8 @@ if(ESTUDIOUI_BUILD_TESTS)
     endif()
     add_test(NAME RichCss COMMAND EStudioUIRichCssTests)
 
-    foreach(suite CanvasScene CanvasGeometry SketchDocument CanvasWidget InputControls SplitToolButton Painter)
+    foreach(suite CanvasScene CanvasGeometry SketchDocument CanvasWidget InputControls SplitToolButton Painter
+                  StyleParts StyledCollections StyledScroll CompositeStyle)
         add_executable(EStudioUI${suite}Tests tests/${suite}Tests.cpp)
         target_link_libraries(EStudioUI${suite}Tests PRIVATE EStudioUI::EStudioUI)
         target_compile_definitions(EStudioUI${suite}Tests PRIVATE

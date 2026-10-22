@@ -73,6 +73,22 @@ class Slider : public Widget
     bool OnScroll(Point delta, Modifiers modifiers) override;
 
   private:
+    //! Shared logical geometry used by painting and pointer-to-value mapping.
+    struct Geometry
+    {
+        //! Minimum-value center and maximum-value center.
+        Point m_From, m_To;
+
+        //! Styled groove, value fill, and handle rectangles.
+        Rect m_Groove, m_Fill, m_Handle;
+    };
+
+    //! Resolves CSS part dimensions within the available content rectangle.
+    Geometry GetGeometry() const;
+
+    //! Updates owner and part orientation selectors without reparsing CSS.
+    void UpdateOrientationState();
+
     //! Maps a pointer coordinate onto the range and quantizes to the configured step.
     void SetFromPointer(Point point);
 

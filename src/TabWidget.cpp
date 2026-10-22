@@ -5,11 +5,30 @@
 
 namespace EStudioUI
 {
+namespace
+{
+//! A tab command publishes selection without an independent toggle action.
+class TabButton final : public ToolButton
+{
+  public:
+    //! Creates a normal tool button with a stable styling hook.
+    explicit TabButton(std::string text) : ToolButton(std::move(text))
+    {
+        AddClass("tab-button");
+    }
+
+    //! Updates CSS selection without delivering an unrelated toggle signal.
+    void SetSelected(bool selected)
+    {
+        SetState(Selected, selected);
+    }
+};
+} // namespace
+
 TabWidget::TabWidget() : Widget("tabwidget")
 {
     m_Strip = &Add<Widget>("tabbar");
     m_Strip->SetLayoutDirection(Axis::Horizontal);
-    m_Strip->SetGap(4);
     m_Strip->SetHeight(SizeRule::Content());
     m_Pages = &Add<Widget>("tabpages");
     m_Pages->SetHeight(SizeRule::Fill());
@@ -19,15 +38,19 @@ Widget& TabWidget::AddTab(std::string title)
 {
     auto& page = m_Pages->Add<Widget>("tabpage");
     page.SetHeight(SizeRule::Fill());
-    auto& button = m_Strip->Add<ToolButton>(std::move(title));
+    auto& button = m_Strip->Add<TabButton>(std::move(title));
     const WidgetRef pageRef(&page);
+    const WidgetRef owner(this);
     button.Clicked().Connect(
-        [this, pageRef]
+        [owner, pageRef]
         {
-            for (std::size_t i = 0; i < m_Tabs.size(); ++i)
-                if (m_Tabs[i].m_Page.Get() == pageRef.Get())
+            auto* tabs = dynamic_cast<TabWidget*>(owner.Get());
+            if (!tabs)
+                return;
+            for (std::size_t i = 0; i < tabs->m_Tabs.size(); ++i)
+                if (tabs->m_Tabs[i].m_Page.Get() == pageRef.Get())
                 {
-                    SetCurrentIndex(static_cast<int>(i));
+                    tabs->SetCurrentIndex(static_cast<int>(i));
                     return;
                 }
         });
@@ -88,6 +111,7 @@ void TabWidget::SetCurrentIndex(int index)
             page->SetVisible(static_cast<int>(i) == index);
         if (auto* button = m_Tabs[i].m_Button.Get())
         {
+            static_cast<TabButton*>(button)->SetSelected(static_cast<int>(i) == index);
             if (static_cast<int>(i) == index)
                 button->AddClass("selected");
             else

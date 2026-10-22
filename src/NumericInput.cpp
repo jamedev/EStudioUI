@@ -17,17 +17,14 @@ NumericInput::NumericInput(double value) : Widget("numericinput")
     if (!std::isfinite(value))
         throw std::invalid_argument("Numeric input value must be finite.");
     SetLayoutDirection(Axis::Horizontal);
-    SetGap(3);
     m_Decrement = &Add<ToolButton>("-");
     m_Decrement->AddClass("numeric-decrement");
-    m_Decrement->SetWidth(SizeRule::Fixed(28));
     m_Editor = &Add<TextBox>();
     m_Editor->AddClass("numeric-editor");
     m_Editor->SetWidth(SizeRule::Fill(1, 24));
     m_Editor->SetMaxBytes(512);
     m_Increment = &Add<ToolButton>("+");
     m_Increment->AddClass("numeric-increment");
-    m_Increment->SetWidth(SizeRule::Fixed(28));
     const WidgetRef owner(this);
     m_Decrement->Clicked().Connect(
         [owner]
@@ -53,6 +50,13 @@ NumericInput::NumericInput(double value) : Widget("numericinput")
             if (auto* live = dynamic_cast<NumericInput*>(owner.Get()))
                 live->Commit();
         });
+    m_Editor->ValidationChanged().Connect(
+        [owner](ValidationState state)
+        {
+            if (auto* live = dynamic_cast<NumericInput*>(owner.Get()))
+                live->UpdateValidationState(state);
+        });
+    UpdateValidationState(m_Editor->GetValidationState());
     RefreshValidator();
     m_Value = std::clamp(value, m_Minimum, m_Maximum);
     RefreshText();
@@ -64,8 +68,11 @@ void NumericInput::SetRange(double minimum, double maximum)
         throw std::invalid_argument("Numeric input bounds must be finite and ordered.");
     m_Minimum = minimum;
     m_Maximum = maximum;
+    const auto revision = ++m_ValueRevision;
+    const WidgetRef lifetime(this);
     RefreshValidator();
-    SetValue(m_Value);
+    if (lifetime.Get() && revision == m_ValueRevision)
+        SetValue(m_Value);
 }
 
 double NumericInput::GetMinimum() const
@@ -159,6 +166,13 @@ void NumericInput::RefreshText()
 void NumericInput::RefreshValidator()
 {
     m_Editor->SetValidator(std::make_shared<DoubleValidator>(m_Minimum, m_Maximum));
+}
+
+void NumericInput::UpdateValidationState(ValidationState state)
+{
+    SetState(Valid, state == ValidationState::Acceptable);
+    SetState(Invalid, state == ValidationState::Invalid);
+    SetState(Intermediate, state == ValidationState::Intermediate);
 }
 
 bool NumericInput::Commit()

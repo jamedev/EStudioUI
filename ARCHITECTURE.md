@@ -286,3 +286,34 @@ state stack restores transforms and clips even during exception unwinding.
 Custom widgets use normal ownership, styles, focus, invalidation, retained damage,
 and input dispatch; there is no separate GL context or renderer per control.
 See [CUSTOM_WIDGETS.md](CUSTOM_WIDGETS.md) and [INPUT_CONTROLS.md](INPUT_CONTROLS.md).
+
+## Named widget style parts (0.8)
+
+Controls register a bounded set of named paint parts with a fallback-style factory
+and supported state bits. The style engine compiles matching assignments during
+restyle and caches the variants. Paint reads typed `Style` values; it does not
+parse CSS or match selectors. Cached assignments can refresh owner-derived
+fallback colors during paint-only animation without resolving selectors again.
+Parts are not children, layout nodes, or focus targets.
+
+Fixed animated parts use stable additional layers in `CssMotion`, sharing the
+owner's lifetime, visibility, and clock. Collection rows/cells and scrollbar
+parts use shared static variants; model size cannot create per-item timelines.
+Collections continue to submit viewport entries only. Inner paint identities
+include stable item/part coordinates so shadows and selection changes do not
+renumber unrelated retained records. Text shaping is cached by text and font
+size under bounded entry and byte limits.
+
+Owner and part states are distinct: `listwidget:hover::item` addresses every item
+while `listwidget::item:hover` addresses the hovered item. Common owner states
+such as disabled, focus, validation, and read-only participate in part matching.
+Fixed control dimensions used by pointer mapping come from the same styles as
+their drawing. Collection row height and table column allocation retain their
+existing geometry contracts; decorative part transforms do not change those
+allocations.
+
+Composite controls expose real child selectors and semantic state. Built-in
+cosmetic sizes and gaps are pre-cascade defaults, while explicit application
+contracts still win. Owned popup selector ancestry follows the logical owner,
+independently of root overlay layout, clipping, focus routing, and lifetime
+pruning. See [WIDGET_STYLING.md](WIDGET_STYLING.md).

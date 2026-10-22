@@ -7,6 +7,25 @@ manifest; no Qt or commercial SDK is required.
 
 ![EStudioUI widget gallery](verification/widgets-dark.png)
 
+## Rich styling across the toolkit (0.8)
+
+The **Widget styles** tab applies three CSS presets to working text/numeric
+inputs, sliders, tabs, toolbars, split buttons, menus, lists, trees, tables,
+canvas, custom painting, and the embedded 3D surface. Edit
+[assets/rich-widgets.css](assets/rich-widgets.css) and press F5.
+
+Named CSS parts style slider tracks/handles, editor selection/caret/placeholder,
+collection items/headers/tree branches, and scrollbars. Validation, focus-within,
+orientation, selection, expanded, alternate, and sorted states are available.
+Fixed slider parts can animate; virtualized rows use shared cached styles without
+per-row widgets or timelines. Existing outer-widget gradients, shadows, transforms,
+decorations, transitions, and keyframes remain available throughout the toolkit.
+See [WIDGET_STYLING.md](WIDGET_STYLING.md) for examples and the exact contracts.
+
+![Rich input styling rendered by EStudioUI](verification/widget-styles-inputs-aurora.png)
+
+![The Paper preset on virtualized collections](verification/widget-styles-collections-paper.png)
+
 ## Canvas, sketcher, and custom controls (0.7)
 
 The **Sketcher** tab is a reusable geometric CAD editor with lines, rectangles,

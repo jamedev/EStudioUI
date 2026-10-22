@@ -156,6 +156,18 @@ class UiContext
     WidgetRef Observe(Widget* widget) const;
 
   private:
+    friend class Widget;
+    friend class CssMotion;
+
+    //! Refreshes cached part defaults after paint-only owner changes without matching selectors.
+    void RefreshStyleParts(Widget& widget);
+
+    //! Applies bounded shared-palette presentation overrides above CSS part motion.
+    void ApplyPartOverrides(Widget& widget);
+
+    //! Clears logical selector links before an owner is destroyed.
+    void ReleaseSelectorOwner(const Widget& owner);
+
     //! Removes popups whose composite-widget owners have been destroyed.
     void PruneOwnedPopups();
 

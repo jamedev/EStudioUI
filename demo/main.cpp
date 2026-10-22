@@ -5,6 +5,7 @@
 #include "CanvasCurvesProbe.h"
 #include "PainterProbe.h"
 #include "InputControlsProbe.h"
+#include "WidgetStylesProbe.h"
 
 #include <EStudioUI/Button.h>
 #include <EStudioUI/TextBox.h>
@@ -231,7 +232,7 @@ class Demo
             });
         if (!LoadCss(m_CurrentCss))
             throw std::runtime_error("Initial CSS could not be loaded.");
-        m_Tabs->SetCurrentIndex(6);
+        m_Tabs->SetCurrentIndex(8);
     }
 
     ~Demo()
@@ -251,14 +252,16 @@ class Demo
         std::ifstream theme(path, std::ios::binary);
         std::ifstream animation(m_Assets / "animation-start.css", std::ios::binary);
         std::ifstream rich(m_Assets / "rich-buttons.css", std::ios::binary);
+        std::ifstream widgets(m_Assets / "rich-widgets.css", std::ios::binary);
         bool loaded = false;
-        if (theme && animation && rich)
+        if (theme && animation && rich && widgets)
             loaded = m_Window.Ui().SetStyleSheet(std::string(std::istreambuf_iterator<char>(theme), {}) + "\n" +
                                                      std::string(std::istreambuf_iterator<char>(animation), {}) + "\n" +
-                                                     std::string(std::istreambuf_iterator<char>(rich), {}),
+                                                     std::string(std::istreambuf_iterator<char>(rich), {}) + "\n" +
+                                                     std::string(std::istreambuf_iterator<char>(widgets), {}),
                                                  error);
         else
-            error = "Cannot read theme, animation-start.css, or rich-buttons.css.";
+            error = "Cannot read theme, animation-start.css, rich-buttons.css, or rich-widgets.css.";
         if (!loaded)
         {
             m_Message->AddClass("error");
@@ -367,7 +370,8 @@ class Demo
         VerifyCanvasCurves(m_Assets, output, m_Window.IsHeadless());
         VerifyPainter(m_Assets, output, m_Window.IsHeadless());
         VerifyInputControls(m_Assets, output, m_Window.IsHeadless());
-        m_Window.RenderFrame();
+        VerifyWidgetStyles(m_Assets, output, m_Window.IsHeadless());
+        m_Window.RenderFrame(ui.GetTime());
         std::ofstream report(output / "gpu-report.txt");
         report << "EStudioUI GPU integration: PASS\nDriver: " << gpu.GetDriverDescription()
                << "\nInitial demo: " << stats.m_DrawCalls << " draw call, " << stats.m_Shapes << " shapes, "

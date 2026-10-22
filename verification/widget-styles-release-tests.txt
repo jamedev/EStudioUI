@@ -1,0 +1,37 @@
+Test project /dev/shm/estudioui-v08-release
+      Start 14: StyledScroll
+      Start 16: GpuIntegration
+ 1/16 Test #14: StyledScroll .....................   Passed    0.17 sec
+      Start  7: SketchDocument
+ 2/16 Test  #7: SketchDocument ...................   Passed    0.91 sec
+      Start  5: CanvasScene
+ 3/16 Test  #5: CanvasScene ......................   Passed    0.19 sec
+      Start  6: CanvasGeometry
+ 4/16 Test  #6: CanvasGeometry ...................   Passed    0.11 sec
+      Start 12: StyleParts
+ 5/16 Test #12: StyleParts .......................   Passed    0.08 sec
+      Start  4: RichCss
+ 6/16 Test  #4: RichCss ..........................   Passed    0.06 sec
+      Start 13: StyledCollections
+ 7/16 Test #13: StyledCollections ................   Passed    0.02 sec
+      Start  2: WidgetsAndLayout
+ 8/16 Test  #2: WidgetsAndLayout .................   Passed    0.02 sec
+      Start  1: Core
+ 9/16 Test  #1: Core .............................   Passed    0.01 sec
+      Start 10: SplitToolButton
+10/16 Test #10: SplitToolButton ..................   Passed    0.01 sec
+      Start  9: InputControls
+11/16 Test  #9: InputControls ....................   Passed    0.01 sec
+      Start  3: Animation
+12/16 Test  #3: Animation ........................   Passed    0.01 sec
+      Start 15: CompositeStyle
+13/16 Test #15: CompositeStyle ...................   Passed    0.01 sec
+      Start  8: CanvasWidget
+14/16 Test  #8: CanvasWidget .....................   Passed    0.01 sec
+      Start 11: Painter
+15/16 Test #11: Painter ..........................   Passed    0.01 sec
+16/16 Test #16: GpuIntegration ...................   Passed    3.59 sec
+
+100% tests passed out of 16
+
+Total Test time (real) =   3.60 sec

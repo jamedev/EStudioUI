@@ -10,12 +10,11 @@ SplitToolButton::SplitToolButton(std::string text)
 {
     SetLayoutDirection(Axis::Horizontal);
     SetWidth(SizeRule::Content());
-    SetGap(0);
+    m_PendingMenu->AddClass("split-menu");
     m_Primary = &Add<ToolButton>(std::move(text));
     m_Primary->SetWidth(SizeRule::Content());
     m_Primary->AddClass("split-primary");
     m_Arrow = &Add<ToolButton>("v");
-    m_Arrow->SetWidth(SizeRule::Fixed(26));
     m_Arrow->AddClass("split-arrow");
     const WidgetRef owner(this);
     m_Primary->Clicked().Connect(

@@ -75,6 +75,12 @@ class TreeWidget final : public ScrollWidget
     //! Updates row hover and scrollbar dragging.
     void OnPointerMove(const PointerEvent& event) override;
 
+    //! Releases a pressed row or expansion branch.
+    void OnPointerUp(const PointerEvent& event) override;
+
+    //! Clears cancelled row and branch presses.
+    void OnCaptureLost() override;
+
     //! Implements arrows, page navigation, Home/End, and activation.
     void OnKey(Key key, bool down, bool repeat, Modifiers modifiers) override;
 
@@ -111,6 +117,12 @@ class TreeWidget final : public ScrollWidget
     //! Converts a pointer position to a flattened row index.
     int RowAt(Point position) const;
 
+    //! Returns the cached style-state key for a visible row.
+    unsigned ItemState(int index, int hover) const;
+
+    //! Returns a branch allocation using state-independent hover/press metrics.
+    Rect BranchBounds(const Row& row, Rect bounds, unsigned state) const;
+
     //! Stores nodes independently of rendering widgets.
     std::unordered_map<NodeId, Node> m_Nodes;
 
@@ -124,7 +136,19 @@ class TreeWidget final : public ScrollWidget
     NodeId m_Current = 0;
 
     //! Stores the pointer's flattened row index.
-    int m_Hover = -1;
+    mutable int m_Hover = -1;
+
+    //! Remembers layout coordinates so hover follows rows while scrolling.
+    Point m_HoverPosition;
+
+    //! Records whether the last pointer position is over an expansion branch.
+    mutable bool m_HoverBranch = false;
+
+    //! Stores the stable node ID whose row is captured.
+    NodeId m_Pressed = 0;
+
+    //! Records whether capture began over an expansion branch.
+    bool m_PressedBranch = false;
 
     //! Caches the expanded traversal.
     mutable std::vector<Row> m_Rows;

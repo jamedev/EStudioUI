@@ -8,12 +8,12 @@ namespace EStudioUI
 ContextMenu::ContextMenu() : Widget("contextmenu")
 {
     SetVisible(false);
-    SetGap(3);
 }
 
 ToolButton& ContextMenu::AddAction(std::string text, bool enabled)
 {
     auto& action = Add<ToolButton>(std::move(text));
+    action.AddClass("menu-action");
     action.SetEnabled(enabled);
     const WidgetRef menu(this);
     action.Clicked().Connect(
@@ -28,7 +28,7 @@ ToolButton& ContextMenu::AddAction(std::string text, bool enabled)
 void ContextMenu::AddSeparator()
 {
     auto& separator = Add<Widget>("separator");
-    separator.SetHeight(SizeRule::Fixed(1));
+    separator.AddClass("menu-separator");
 }
 
 void ContextMenu::Open(Point position)

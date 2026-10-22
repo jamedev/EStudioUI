@@ -132,6 +132,12 @@ class TableWidget final : public ScrollWidget
     //! Returns the column under a window-coordinate point, or -1.
     int ColumnAt(Point point) const;
 
+    //! Returns the body row under a layout-coordinate point, or -1.
+    int RowAt(Point point) const;
+
+    //! Returns the fixed header under a layout-coordinate point, or -1.
+    int HeaderAt(Point point) const;
+
     //! Stores headers and initial sizing contracts.
     std::vector<TableColumn> m_Columns;
 
@@ -146,6 +152,36 @@ class TableWidget final : public ScrollWidget
 
     //! Records the font size associated with preferred column widths.
     mutable float m_ContentFontSize = -1;
+
+    //! Records the header font used by content-column measurements.
+    mutable float m_ContentHeaderFontSize = -1;
+
+    //! Records the combined cell border and horizontal padding.
+    mutable float m_ContentCellInset = -1;
+
+    //! Records the combined header border and horizontal padding.
+    mutable float m_ContentHeaderInset = -1;
+
+    //! Stores the hovered body row, or -1.
+    mutable int m_HoverRow = -1;
+
+    //! Stores the hovered body column, or -1.
+    mutable int m_HoverColumn = -1;
+
+    //! Stores the hovered header, or -1.
+    mutable int m_HoverHeader = -1;
+
+    //! Remembers layout coordinates so hover follows cells while scrolling.
+    Point m_HoverPosition;
+
+    //! Stores the captured body row, or -1.
+    int m_PressedRow = -1;
+
+    //! Stores the captured body column, or -1.
+    int m_PressedColumn = -1;
+
+    //! Stores the captured header, or -1.
+    int m_PressedHeader = -1;
 
     //! Stores the selected row.
     int m_CurrentRow = -1;

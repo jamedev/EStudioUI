@@ -1,0 +1,9 @@
+Widget styles GPU: PASS
+Driver: llvmpipe (LLVM 20.1.2, 256 bits) | 4.5 (Core Profile) Mesa 25.1.7-1ubuntu2~24.04.2
+28 complete retained/full RGBA comparisons at 1x and 2x.
+Real pixels: slider gradient/fill/handle, selection/caret, focus-within, row hover/selection,
+tree branch expansion, sorted table header, selected cells, styled scrollbars.
+Selection shadows, outer transforms, theme replacement, pointer endpoints and scroll clamps.
+10000 list items and table rows: peak visible glyphs 248.
+500 animated fixed parts, 240 paint-only ticks: selector resolutions 0, layout passes 0.
+Idle and hidden animated frames submit zero analytic work.

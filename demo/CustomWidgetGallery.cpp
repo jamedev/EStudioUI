@@ -27,6 +27,15 @@ void Check(bool condition, const std::string& message)
 
 DemoDial::DemoDial() : PaintWidget("demo-dial")
 {
+    RegisterStylePart("face", 0,
+                      [](const Style& owner, unsigned state)
+                      {
+                          Style part;
+                          part.m_Background = owner.m_Background;
+                          part.m_BorderColor = state & Focus ? owner.m_SelectionBackground : owner.m_BorderColor;
+                          part.m_BorderWidth = 2;
+                          return part;
+                      });
     m_Track.ArcTo({0, 0}, .83f, s_Start, s_Sweep);
     m_Wave.MoveTo({-.55f, .55f});
     m_Wave.CubicTo({-.25f, .85f}, {.2f, .25f}, {.55f, .55f});
@@ -76,15 +85,16 @@ void DemoDial::PaintContent(Painter& painter) const
     painter.Save();
     painter.Translate(center.m_X, center.m_Y);
     painter.Scale(radius, radius);
-    painter.SetBrush(Color{.04f, .075f, .12f, 1});
-    painter.SetPen(IsFocused() ? accent : style.m_BorderColor, 2 / radius);
+    const auto& face = GetPartStyle("face");
+    painter.SetBrush(face);
+    painter.SetPen(face.m_BorderColor, face.m_BorderWidth / radius);
     painter.DrawCircle({0, 0}, 1);
-    painter.SetPen({.20f, .27f, .36f, 1}, 7 / radius);
+    painter.SetPen(style.m_GridColor, 7 / radius);
     painter.DrawPath(m_Track);
     for (int tick = 0; tick <= 20; ++tick)
     {
         const float angle = s_Start + s_Sweep * static_cast<float>(tick) / 20;
-        painter.SetPen(tick * 5 <= m_Value ? accent : Color{.34f, .4f, .48f, 1}, 2 / radius);
+        painter.SetPen(tick * 5 <= m_Value ? accent : style.m_PlaceholderColor, 2 / radius);
         painter.DrawLine(Along(angle, tick % 5 == 0 ? .64f : .71f), Along(angle, .78f));
     }
     painter.SetPen(accent, 2 / radius);

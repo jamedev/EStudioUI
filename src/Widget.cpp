@@ -3,6 +3,7 @@
 #include <EStudioUI/UiContext.h>
 
 #include <algorithm>
+#include <bit>
 #include <cctype>
 #include <cmath>
 #include <stdexcept>
@@ -18,6 +19,8 @@ Widget::Widget(std::string type)
 
 Widget::~Widget()
 {
+    if (m_Context)
+        m_Context->ReleaseSelectorOwner(*this);
     m_Lifetime.reset();
 }
 
@@ -177,6 +180,22 @@ void Widget::SetStyleProperty(StyleProperty property, const StyleValue& value)
     if (IsPaintOnlyProperty(property))
     {
         EStudioUI::SetStyleValue(m_Style, property, validated);
+        if (m_Context)
+            m_Context->RefreshStyleParts(*this);
+        else
+            for (auto& part : m_StyleParts)
+            {
+                for (std::size_t i = 0; i < part.m_States.size(); ++i)
+                {
+                    part.m_Palette[i] = part.m_Defaults(m_Style, part.m_States[i]);
+                    if (!part.m_Animated)
+                    {
+                        part.m_Palette[i].m_Transitions.clear();
+                        part.m_Palette[i].m_Animations.clear();
+                    }
+                }
+                part.m_Presentation = part.m_Palette[PartIndex(part.m_StateMask, part.m_ActiveState)];
+            }
         RequestRepaint();
     }
     else
@@ -192,6 +211,9 @@ void Widget::ClearStyleProperty(StyleProperty property)
 void Widget::ClearStyleProperties()
 {
     m_StyleOverrides.clear();
+    for (auto& part : m_StyleParts)
+        for (auto& overrides : part.m_Overrides)
+            overrides.clear();
     Invalidate();
 }
 
@@ -334,6 +356,96 @@ void Widget::RequestRepaint()
 {
     if (m_Context)
         m_Context->RequestRepaint();
+}
+
+std::size_t Widget::PartIndex(unsigned mask, unsigned state)
+{
+    std::size_t result = 0, denseBit = 1;
+    while (mask)
+    {
+        const unsigned bit = mask & (~mask + 1);
+        if (state & bit)
+            result |= denseBit;
+        denseBit <<= 1;
+        mask &= ~bit;
+    }
+    return result;
+}
+
+void Widget::RegisterStylePart(std::string name, unsigned stateMask,
+                               std::function<Style(const Style&, unsigned)> defaults, bool animated)
+{
+    std::transform(name.begin(), name.end(), name.begin(),
+                   [](unsigned char value) { return static_cast<char>(std::tolower(value)); });
+    if (name.empty() || name == "before" || name == "after" || !defaults || m_StyleParts.size() >= 32 ||
+        std::popcount(stateMask) > 6 ||
+        !std::all_of(name.begin(), name.end(),
+                     [](unsigned char value) { return std::isalnum(value) || value == '-' || value == '_'; }) ||
+        std::any_of(m_StyleParts.begin(), m_StyleParts.end(), [&](const auto& part) { return part.m_Name == name; }))
+        throw std::invalid_argument(
+            "A paint part requires a unique name, defaults, and at most six varying states (32 parts maximum).");
+    StylePart part;
+    part.m_Name = std::move(name);
+    part.m_StateMask = stateMask;
+    part.m_Animated = animated;
+    part.m_Defaults = std::move(defaults);
+    unsigned state = 0;
+    do
+    {
+        part.m_States.push_back(state);
+        auto style = part.m_Defaults(m_Style, state);
+        if (!animated)
+        {
+            style.m_Transitions.clear();
+            style.m_Animations.clear();
+        }
+        part.m_Palette.push_back(std::move(style));
+        part.m_Assignments.emplace_back();
+        part.m_Overrides.emplace_back();
+        state = (state - stateMask) & stateMask;
+    } while (state);
+    part.m_Presentation = part.m_Palette.front();
+    m_StyleParts.push_back(std::move(part));
+    Invalidate();
+}
+
+const Style& Widget::GetPartStyle(std::string_view name) const
+{
+    const auto found =
+        std::find_if(m_StyleParts.begin(), m_StyleParts.end(), [&](const auto& part) { return part.m_Name == name; });
+    if (found == m_StyleParts.end())
+        throw std::out_of_range("Unregistered paint part.");
+    return found->m_Animated ? found->m_Presentation : found->m_Palette[PartIndex(found->m_StateMask, found->m_State)];
+}
+
+const Style& Widget::GetPartStyle(std::string_view name, unsigned state) const
+{
+    const auto found =
+        std::find_if(m_StyleParts.begin(), m_StyleParts.end(), [&](const auto& part) { return part.m_Name == name; });
+    if (found == m_StyleParts.end())
+        throw std::out_of_range("Unregistered paint part.");
+    state &= found->m_StateMask;
+    if (found->m_Animated && state == (found->m_ActiveState & found->m_StateMask))
+        return found->m_Presentation;
+    return found->m_Palette[PartIndex(found->m_StateMask, state)];
+}
+
+void Widget::SetPartState(std::string_view name, unsigned state)
+{
+    const auto found =
+        std::find_if(m_StyleParts.begin(), m_StyleParts.end(), [&](const auto& part) { return part.m_Name == name; });
+    if (found == m_StyleParts.end())
+        throw std::out_of_range("Unregistered paint part.");
+    state &= found->m_StateMask;
+    if (found->m_State == state)
+        return;
+    found->m_State = state;
+    if (!m_Context)
+    {
+        found->m_ActiveState = state;
+        found->m_Presentation = found->m_Palette[PartIndex(found->m_StateMask, state)];
+    }
+    Invalidate();
 }
 
 void Widget::SetState(unsigned flag, bool enabled)

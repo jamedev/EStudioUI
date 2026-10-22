@@ -2,10 +2,10 @@
 #include <EStudioUI/UiContext.h>
 
 #include <algorithm>
-#include <array>
 #include <cmath>
 #include <map>
 #include <optional>
+#include <stdexcept>
 
 namespace EStudioUI
 {
@@ -16,6 +16,7 @@ struct CssMotion::Impl
         double m_Offset;
         StyleValue m_Value;
         std::optional<EasingCurve> m_Easing;
+        bool m_Underlying = false;
     };
 
     struct Track
@@ -52,7 +53,7 @@ struct CssMotion::Impl
     struct Entry
     {
         WidgetRef m_Widget;
-        std::array<Layer, 3> m_Layers;
+        std::vector<Layer> m_Layers = std::vector<Layer>(3);
     };
 
     UiContext& m_Context;
@@ -101,9 +102,9 @@ struct CssMotion::Impl
         {
             const auto underlying = GetStyleValue(base, property);
             if (knots.front().m_Offset > 0)
-                knots.insert(knots.begin(), {0, underlying, {}});
+                knots.insert(knots.begin(), {0, underlying, {}, true});
             if (knots.back().m_Offset < 1)
-                knots.push_back({1, underlying, {}});
+                knots.push_back({1, underlying, {}, true});
             tracks.push_back({property, std::move(knots)});
         }
         return tracks;
@@ -206,7 +207,11 @@ const Style& CssMotion::Resolve(Widget& widget, int layerIndex, Style base, cons
     auto& entry = self.m_Entries[&widget];
     if (entry.m_Widget.Get() != &widget)
         entry = {WidgetRef(&widget), {}};
-    auto& layer = entry.m_Layers.at(static_cast<std::size_t>(layerIndex));
+    if (layerIndex < 0 || layerIndex >= 35)
+        throw std::out_of_range("CSS motion layer exceeds the bounded widget part capacity.");
+    if (entry.m_Layers.size() <= static_cast<std::size_t>(layerIndex))
+        entry.m_Layers.resize(static_cast<std::size_t>(layerIndex + 1));
+    auto& layer = entry.m_Layers[static_cast<std::size_t>(layerIndex)];
     const double now = self.m_Context.GetTime();
     if (layer.m_Initialized)
         Impl::Advance(layer, now);
@@ -282,6 +287,27 @@ const Style& CssMotion::Resolve(Widget& widget, int layerIndex, Style base, cons
     return layer.m_Presentation;
 }
 
+const Style& CssMotion::Rebase(Widget& widget, int layerIndex, Style base)
+{
+    if (layerIndex < 3 || layerIndex >= 35)
+        throw std::out_of_range("Only bounded named part layers can be rebased.");
+    auto& entry = m_Impl->m_Entries[&widget];
+    if (entry.m_Widget.Get() != &widget)
+        entry = {WidgetRef(&widget), {}};
+    if (entry.m_Layers.size() <= static_cast<std::size_t>(layerIndex))
+        entry.m_Layers.resize(static_cast<std::size_t>(layerIndex + 1));
+    auto& layer = entry.m_Layers[static_cast<std::size_t>(layerIndex)];
+    layer.m_Base = std::move(base);
+    layer.m_Presentation = layer.m_Base;
+    for (auto& timeline : layer.m_Animations)
+        for (auto& track : timeline.m_Tracks)
+            for (auto& knot : track.m_Knots)
+                if (knot.m_Underlying)
+                    knot.m_Value = GetStyleValue(layer.m_Base, track.m_Property);
+    Impl::Sample(layer, m_Impl->m_Context.GetTime());
+    return layer.m_Presentation;
+}
+
 void CssMotion::Update(double time)
 {
     auto& self = *m_Impl;
@@ -300,7 +326,8 @@ void CssMotion::Update(double time)
         for (std::size_t index = 0; index < entry.m_Layers.size(); ++index)
         {
             auto& layer = entry.m_Layers[index];
-            if (index && (!layer.m_Presentation.m_Decoration || !layer.m_Presentation.m_Displayed))
+            if (!layer.m_Initialized || !layer.m_Presentation.m_Displayed ||
+                ((index == 1 || index == 2) && !layer.m_Presentation.m_Decoration))
                 continue;
             const bool active =
                 !layer.m_Transitions.empty() ||
@@ -310,8 +337,22 @@ void CssMotion::Update(double time)
                 continue;
             Impl::Advance(layer, time);
             self.m_Context.RequestRepaint();
+            if (index >= 3)
+            {
+                auto& part = widget.m_StyleParts.at(index - 3);
+                const auto& overrides = part.m_Overrides[Widget::PartIndex(part.m_StateMask, part.m_ActiveState)];
+                for (auto property : layer.m_Properties)
+                    if (!overrides.contains(property) && !IsPaintOnlyProperty(property) &&
+                        GetStyleValue(part.m_Presentation, property) != GetStyleValue(layer.m_Presentation, property))
+                        self.m_Context.Invalidate();
+                part.m_Presentation = layer.m_Presentation;
+                for (const auto& [property, value] : overrides)
+                    SetStyleValue(part.m_Presentation, property, value);
+                continue;
+            }
             if (index != 0)
                 continue;
+            bool ownerChanged = false;
             for (auto property : layer.m_Properties)
             {
                 if (widget.m_StyleOverrides.contains(property))
@@ -331,9 +372,12 @@ void CssMotion::Update(double time)
                 if (GetStyleValue(widget.m_Style, property) == value)
                     continue;
                 SetStyleValue(widget.m_Style, property, value);
+                ownerChanged = true;
                 if (!IsPaintOnlyProperty(property))
                     self.m_Context.Invalidate();
             }
+            if (ownerChanged)
+                self.m_Context.RefreshStyleParts(widget);
         }
     }
 }
@@ -341,7 +385,8 @@ void CssMotion::Update(double time)
 const Style* CssMotion::Decoration(const Widget& widget, int layerIndex) const
 {
     const auto found = m_Impl->m_Entries.find(&widget);
-    if (found == m_Impl->m_Entries.end() || found->second.m_Widget.Get() != &widget)
+    if (found == m_Impl->m_Entries.end() || found->second.m_Widget.Get() != &widget || layerIndex < 1 ||
+        layerIndex > 2 || found->second.m_Layers.size() <= static_cast<std::size_t>(layerIndex))
         return nullptr;
     const auto& layer = found->second.m_Layers.at(static_cast<std::size_t>(layerIndex));
     return layer.m_Initialized && layer.m_Presentation.m_Decoration && layer.m_Presentation.m_Displayed
@@ -354,12 +399,13 @@ bool CssMotion::HasRunning() const
     for (const auto& [address, entry] : m_Impl->m_Entries)
     {
         const auto* widget = entry.m_Widget.Get();
-        if (!widget || !widget->IsVisible())
+        if (!widget || widget->GetContext() != &m_Impl->m_Context || !widget->IsVisible())
             continue;
         for (std::size_t i = 0; i < entry.m_Layers.size(); ++i)
         {
             const auto& layer = entry.m_Layers[i];
-            if (i != 0 && !layer.m_Presentation.m_Decoration)
+            if (!layer.m_Initialized || !layer.m_Presentation.m_Displayed ||
+                ((i == 1 || i == 2) && !layer.m_Presentation.m_Decoration))
                 continue;
             if (!layer.m_Transitions.empty())
                 return true;

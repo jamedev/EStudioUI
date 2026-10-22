@@ -1,4 +1,4 @@
-# CSS supported by EStudioUI 0.5
+# CSS supported by EStudioUI 0.8
 
 Style is external UTF-8 text, with optional BOM and `/* comments */`. Parsing is
 atomic: an unknown property, unsupported value, or malformed rule rejects the
@@ -17,10 +17,14 @@ CSS is loaded on request, not watched automatically. Press F5 in the demo to rel
 | Descendant | `.card textbox` |
 | Immediate child | `.row > button` |
 | Selector list | `button, textbox` |
-| Interaction states | `:hover`, `:active`, `:pressed`, `:focus` |
+| Interaction states | `:hover`, `:active`, `:pressed`, `:focus`, `:focus-within` |
 | Selection/toggle | `:selected`, `:checked` (aliases on toggle buttons) |
 | Decorative paint layers | `button::before`, `button:hover::after` |
 | Availability | `:enabled`, `:disabled`, `:read-only` |
+| Editor states | `:valid`, `:invalid`, `:intermediate`, `:placeholder-shown` |
+| Orientation | `:horizontal`, `:vertical` |
+| Collection states | `:empty`, part states `:alternate`, `:expanded`, `:sorted` |
+| Named control parts | `slider::handle:hover`, `tablewidget::cell:selected` |
 
 Type names are the strings passed to `Widget`'s constructor. IDs and classes are
 set using `SetId()` and `AddClass()`. Hover includes the target's ancestors.
@@ -104,19 +108,27 @@ resize the native window.
 
 ## Control styling
 
-Tab strips use `tabbar toolbutton` and a `.selected` class for the active tab.
+Tab strips use `tabbar .tab-button:selected`; the older `.selected` class remains available.
 ToolButton's `:checked` / `:selected` state is persistent; `:active` remains the
 transient press state. Toolbars and menus accept ordinary child selectors.
 
-Collection rows/cells are model entries, not child widgets. Configure their
-selection, hover, alternating backgrounds, row height, indentation, header, and
-grid through the properties above on `listwidget`, `treewidget`, and
-`tablewidget`. Arbitrary per-row selectors and subcontrol pseudo-elements are not
-implemented. The reusable table editor is `tablewidget textbox.cell-editor`.
+Collection rows/cells are model entries, not child widgets. Named parts expose
+their backgrounds, gradients, borders, shadows, typography, padding, alignment,
+and state styling through a shared compiled palette. Examples include
+`listwidget::item:hover`, `treewidget::branch:expanded`,
+`tablewidget::header:sorted`, and `tablewidget::cell:selected`.
+Keep `row-height`, `indent-size`, and `grid-color` on the owning collection.
+The reusable table editor is `tablewidget textbox.cell-editor`.
+See [WIDGET_STYLING.md](WIDGET_STYLING.md) for the complete part/state table and
+metric, animation, and custom-control contracts.
 
 Code-level size/direction/gap contracts take precedence over CSS for the explicitly
 set values; other computed properties still follow the cascade. Popup placement
 and table editor bounds are controlled by their owners, outside normal flow.
+Built-in cosmetic gaps, stepper/arrow widths, and separator sizes are CSS defaults,
+so themes can override them until application code sets an explicit contract.
+Root-owned composed popups match selectors through their logical owning control;
+changing the owner's theme class also restyles an open popup.
 
 ## GPU paint and decorative layers
 
@@ -236,6 +248,8 @@ color changes still require the relevant style/layout work.
 complete stylesheets. See [ANIMATIONS.md](ANIMATIONS.md) for that C++ API, explicit
 property groups, endpoint measurement, and lifetime/cancellation contracts.
 The **Rich CSS** demo tab uses [assets/rich-buttons.css](assets/rich-buttons.css).
+The **Widget styles** tab extends this to the existing controls using
+[assets/rich-widgets.css](assets/rich-widgets.css), with three switchable presets.
 
 ## Explicit omissions
 
@@ -244,8 +258,9 @@ properties/`var`, `calc`, sibling/attribute selectors, `:not`, font family/weigh
 style selection, raster/SVG background images, conic/repeating gradients, filters/
 backdrop blur, 3D/projective transforms, textual generated content, z-index,
 percentage padding, CSS grid, negative margins, browser box formatting, or Qt
-`qproperty-*`/subcontrol syntax. Use the font passed to `Window`. Text alignment
-affects labels/buttons; editable lines scroll horizontally around their caret.
+`qproperty-*` or browser pseudo-element compatibility beyond the named parts
+listed here. Use the font passed to `Window`. Text alignment affects captions,
+collection parts, and editable lines; overflowing editors scroll around the caret.
 Widget `position`/edge offsets do not replace the layout API; those declarations
 are intended for decorative layers. Unsupported declarations fail during parsing
 rather than being silently interpreted as full browser CSS.
@@ -273,9 +288,12 @@ screen-space stroke versus world-space geometry contract.
 Numeric inputs compose `.numeric-editor`, `.numeric-increment`, and
 `.numeric-decrement` children; split controls compose `.split-primary` and
 `.split-arrow` tool buttons. They support the ordinary disabled/focus/hover states.
-Slider `grid-color` paints the groove, `selection-background-color` paints the
+Slider `grid-color` supplies the default groove, `selection-background-color` supplies the
 active track and focused handle border, `color` paints the handle, and
-`border-color` paints its idle outline. No new parsing syntax is required.
+`border-color` supplies its idle outline. Named `::groove`, `::fill`, and `::handle`
+parts override these defaults. Their transitions and keyframes share the widget's
+existing animation scheduler. Text boxes expose `::selection`, `::caret`, and
+`::placeholder` without creating children.
 
 Dense arcs, splines, and paths use the same shared item CSS palette as lines;
 annotation text uses `color` and opacity while its font size is stored in world

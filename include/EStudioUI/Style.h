@@ -21,7 +21,18 @@ enum PseudoState : unsigned
     Focus = 4,
     Disabled = 8,
     ReadOnly = 16,
-    Selected = 32
+    Selected = 32,
+    FocusWithin = 64,
+    Valid = 128,
+    Invalid = 256,
+    Intermediate = 512,
+    PlaceholderShown = 1024,
+    Horizontal = 2048,
+    Vertical = 4096,
+    Alternate = 8192,
+    Expanded = 16384,
+    Sorted = 32768,
+    Empty = 65536
 };
 
 //! Describes the identity and states visible to CSS selectors.
@@ -278,6 +289,12 @@ class StyleSheet
     //! Resolves matching declarations, inheritance, and selector specificity.
     Style Compute(const StyleNode& node, const Style* inherited = nullptr, int pseudoElement = 0) const;
 
+    //! Resolves a named paint part over the supplied widget-specific defaults.
+    Style ComputePart(const StyleNode& owner, std::string_view name, unsigned state, const Style& fallback) const;
+
+    //! Caches matched typed assignments for refreshing defaults without selector evaluation.
+    std::function<void(Style&)> CompilePart(const StyleNode& owner, std::string_view name, unsigned state) const;
+
     //! One compiled keyframe block with normalized offsets.
     struct Keyframe
     {
@@ -353,6 +370,15 @@ class StyleSheet
 
         //! Zero for a widget, one for before, and two for after.
         int m_PseudoElement = 0;
+
+        //! Named paint part, empty for widgets and before/after decorations.
+        std::string m_Part;
+
+        //! Required states of the paint part rather than its owning widget.
+        unsigned m_PartRequired = 0;
+
+        //! Forbidden states of the paint part.
+        unsigned m_PartForbidden = 0;
 
         //! Encodes identifier, class, and type specificity.
         unsigned m_Specificity = 0;

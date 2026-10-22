@@ -11,6 +11,20 @@ namespace EStudioUI
 {
 ListWidget::ListWidget() : ScrollWidget("listwidget")
 {
+    RegisterStylePart("item", Hover | Pressed | Selected | Alternate,
+                      [](const Style& owner, unsigned state)
+                      {
+                          Style part;
+                          part.m_Background = state & Selected    ? owner.m_SelectionBackground
+                                              : state & Hover     ? owner.m_HoverBackground
+                                              : state & Alternate ? owner.m_AlternateBackground
+                                                                  : Color{0, 0, 0, 0};
+                          part.m_Color = state & Selected ? owner.m_SelectionColor : owner.m_Color;
+                          part.m_FontSize = owner.m_FontSize;
+                          part.m_TextAlign = owner.m_TextAlign;
+                          part.m_Padding = {0, 8, 0, 8};
+                          return part;
+                      });
 }
 
 void ListWidget::SetItems(std::vector<std::string> items)
@@ -21,6 +35,8 @@ void ListWidget::SetItems(std::vector<std::string> items)
     const bool changed = m_Current != -1;
     m_Current = -1;
     m_Hover = -1;
+    m_Pressed = -1;
+    SetState(Pressed, false);
     SetScrollOffset({});
     Invalidate();
     if (changed)
@@ -40,6 +56,8 @@ void ListWidget::RemoveItem(int index)
     m_Items.erase(m_Items.begin() + index);
     const int next = m_Current == index ? -1 : m_Current > index ? m_Current - 1 : m_Current;
     m_Hover = -1;
+    m_Pressed = -1;
+    SetState(Pressed, false);
     Invalidate();
     if (m_Current != next)
     {
@@ -112,6 +130,18 @@ int ListWidget::ItemAt(Point position) const
     return index < GetItemCount() ? index : -1;
 }
 
+unsigned ListWidget::ItemState(int index, int hover) const
+{
+    unsigned state = index == m_Current ? static_cast<unsigned>(Selected) : 0u;
+    if (index % 2)
+        state |= Alternate;
+    if (hover == index)
+        state |= Hover;
+    if (index == m_Pressed)
+        state |= Pressed;
+    return state;
+}
+
 void ListWidget::Paint(Renderer& renderer, FontFace& font, double time, float opacity) const
 {
     Widget::Paint(renderer, font, time, opacity);
@@ -119,23 +149,33 @@ void ListWidget::Paint(Renderer& renderer, FontFace& font, double time, float op
     const auto clip = GetClip().Intersect(viewport);
     const auto& style = GetStyle();
     const float offset = GetScrollOffset().m_Y;
+    const auto pointer = IsHovered() && GetContext() ? GetContext()->GetPointerPosition() : std::optional<Point>{};
+    const Point position = pointer ? GetContext()->ToLayoutPoint(*this, *pointer) : m_HoverPosition;
+    m_Hover = IsHovered() ? ItemAt(position) : -1;
     const int first = std::max(0, static_cast<int>(offset / style.m_RowHeight));
     const int last =
         std::min(GetItemCount(), static_cast<int>(std::ceil((offset + viewport.m_Height) / style.m_RowHeight)));
+    renderer.PushState();
+    if (style.m_ClipContent)
+        renderer.PushClip(GetBounds(), style.m_Radius);
+    renderer.PushClip(clip);
     for (int i = first; i < last; ++i)
     {
         const Rect row{viewport.m_X, viewport.m_Y + static_cast<float>(i) * style.m_RowHeight - offset,
                        viewport.m_Width, style.m_RowHeight};
-        Color background = i == m_Current                ? style.m_SelectionBackground
-                           : IsHovered() && i == m_Hover ? style.m_HoverBackground
-                           : i % 2                       ? style.m_AlternateBackground
-                                                         : Color{0, 0, 0, 0};
-        background.m_A *= opacity;
-        renderer.DrawSolid(row, background, clip);
-        auto color = i == m_Current ? style.m_SelectionColor : style.m_Color;
-        color.m_A *= opacity;
-        DrawRowText(renderer, font, m_Items[static_cast<std::size_t>(i)], row, color, clip);
+        const auto& item = GetPartStyle("item", ItemState(i, m_Hover));
+        if (!item.m_Displayed || item.m_Opacity <= 0)
+            continue;
+        renderer.PushState(item.m_Transform.Resolve(row));
+        renderer.SetWidgetPaint(row, clip, nullptr, false, 0);
+        renderer.SetPaintIdentity(reinterpret_cast<std::uintptr_t>(&m_Items), static_cast<std::uint64_t>(i) + 1);
+        renderer.DrawBox(row, item, clip, opacity * item.m_Opacity);
+        if (item.m_ClipContent)
+            renderer.PushClip(row, item.m_Radius);
+        DrawRowText(renderer, font, m_Items[static_cast<std::size_t>(i)], row, item, row, opacity * item.m_Opacity);
+        renderer.PopState();
     }
+    renderer.PopState();
     PaintScrollBars(renderer, opacity);
 }
 
@@ -146,6 +186,8 @@ void ListWidget::OnPointerDown(const PointerEvent& event)
     const int index = ItemAt(event.m_Position);
     if (index < 0)
         return;
+    m_Pressed = index;
+    SetState(Pressed, true);
     const WidgetRef self(this);
     SetCurrentIndex(index);
     if (self.Get() && event.m_Clicks == 2)
@@ -155,12 +197,27 @@ void ListWidget::OnPointerDown(const PointerEvent& event)
 void ListWidget::OnPointerMove(const PointerEvent& event)
 {
     ScrollWidget::OnPointerMove(event);
+    m_HoverPosition = event.m_Position;
     const int hover = ItemAt(event.m_Position);
     if (hover != m_Hover)
     {
         m_Hover = hover;
         RequestRepaint();
     }
+}
+
+void ListWidget::OnPointerUp(const PointerEvent& event)
+{
+    m_Pressed = -1;
+    SetState(Pressed, false);
+    ScrollWidget::OnPointerUp(event);
+}
+
+void ListWidget::OnCaptureLost()
+{
+    m_Pressed = -1;
+    SetState(Pressed, false);
+    ScrollWidget::OnCaptureLost();
 }
 
 void ListWidget::OnKey(Key key, bool down, bool, Modifiers modifiers)

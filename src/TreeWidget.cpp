@@ -1,6 +1,7 @@
 #include <EStudioUI/TreeWidget.h>
 #include <EStudioUI/Renderer.h>
 #include <EStudioUI/TextBuffer.h>
+#include <EStudioUI/UiContext.h>
 
 #include <cmath>
 #include <stdexcept>
@@ -9,6 +10,30 @@ namespace EStudioUI
 {
 TreeWidget::TreeWidget() : ScrollWidget("treewidget")
 {
+    RegisterStylePart("item", Hover | Pressed | Selected | Alternate | Expanded,
+                      [](const Style& owner, unsigned state)
+                      {
+                          Style part;
+                          part.m_Background = state & Selected    ? owner.m_SelectionBackground
+                                              : state & Hover     ? owner.m_HoverBackground
+                                              : state & Alternate ? owner.m_AlternateBackground
+                                                                  : Color{0, 0, 0, 0};
+                          part.m_Color = state & Selected ? owner.m_SelectionColor : owner.m_Color;
+                          part.m_FontSize = owner.m_FontSize;
+                          part.m_TextAlign = owner.m_TextAlign;
+                          part.m_Padding = {0, 8, 0, 8};
+                          return part;
+                      });
+    RegisterStylePart("branch", Hover | Pressed | Selected | Alternate | Expanded,
+                      [](const Style& owner, unsigned state)
+                      {
+                          Style part;
+                          part.m_Color = state & Selected ? owner.m_SelectionColor : owner.m_Color;
+                          part.m_FontSize = owner.m_FontSize;
+                          part.m_TextAlign = "center";
+                          part.m_Width = {Length::Unit::Pixels, 22};
+                          return part;
+                      });
 }
 
 TreeWidget::NodeId TreeWidget::AddItem(NodeId parent, std::string text)
@@ -40,6 +65,9 @@ void TreeWidget::RemoveItem(NodeId item)
     }
     m_RowsDirty = true;
     m_Hover = -1;
+    m_Pressed = 0;
+    m_PressedBranch = false;
+    SetState(Pressed, false);
     Invalidate();
     if (selectionRemoved)
     {
@@ -54,6 +82,9 @@ void TreeWidget::Clear()
     m_Roots.clear();
     m_RowsDirty = true;
     m_Hover = -1;
+    m_Pressed = 0;
+    m_PressedBranch = false;
+    SetState(Pressed, false);
     const bool changed = m_Current != 0;
     m_Current = 0;
     SetScrollOffset({});
@@ -113,12 +144,17 @@ void TreeWidget::EnsureRows() const
 
 void TreeWidget::SetCurrentItem(NodeId item)
 {
+    bool revealed = false;
     if (item)
     {
         for (auto parent = m_Nodes.at(item).m_Parent; parent; parent = m_Nodes.at(parent).m_Parent)
         {
-            m_Nodes.at(parent).m_Expanded = true;
-            m_RowsDirty = true;
+            if (!m_Nodes.at(parent).m_Expanded)
+            {
+                m_Nodes.at(parent).m_Expanded = true;
+                m_RowsDirty = true;
+                revealed = true;
+            }
         }
         EnsureRows();
         const auto found =
@@ -126,10 +162,12 @@ void TreeWidget::SetCurrentItem(NodeId item)
         EnsureVisible(
             {0, static_cast<float>(found - m_Rows.begin()) * GetStyle().m_RowHeight, 0, GetStyle().m_RowHeight});
     }
+    if (revealed)
+        Invalidate();
     if (m_Current == item)
         return;
     m_Current = item;
-    Invalidate();
+    RequestRepaint();
     m_CurrentChanged.Emit(item);
 }
 
@@ -185,6 +223,31 @@ int TreeWidget::RowAt(Point position) const
     return row < static_cast<int>(m_Rows.size()) ? row : -1;
 }
 
+unsigned TreeWidget::ItemState(int index, int hover) const
+{
+    const auto& row = m_Rows[static_cast<std::size_t>(index)];
+    unsigned state = row.m_Id == m_Current ? static_cast<unsigned>(Selected) : 0u;
+    if (index % 2)
+        state |= Alternate;
+    if (m_Nodes.at(row.m_Id).m_Expanded)
+        state |= Expanded;
+    if (hover == index)
+        state |= Hover;
+    if (row.m_Id == m_Pressed)
+        state |= Pressed;
+    return state;
+}
+
+Rect TreeWidget::BranchBounds(const Row& row, Rect bounds, unsigned state) const
+{
+    // Hover/pressed styles decorate the allocated branch without moving its hit target.
+    const auto& part = GetPartStyle("branch", state & (Selected | Alternate | Expanded));
+    const float indent = static_cast<float>(row.m_Depth) * GetStyle().m_Indent;
+    const float available = std::max(0.0f, bounds.m_Width - indent);
+    const float width = std::clamp(part.m_Width.Resolve(available, 22), part.m_MinWidth, part.m_MaxWidth);
+    return {bounds.m_X + indent, bounds.m_Y, std::min(width, available), bounds.m_Height};
+}
+
 void TreeWidget::Paint(Renderer& renderer, FontFace& font, double time, float opacity) const
 {
     Widget::Paint(renderer, font, time, opacity);
@@ -193,31 +256,62 @@ void TreeWidget::Paint(Renderer& renderer, FontFace& font, double time, float op
     const auto clip = GetClip().Intersect(viewport);
     const auto& style = GetStyle();
     const auto offset = GetScrollOffset().m_Y;
+    const auto pointer = IsHovered() && GetContext() ? GetContext()->GetPointerPosition() : std::optional<Point>{};
+    const Point position = pointer ? GetContext()->ToLayoutPoint(*this, *pointer) : m_HoverPosition;
+    m_Hover = IsHovered() ? RowAt(position) : -1;
+    m_HoverBranch = false;
     const int first = std::max(0, static_cast<int>(offset / style.m_RowHeight));
     const int last = std::min(static_cast<int>(m_Rows.size()),
                               static_cast<int>(std::ceil((offset + viewport.m_Height) / style.m_RowHeight)));
+    renderer.PushState();
+    if (style.m_ClipContent)
+        renderer.PushClip(GetBounds(), style.m_Radius);
+    renderer.PushClip(clip);
     for (int i = first; i < last; ++i)
     {
         const auto row = m_Rows[static_cast<std::size_t>(i)];
         const auto& node = m_Nodes.at(row.m_Id);
-        Rect bounds{viewport.m_X, viewport.m_Y + static_cast<float>(i) * style.m_RowHeight - offset, viewport.m_Width,
-                    style.m_RowHeight};
-        auto background = row.m_Id == m_Current         ? style.m_SelectionBackground
-                          : IsHovered() && i == m_Hover ? style.m_HoverBackground
-                          : i % 2                       ? style.m_AlternateBackground
-                                                        : Color{0, 0, 0, 0};
-        background.m_A *= opacity;
-        renderer.DrawSolid(bounds, background, clip);
-        auto color = row.m_Id == m_Current ? style.m_SelectionColor : style.m_Color;
-        color.m_A *= opacity;
-        const float indent = static_cast<float>(row.m_Depth) * style.m_Indent;
-        Rect indicator{bounds.m_X + indent, bounds.m_Y, 22, bounds.m_Height};
+        const Rect bounds{viewport.m_X, viewport.m_Y + static_cast<float>(i) * style.m_RowHeight - offset,
+                          viewport.m_Width, style.m_RowHeight};
+        const unsigned state = ItemState(i, m_Hover);
+        const auto& item = GetPartStyle("item", state);
+        if (!item.m_Displayed || item.m_Opacity <= 0)
+            continue;
+        const auto indicator = BranchBounds(row, bounds, state);
+        renderer.PushState(item.m_Transform.Resolve(bounds));
+        renderer.SetWidgetPaint(bounds, clip, nullptr, false, 0);
+        renderer.SetPaintIdentity(reinterpret_cast<std::uintptr_t>(&m_Nodes), row.m_Id);
+        renderer.DrawBox(bounds, item, clip, opacity * item.m_Opacity);
+        if (item.m_ClipContent)
+            renderer.PushClip(bounds, item.m_Radius);
+        const Rect textBounds{indicator.m_X + indicator.m_Width, bounds.m_Y,
+                              std::max(0.0f, bounds.m_X + bounds.m_Width - indicator.m_X - indicator.m_Width),
+                              bounds.m_Height};
+        DrawRowText(renderer, font, node.m_Text, textBounds, item, textBounds, opacity * item.m_Opacity);
         if (!node.m_Children.empty())
-            DrawRowText(renderer, font, node.m_Expanded ? "−" : "+", indicator, color, clip);
-        bounds.m_X += indent + 22;
-        bounds.m_Width = std::max(0.0f, bounds.m_Width - indent - 22);
-        DrawRowText(renderer, font, node.m_Text, bounds, color, clip);
+        {
+            unsigned branchState = state;
+            if (!indicator.Contains(position))
+                branchState &= ~Hover;
+            if (branchState & Hover)
+                m_HoverBranch = true;
+            if (!m_PressedBranch)
+                branchState &= ~Pressed;
+            const auto& branch = GetPartStyle("branch", branchState);
+            renderer.PushState(branch.m_Transform.Resolve(indicator));
+            renderer.SetWidgetPaint(indicator, clip, nullptr, false, 0);
+            renderer.SetPaintIdentity(reinterpret_cast<std::uintptr_t>(&m_Roots), row.m_Id);
+            const float branchOpacity = opacity * item.m_Opacity * branch.m_Opacity;
+            if (branch.m_Displayed && branch.m_Opacity > 0)
+                renderer.DrawBox(indicator, branch, clip, branchOpacity);
+            if (branch.m_ClipContent)
+                renderer.PushClip(indicator, branch.m_Radius);
+            DrawRowText(renderer, font, node.m_Expanded ? "−" : "+", indicator, branch, indicator, branchOpacity);
+            renderer.PopState();
+        }
+        renderer.PopState();
     }
+    renderer.PopState();
     PaintScrollBars(renderer, opacity);
 }
 
@@ -229,10 +323,15 @@ void TreeWidget::OnPointerDown(const PointerEvent& event)
     if (index < 0)
         return;
     const auto row = m_Rows[static_cast<std::size_t>(index)];
-    const bool toggle =
-        !m_Nodes.at(row.m_Id).m_Children.empty() &&
-        (event.m_Position.m_X < GetViewport().m_X + static_cast<float>(row.m_Depth) * GetStyle().m_Indent + 22 ||
-         event.m_Clicks == 2);
+    const auto viewport = GetViewport();
+    const Rect bounds{viewport.m_X,
+                      viewport.m_Y + static_cast<float>(index) * GetStyle().m_RowHeight - GetScrollOffset().m_Y,
+                      viewport.m_Width, GetStyle().m_RowHeight};
+    m_Pressed = row.m_Id;
+    m_PressedBranch = !m_Nodes.at(row.m_Id).m_Children.empty() &&
+                      BranchBounds(row, bounds, ItemState(index, index)).Contains(event.m_Position);
+    const bool toggle = !m_Nodes.at(row.m_Id).m_Children.empty() && (m_PressedBranch || event.m_Clicks == 2);
+    SetState(Pressed, true);
     const WidgetRef self(this);
     SetCurrentItem(row.m_Id);
     if (!self.Get() || !m_Nodes.contains(row.m_Id))
@@ -246,12 +345,41 @@ void TreeWidget::OnPointerDown(const PointerEvent& event)
 void TreeWidget::OnPointerMove(const PointerEvent& event)
 {
     ScrollWidget::OnPointerMove(event);
-    const int row = RowAt(event.m_Position);
-    if (row != m_Hover)
+    m_HoverPosition = event.m_Position;
+    const int index = RowAt(event.m_Position);
+    bool branch = false;
+    if (index >= 0)
     {
-        m_Hover = row;
+        const auto& row = m_Rows[static_cast<std::size_t>(index)];
+        const auto viewport = GetViewport();
+        const Rect bounds{viewport.m_X,
+                          viewport.m_Y + static_cast<float>(index) * GetStyle().m_RowHeight - GetScrollOffset().m_Y,
+                          viewport.m_Width, GetStyle().m_RowHeight};
+        branch = !m_Nodes.at(row.m_Id).m_Children.empty() &&
+                 BranchBounds(row, bounds, ItemState(index, index)).Contains(event.m_Position);
+    }
+    if (index != m_Hover || branch != m_HoverBranch)
+    {
+        m_Hover = index;
+        m_HoverBranch = branch;
         RequestRepaint();
     }
+}
+
+void TreeWidget::OnPointerUp(const PointerEvent& event)
+{
+    m_Pressed = 0;
+    m_PressedBranch = false;
+    SetState(Pressed, false);
+    ScrollWidget::OnPointerUp(event);
+}
+
+void TreeWidget::OnCaptureLost()
+{
+    m_Pressed = 0;
+    m_PressedBranch = false;
+    SetState(Pressed, false);
+    ScrollWidget::OnCaptureLost();
 }
 
 void TreeWidget::OnKey(Key key, bool down, bool, Modifiers)

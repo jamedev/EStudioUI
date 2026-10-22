@@ -248,6 +248,154 @@ void Lifetimes(FontFace& font)
         Check(!compositeRef.Get(), "earlier nested button callback may delete the composite before its queued step");
     }
 }
+
+void StyledInputs(FontFace& font)
+{
+    UiContext ui(font);
+    std::string error;
+    Check(ui.SetStyleSheet(R"CSS(
+        textbox { padding-left: 0; }
+        textbox:valid { border-width: 1px; }
+        textbox:intermediate { border-width: 2px; }
+        textbox:invalid { border-width: 3px; }
+        textbox:placeholder-shown { padding-left: 9px; }
+        textbox:read-only::caret { display: none; }
+        textbox::caret { width: 5px; height: 50%; background: #ff3300; }
+        textbox::placeholder { color: #33cc66; font-size: 23px; text-align: right; }
+        textbox::selection { background: linear-gradient(90deg, #123456, #abcdef); border-radius: 3px; }
+        numericinput:valid { border-width: 1px; }
+        numericinput:intermediate { border-width: 2px; }
+        numericinput:invalid { border-width: 3px; }
+        numericinput:focus-within { padding-left: 7px; }
+        numericinput { gap: 6px; }
+        numericinput > .numeric-increment, numericinput > .numeric-decrement { width: 38px; }
+    )CSS",
+                           error),
+          error.c_str());
+    auto& editor = ui.Root().Add<TextBox>();
+    editor.SetPlaceholder("Value");
+    editor.SetValidator(std::make_shared<IntegerValidator>(-10, 10));
+    ui.Prepare(600, 300);
+    Check(editor.GetStyle().m_BorderWidth == 2 && editor.GetStyle().m_Padding.m_Left == 9,
+          "empty validated editor exposes intermediate and placeholder-shown CSS states");
+    Check(editor.GetPartStyle("caret").m_Width.m_Value == 5 && editor.GetPartStyle("placeholder").m_FontSize == 23 &&
+              editor.GetPartStyle("selection").m_BackgroundImage.m_Kind != Gradient::Kind::None,
+          "editor internals resolve independent rich CSS parts");
+    int validations = 0;
+    editor.ValidationChanged().Connect([&](ValidationState) { ++validations; });
+    ui.SetFocus(&editor);
+    ui.TextInput("5");
+    ui.Prepare(600, 300);
+    Check(editor.GetStyle().m_BorderWidth == 1 && editor.GetStyle().m_Padding.m_Left == 0 && validations == 1,
+          "text edit updates classification and removes placeholder state");
+    ui.KeyEvent(Key::Z, true, false, {false, true, false});
+    ui.Prepare(600, 300);
+    Check(editor.GetStyle().m_BorderWidth == 2 && editor.GetStyle().m_Padding.m_Left == 9 && validations == 2,
+          "undo restores validation and placeholder CSS states");
+    editor.SetReadOnly(true);
+    ui.Prepare(600, 300);
+    Check(!editor.GetPartStyle("caret").m_Displayed && editor.NextCaretDeadline(5) > 1000,
+          "read-only caret is styleable and does not schedule blinking");
+    editor.SetReadOnly(false);
+    editor.SetValidator(nullptr);
+    editor.SetText("letters");
+    editor.SetValidator(std::make_shared<IntegerValidator>(-10, 10));
+    ui.Prepare(600, 300);
+    Check(editor.GetStyle().m_BorderWidth == 3, "new policy publishes invalid existing text to CSS");
+    auto& numeric = ui.Root().Add<NumericInput>(4);
+    numeric.SetWidth(SizeRule::Fixed(280));
+    ui.SetFocus(&numeric.GetEditor());
+    numeric.GetEditor().SetText("-");
+    ui.Prepare(600, 300);
+    Check(numeric.GetStyle().m_BorderWidth == 2 && numeric.GetStyle().m_Padding.m_Left == 7,
+          "numeric composite reflects editor classification and focus-within");
+    Check(numeric.GetStyle().m_Gap == 6 && numeric.GetChildren()[0]->GetBounds().m_Width == 38 &&
+              numeric.GetChildren()[2]->GetBounds().m_Width == 38 && numeric.GetBounds().m_Width == 280,
+          "numeric CSS configures cosmetic spacing and buttons while preserving explicit outer width");
+    numeric.Commit();
+    ui.Prepare(600, 300);
+    Check(numeric.GetStyle().m_BorderWidth == 1, "numeric rollback restores valid composite styling");
+    numeric.SetRange(0, 2);
+    ui.Prepare(600, 300);
+    Check(numeric.GetValue() == 2 && numeric.GetStyle().m_BorderWidth == 1,
+          "numeric range updates finish with a valid clamped editor and root");
+}
+
+void StyledSliderMetrics(FontFace& font)
+{
+    UiContext ui(font);
+    std::string error;
+    Check(ui.SetStyleSheet(R"CSS(
+        slider::groove:horizontal { width: 100px; height: 10px; }
+        slider::fill:horizontal { height: 6px; }
+        slider::handle { width: 40px; height: 24px; border-radius: 7px; }
+        slider::handle:hover { border-width: 3px; }
+        slider:vertical::groove { width: 8px; height: 100px; }
+    )CSS",
+                           error),
+          error.c_str());
+    auto& slider = ui.Root().Add<Slider>();
+    slider.SetWidth(SizeRule::Fixed(200));
+    slider.SetHeight(SizeRule::Fixed(40));
+    ui.Prepare(300, 250);
+    Check(slider.GetPartStyle("groove").m_Height.m_Value == 10 && slider.GetPartStyle("handle").m_Width.m_Value == 40,
+          "slider orientation resolves part dimensions");
+    ui.PointerDown({50, 20});
+    ui.PointerUp({50, 20});
+    Check(slider.GetValue() == 0, "styled groove defines minimum endpoint");
+    ui.PointerDown({100, 20});
+    ui.PointerUp({100, 20});
+    Check(slider.GetValue() == 50, "styled groove defines shared paint and pointer midpoint");
+    ui.PointerDown({150, 20});
+    ui.PointerUp({150, 20});
+    Check(slider.GetValue() == 100, "styled groove defines maximum endpoint");
+    ui.Prepare(300, 250);
+    Check(slider.GetPartStyle("handle").m_BorderWidth == 3, "fixed slider parts inherit owner hover");
+    ui.PointerMove({290, 240});
+    ui.Prepare(300, 250);
+    Check(slider.GetPartStyle("handle").m_BorderWidth != 3, "slider part hover clears on pointer leave");
+    slider.SetOrientation(Axis::Vertical);
+    slider.SetWidth(SizeRule::Fixed(40));
+    slider.SetHeight(SizeRule::Fixed(200));
+    ui.Prepare(300, 250);
+    Check(slider.GetPartStyle("groove").m_Width.m_Value == 8 && slider.GetPartStyle("groove").m_Height.m_Value == 100,
+          "owner orientation selectors update existing slider parts");
+    ui.PointerDown({20, 50});
+    ui.PointerUp({20, 50});
+    Check(slider.GetValue() == 100, "vertical styled groove maximum is at top");
+    ui.PointerDown({20, 150});
+    ui.PointerUp({20, 150});
+    Check(slider.GetValue() == 0, "vertical styled groove minimum is at bottom");
+}
+
+void ValidationLifetimes(FontFace& font)
+{
+    UiContext ui(font);
+    auto& editor = ui.Root().Add<TextBox>("1");
+    editor.SetValidator(std::make_shared<IntegerValidator>(-10, 10));
+    const WidgetRef lifetime(&editor);
+    editor.ValidationChanged().Connect([&](ValidationState) { ui.Root().RemoveChild(editor); });
+    editor.SetText("-");
+    Check(!lifetime.Get(), "validation callback may delete text editor before text notification");
+    auto& numeric = ui.Root().Add<NumericInput>(5);
+    const WidgetRef composite(&numeric);
+    numeric.GetEditor().ValidationChanged().Connect([&](ValidationState) { ui.Root().RemoveChild(numeric); });
+    numeric.SetRange(0, 1);
+    Check(!composite.Get(), "range validation callback may delete composite before clamping");
+    auto& reentrant = ui.Root().Add<TextBox>("1");
+    reentrant.SetValidator(std::make_shared<IntegerValidator>(-10, 10));
+    std::string observed;
+    reentrant.ValidationChanged().Connect(
+        [&](ValidationState state)
+        {
+            if (state == ValidationState::Intermediate)
+                reentrant.SetText("2");
+        });
+    reentrant.TextChanged().Connect([&](const std::string& text) { observed = text; });
+    reentrant.SetText("-");
+    Check(reentrant.GetText() == "2" && observed == "2",
+          "reentrant validation suppresses obsolete outer text notification");
+}
 } // namespace
 
 int main()
@@ -260,6 +408,9 @@ int main()
         NumericEditor(font);
         Sliders(font);
         Lifetimes(font);
+        StyledInputs(font);
+        StyledSliderMetrics(font);
+        ValidationLifetimes(font);
         std::cout << "Input controls PASS / " << s_Checks << " checks\n";
         return 0;
     }

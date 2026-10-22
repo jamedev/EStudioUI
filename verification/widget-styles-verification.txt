@@ -1,0 +1,4 @@
+Three compiled presets exercised using actual window input and framebuffer captures.
+Validated text, scalar synchronization, split command, context popup, list selection, tree expansion, table editing, canvas zoom, custom paint input and static OpenGL reuse passed.
+12,000 collection records; bounded visible-instance submission.
+Optional motion suspends when hidden; settled controls and surfaces submit zero GPU draw calls.

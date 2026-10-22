@@ -135,6 +135,12 @@ class Widget
     //! Returns computed CSS values.
     const Style& GetStyle() const;
 
+    //! Returns a fixed part's current presentation, or a shared part's default state.
+    const Style& GetPartStyle(std::string_view name) const;
+
+    //! Returns a precomputed shared state; lookup allocates nothing and evaluates no selectors.
+    const Style& GetPartStyle(std::string_view name, unsigned state) const;
+
     //! Returns the attached GUI context, or null when detached.
     UiContext* GetContext() const;
 
@@ -199,6 +205,13 @@ class Widget
     //! Requests painting without repeating style resolution or layout.
     void RequestRepaint();
 
+    //! Registers a named paint part with at most six varying state bits and optional fixed-part motion.
+    void RegisterStylePart(std::string name, unsigned stateMask, std::function<Style(const Style&, unsigned)> defaults,
+                           bool animated = false);
+
+    //! Selects a fixed part state; animated parts additionally inherit owner hover/pressed states.
+    void SetPartState(std::string_view name, unsigned state);
+
     //! Updates a pseudo-class flag and requests a frame.
     void SetState(unsigned flag, bool enabled);
 
@@ -216,6 +229,40 @@ class Widget
 
     //! Stores typed presentation overrides without modifying the stylesheet.
     std::map<StyleProperty, StyleValue> m_StyleOverrides;
+
+    //! Stores bounded style palettes rather than one widget or animation per collection item.
+    struct StylePart
+    {
+        //! CSS part name.
+        std::string m_Name;
+        //! Varying part states, excluding inherited owner states.
+        unsigned m_StateMask = 0;
+        //! Explicit active states for a fixed part.
+        unsigned m_State = 0;
+        //! Effective active states after owner-state inheritance.
+        unsigned m_ActiveState = 0;
+        //! Enables a single motion layer for this fixed part.
+        bool m_Animated = false;
+        //! Computes widget-specific defaults from current owner presentation and part state.
+        std::function<Style(const Style&, unsigned)> m_Defaults;
+        //! Dense state combinations in palette order.
+        std::vector<unsigned> m_States;
+        //! Precomputed shared variants for allocation-free painting.
+        std::vector<Style> m_Palette;
+        //! Matched typed declarations reused when owner presentation changes.
+        std::vector<std::function<void(Style&)>> m_Assignments;
+        //! Temporary whole-stylesheet animation overrides, shared by all items in each variant.
+        std::vector<std::map<StyleProperty, StyleValue>> m_Overrides;
+
+        //! Current animated fixed-part presentation.
+        Style m_Presentation;
+    };
+
+    //! Converts varying state flags into a dense palette index.
+    static std::size_t PartIndex(unsigned mask, unsigned state);
+
+    //! Owns at most 32 parts; stable indices map to motion layers starting at three.
+    std::vector<StylePart> m_StyleParts;
 
     //! Stores the last layout rectangle.
     Rect m_Bounds;

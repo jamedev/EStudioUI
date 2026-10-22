@@ -1,0 +1,37 @@
+Test project /dev/shm/estudioui-v08-sanitize
+      Start  1: Core
+      Start  2: WidgetsAndLayout
+ 1/16 Test  #1: Core .............................   Passed    0.40 sec
+      Start  3: Animation
+ 2/16 Test  #2: WidgetsAndLayout .................   Passed    0.47 sec
+      Start  4: RichCss
+ 3/16 Test  #3: Animation ........................   Passed    0.30 sec
+      Start  5: CanvasScene
+ 4/16 Test  #4: RichCss ..........................   Passed    1.23 sec
+      Start  6: CanvasGeometry
+ 5/16 Test  #5: CanvasScene ......................   Passed    2.14 sec
+      Start  7: SketchDocument
+ 6/16 Test  #6: CanvasGeometry ...................   Passed    1.27 sec
+      Start  8: CanvasWidget
+ 7/16 Test  #8: CanvasWidget .....................   Passed    0.27 sec
+      Start  9: InputControls
+ 8/16 Test  #9: InputControls ....................   Passed    0.38 sec
+      Start 10: SplitToolButton
+ 9/16 Test #10: SplitToolButton ..................   Passed    0.27 sec
+      Start 11: Painter
+10/16 Test #11: Painter ..........................   Passed    0.02 sec
+      Start 12: StyleParts
+11/16 Test #12: StyleParts .......................   Passed    1.54 sec
+      Start 13: StyledCollections
+12/16 Test #13: StyledCollections ................   Passed    0.30 sec
+      Start 14: StyledScroll
+13/16 Test #14: StyledScroll .....................   Passed    2.90 sec
+      Start 15: CompositeStyle
+14/16 Test #15: CompositeStyle ...................   Passed    0.26 sec
+      Start 16: GpuIntegration
+15/16 Test  #7: SketchDocument ...................   Passed   12.50 sec
+16/16 Test #16: GpuIntegration ...................   Passed   18.04 sec
+
+100% tests passed out of 16
+
+Total Test time (real) =  26.98 sec

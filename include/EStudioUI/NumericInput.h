@@ -74,6 +74,9 @@ class NumericInput : public Widget
     //! Rebuilds the shared immutable numeric validation policy.
     void RefreshValidator();
 
+    //! Mirrors the embedded editor's validation state on the composed control.
+    void UpdateValidationState(ValidationState state);
+
     //! Observes the owned single-line editor.
     TextBox* m_Editor = nullptr;
 

@@ -6,12 +6,13 @@ namespace EStudioUI
 ToolBar::ToolBar() : Widget("toolbar")
 {
     SetLayoutDirection(Axis::Horizontal);
-    SetGap(6);
 }
 
 ToolButton& ToolBar::AddButton(std::string text)
 {
-    return Add<ToolButton>(std::move(text));
+    auto& button = Add<ToolButton>(std::move(text));
+    button.AddClass("toolbar-button");
+    return button;
 }
 
 SplitToolButton& ToolBar::AddSplitButton(std::string text)
@@ -22,7 +23,7 @@ SplitToolButton& ToolBar::AddSplitButton(std::string text)
 Widget& ToolBar::AddSeparator()
 {
     auto& separator = Add<Widget>("separator");
-    separator.SetWidth(SizeRule::Fixed(1));
+    separator.AddClass("toolbar-separator");
     separator.SetHeight(SizeRule::Fill());
     return separator;
 }

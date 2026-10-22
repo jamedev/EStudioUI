@@ -70,6 +70,7 @@ WidgetGallery::WidgetGallery(Window& window, TabWidget& tabs, const std::filesys
     m_RichCss = std::make_unique<RichCssGallery>(window, tabs.AddTab("Rich CSS"));
     m_Sketch = std::make_unique<SketchGallery>(window, tabs.AddTab("Sketcher"));
     m_CustomWidgets = std::make_unique<CustomWidgetGallery>(window, tabs.AddTab("Custom widgets"));
+    m_WidgetStyles = std::make_unique<WidgetStylesGallery>(window, tabs.AddTab("Widget styles"), assets);
 }
 
 void WidgetGallery::BuildCollections(Widget& page)
@@ -417,7 +418,9 @@ void WidgetGallery::Verify(const std::filesystem::path& assets, const std::files
     m_Sketch->Verify(assets, output);
     m_Tabs.SetCurrentIndex(7);
     m_CustomWidgets->Verify(output);
-    m_Window.RenderFrame();
+    m_Tabs.SetCurrentIndex(8);
+    m_WidgetStyles->Verify(assets, output);
+    m_Window.RenderFrame(ui.GetTime());
     std::ofstream report(output / "widgets-report.txt");
     report << "EStudioUI 0.3 widget integration: PASS\n"
            << "Real renderer captures: dark/light collections, table editor, popup menu, two 3D scenes, three layout "

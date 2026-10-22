@@ -11,6 +11,33 @@ namespace EStudioUI
 {
 TableWidget::TableWidget() : ScrollWidget("tablewidget")
 {
+    RegisterStylePart("cell", Hover | Pressed | Selected | Alternate,
+                      [](const Style& owner, unsigned state)
+                      {
+                          Style part;
+                          part.m_Background = state & Selected    ? owner.m_SelectionBackground
+                                              : state & Hover     ? owner.m_HoverBackground
+                                              : state & Alternate ? owner.m_AlternateBackground
+                                                                  : Color{0, 0, 0, 0};
+                          part.m_Color = state & Selected ? owner.m_SelectionColor : owner.m_Color;
+                          part.m_FontSize = owner.m_FontSize;
+                          part.m_TextAlign = owner.m_TextAlign;
+                          part.m_Padding = {0, 8, 0, 8};
+                          part.m_GridColor = owner.m_GridColor;
+                          return part;
+                      });
+    RegisterStylePart("header", Hover | Pressed | Selected | Sorted,
+                      [](const Style& owner, unsigned)
+                      {
+                          Style part;
+                          part.m_Background = owner.m_HeaderBackground;
+                          part.m_Color = owner.m_Color;
+                          part.m_FontSize = owner.m_FontSize;
+                          part.m_TextAlign = owner.m_TextAlign;
+                          part.m_Padding = {0, 8, 0, 8};
+                          part.m_GridColor = owner.m_GridColor;
+                          return part;
+                      });
     m_Editor = &Add<TextBox>();
     m_Editor->AddClass("cell-editor");
     m_Editor->SetVisible(false);
@@ -33,6 +60,9 @@ void TableWidget::SetColumns(std::vector<TableColumn> columns)
     m_ContentFontSize = -1;
     m_SortColumn = -1;
     m_ResizeColumn = -1;
+    m_HoverRow = m_HoverColumn = m_HoverHeader = -1;
+    m_PressedRow = m_PressedColumn = m_PressedHeader = -1;
+    SetState(Pressed, false);
     const bool changed = m_CurrentRow != -1;
     m_CurrentRow = m_CurrentColumn = -1;
     SetScrollOffset({});
@@ -55,6 +85,9 @@ void TableWidget::SetRows(std::vector<std::vector<std::string>> rows)
     m_ContentFontSize = -1;
     m_SortColumn = -1;
     m_ResizeColumn = -1;
+    m_HoverRow = m_HoverColumn = m_HoverHeader = -1;
+    m_PressedRow = m_PressedColumn = m_PressedHeader = -1;
+    SetState(Pressed, false);
     const bool changed = m_CurrentRow != -1;
     m_CurrentRow = m_CurrentColumn = -1;
     SetScrollOffset({});
@@ -166,6 +199,7 @@ void TableWidget::SortByColumn(int column, bool ascending)
 void TableWidget::SetEditable(bool editable)
 {
     m_Editable = editable;
+    SetState(ReadOnly, !editable);
     if (!editable)
         CancelEdit();
 }
@@ -186,7 +220,13 @@ void TableWidget::SetColumnWidth(int column, float pixels)
 
 std::vector<float> TableWidget::GetColumnWidths() const
 {
-    if (m_ContentFontSize != GetStyle().m_FontSize || m_ContentWidths.size() != m_Columns.size())
+    const auto& cell = GetPartStyle("cell", 0);
+    const auto& header = GetPartStyle("header", 0);
+    const float cellInset = cell.m_Padding.m_Left + cell.m_Padding.m_Right + 2 * cell.m_BorderWidth;
+    const float headerInset = header.m_Padding.m_Left + header.m_Padding.m_Right + 2 * header.m_BorderWidth;
+    if (m_ContentFontSize != cell.m_FontSize || m_ContentHeaderFontSize != header.m_FontSize ||
+        m_ContentCellInset != cellInset || m_ContentHeaderInset != headerInset ||
+        m_ContentWidths.size() != m_Columns.size())
     {
         m_ContentWidths.assign(m_Columns.size(), 0);
         for (std::size_t i = 0; i < m_Columns.size(); ++i)
@@ -194,12 +234,17 @@ std::vector<float> TableWidget::GetColumnWidths() const
             if (m_Columns[i].m_Size.m_Mode != SizeRule::Mode::Content || !GetContext())
                 continue;
             auto& font = GetContext()->GetFont();
-            float width = font.Shape(m_Columns[i].m_Title, GetStyle().m_FontSize).m_Width + 32;
+            const float sortWidth =
+                std::max(font.Shape(" ↑", header.m_FontSize).m_Width, font.Shape(" ↓", header.m_FontSize).m_Width);
+            float width = font.Shape(m_Columns[i].m_Title, header.m_FontSize).m_Width + headerInset + sortWidth;
             for (const auto& row : m_Rows)
-                width = std::max(width, font.Shape(row[i], GetStyle().m_FontSize).m_Width + 16);
+                width = std::max(width, font.Shape(row[i], cell.m_FontSize).m_Width + cellInset);
             m_ContentWidths[i] = width;
         }
-        m_ContentFontSize = GetStyle().m_FontSize;
+        m_ContentFontSize = cell.m_FontSize;
+        m_ContentHeaderFontSize = header.m_FontSize;
+        m_ContentCellInset = cellInset;
+        m_ContentHeaderInset = headerInset;
     }
     std::vector<LayoutItem> items;
     for (std::size_t i = 0; i < m_Columns.size(); ++i)
@@ -328,6 +373,23 @@ int TableWidget::ColumnAt(Point point) const
     return -1;
 }
 
+int TableWidget::RowAt(Point point) const
+{
+    const auto viewport = GetViewport();
+    if (!viewport.Contains(point))
+        return -1;
+    const int row = static_cast<int>((point.m_Y - viewport.m_Y + GetScrollOffset().m_Y) / GetStyle().m_RowHeight);
+    return row < GetRowCount() ? row : -1;
+}
+
+int TableWidget::HeaderAt(Point point) const
+{
+    const auto viewport = GetViewport();
+    if (point.m_Y < GetContentBounds().m_Y || point.m_Y >= viewport.m_Y)
+        return -1;
+    return ColumnAt(point);
+}
+
 void TableWidget::OnLayout()
 {
     if (m_EditRow >= 0)
@@ -346,8 +408,16 @@ void TableWidget::Paint(Renderer& renderer, FontFace& font, double time, float o
     const int first = std::max(0, static_cast<int>(offset.m_Y / style.m_RowHeight));
     const int last =
         std::min(GetRowCount(), static_cast<int>(std::ceil((offset.m_Y + viewport.m_Height) / style.m_RowHeight)));
-    auto grid = style.m_GridColor;
-    grid.m_A *= opacity;
+    const auto pointer = IsHovered() && GetContext() ? GetContext()->GetPointerPosition() : std::optional<Point>{};
+    const Point position = pointer ? GetContext()->ToLayoutPoint(*this, *pointer) : m_HoverPosition;
+    m_HoverRow = IsHovered() ? RowAt(position) : -1;
+    m_HoverColumn = m_HoverRow >= 0 ? ColumnAt(position) : -1;
+    m_HoverHeader = IsHovered() ? HeaderAt(position) : -1;
+    renderer.PushState();
+    if (style.m_ClipContent)
+        renderer.PushClip(GetBounds(), style.m_Radius);
+    renderer.PushState();
+    renderer.PushClip(clip);
     for (int row = first; row < last; ++row)
     {
         float x = viewport.m_X - offset.m_X;
@@ -355,37 +425,88 @@ void TableWidget::Paint(Renderer& renderer, FontFace& font, double time, float o
         {
             const Rect cell{x, viewport.m_Y + static_cast<float>(row) * style.m_RowHeight - offset.m_Y, widths[column],
                             style.m_RowHeight};
-            const bool selected = row == m_CurrentRow && static_cast<int>(column) == m_CurrentColumn;
-            auto background = selected  ? style.m_SelectionBackground
-                              : row % 2 ? style.m_AlternateBackground
-                                        : Color{0, 0, 0, 0};
-            background.m_A *= opacity;
-            renderer.DrawSolid(cell, background, clip);
-            auto color = selected ? style.m_SelectionColor : style.m_Color;
-            color.m_A *= opacity;
-            DrawRowText(renderer, font, m_Rows[static_cast<std::size_t>(row)][column], cell, color, clip);
+            x += widths[column];
+            if (cell.m_X >= viewport.m_X + viewport.m_Width)
+                break;
+            if (cell.m_X + cell.m_Width <= viewport.m_X)
+                continue;
+            unsigned state = row % 2 ? static_cast<unsigned>(Alternate) : 0u;
+            if (row == m_CurrentRow && static_cast<int>(column) == m_CurrentColumn)
+                state |= Selected;
+            if (row == m_HoverRow && static_cast<int>(column) == m_HoverColumn)
+                state |= Hover;
+            if (row == m_PressedRow && static_cast<int>(column) == m_PressedColumn)
+                state |= Pressed;
+            const auto& part = GetPartStyle("cell", state);
+            if (!part.m_Displayed || part.m_Opacity <= 0)
+                continue;
+            const auto identity = ((static_cast<std::uint64_t>(row) + 1) << 32) | (column + 1);
+            renderer.PushState(part.m_Transform.Resolve(cell));
+            renderer.SetWidgetPaint(cell, clip, nullptr, false, 0);
+            renderer.SetPaintIdentity(reinterpret_cast<std::uintptr_t>(&m_Rows), identity);
+            renderer.DrawBox(cell, part, clip, opacity * part.m_Opacity);
+            if (part.m_ClipContent)
+                renderer.PushClip(cell, part.m_Radius);
+            DrawRowText(renderer, font, m_Rows[static_cast<std::size_t>(row)][column], cell, part, cell,
+                        opacity * part.m_Opacity);
+            auto grid = part.m_GridColor;
+            grid.m_A *= opacity * part.m_Opacity;
+            renderer.SetPaintIdentity(reinterpret_cast<std::uintptr_t>(&m_Widths), identity);
             renderer.DrawSolid({cell.m_X + cell.m_Width - 1, cell.m_Y, 1, cell.m_Height}, grid, clip);
             renderer.DrawSolid({cell.m_X, cell.m_Y + cell.m_Height - 1, cell.m_Width, 1}, grid, clip);
-            x += widths[column];
+            renderer.PopState();
         }
     }
+    renderer.PopState();
     const Rect header{viewport.m_X, GetContentBounds().m_Y, viewport.m_Width, style.m_RowHeight};
     const auto headerClip = GetClip().Intersect(header);
-    auto background = style.m_HeaderBackground;
-    background.m_A *= opacity;
-    renderer.DrawSolid(header, background, headerClip);
+    renderer.PushState();
+    renderer.PushClip(headerClip);
     float x = header.m_X - offset.m_X;
-    auto color = style.m_Color;
-    color.m_A *= opacity;
     for (std::size_t i = 0; i < widths.size(); ++i)
     {
         const Rect cell{x, header.m_Y, widths[i], header.m_Height};
-        const auto title =
-            m_Columns[i].m_Title + (static_cast<int>(i) == m_SortColumn ? (m_Ascending ? " ↑" : " ↓") : "");
-        DrawRowText(renderer, font, title, cell, color, headerClip);
-        renderer.DrawSolid({x + widths[i] - 1, header.m_Y, 1, header.m_Height}, grid, headerClip);
         x += widths[i];
+        if (cell.m_X >= header.m_X + header.m_Width)
+            break;
+        if (cell.m_X + cell.m_Width <= header.m_X)
+            continue;
+        unsigned state = static_cast<int>(i) == m_SortColumn ? static_cast<unsigned>(Sorted) : 0u;
+        if (static_cast<int>(i) == m_CurrentColumn)
+            state |= Selected;
+        if (static_cast<int>(i) == m_HoverHeader)
+            state |= Hover;
+        if (static_cast<int>(i) == m_PressedHeader)
+            state |= Pressed;
+        const auto& part = GetPartStyle("header", state);
+        if (!part.m_Displayed || part.m_Opacity <= 0)
+            continue;
+        const auto title = m_Columns[i].m_Title + (state & Sorted ? (m_Ascending ? " ↑" : " ↓") : "");
+        renderer.PushState(part.m_Transform.Resolve(cell));
+        renderer.SetWidgetPaint(cell, headerClip, nullptr, false, 0);
+        renderer.SetPaintIdentity(reinterpret_cast<std::uintptr_t>(&m_Columns), i + 1);
+        renderer.DrawBox(cell, part, headerClip, opacity * part.m_Opacity);
+        if (part.m_ClipContent)
+            renderer.PushClip(cell, part.m_Radius);
+        DrawRowText(renderer, font, title, cell, part, cell, opacity * part.m_Opacity);
+        auto grid = part.m_GridColor;
+        grid.m_A *= opacity * part.m_Opacity;
+        renderer.SetPaintIdentity(reinterpret_cast<std::uintptr_t>(&m_Widths), i + 1);
+        renderer.DrawSolid({cell.m_X + cell.m_Width - 1, header.m_Y, 1, header.m_Height}, grid, headerClip);
+        renderer.PopState();
     }
+    // Fill any header space left by capped/fixed columns without compositing fills twice.
+    if (x < header.m_X + header.m_Width)
+    {
+        const Rect remainder{std::max(x, header.m_X), header.m_Y, header.m_X + header.m_Width - std::max(x, header.m_X),
+                             header.m_Height};
+        const auto& part = GetPartStyle("header", 0);
+        renderer.SetPaintIdentity(reinterpret_cast<std::uintptr_t>(&m_ContentHeaderFontSize));
+        if (part.m_Displayed && part.m_Opacity > 0)
+            renderer.DrawBox(remainder, part, headerClip, opacity * part.m_Opacity);
+    }
+    renderer.PopState();
+    renderer.PopState();
     PaintScrollBars(renderer, opacity);
 }
 
@@ -396,8 +517,10 @@ void TableWidget::OnPointerDown(const PointerEvent& event)
     const int column = ColumnAt(event.m_Position);
     if (column < 0)
         return;
-    if (event.m_Position.m_Y >= GetContentBounds().m_Y && event.m_Position.m_Y < GetViewport().m_Y)
+    if (HeaderAt(event.m_Position) >= 0)
     {
+        m_PressedHeader = column;
+        SetState(Pressed, true);
         const auto widths = GetColumnWidths();
         float x = GetViewport().m_X - GetScrollOffset().m_X;
         for (std::size_t i = 0; i < widths.size(); ++i)
@@ -415,12 +538,12 @@ void TableWidget::OnPointerDown(const PointerEvent& event)
             SortByColumn(column, m_SortColumn != column || !m_Ascending);
         return;
     }
-    if (!GetViewport().Contains(event.m_Position))
+    const int row = RowAt(event.m_Position);
+    if (row < 0)
         return;
-    const int row =
-        static_cast<int>((event.m_Position.m_Y - GetViewport().m_Y + GetScrollOffset().m_Y) / GetStyle().m_RowHeight);
-    if (row >= GetRowCount())
-        return;
+    m_PressedRow = row;
+    m_PressedColumn = column;
+    SetState(Pressed, true);
     const WidgetRef self(this);
     SetCurrentCell(row, column);
     if (self.Get() && event.m_Clicks == 2 && row < GetRowCount() && column < GetColumnCount())
@@ -429,6 +552,17 @@ void TableWidget::OnPointerDown(const PointerEvent& event)
 
 void TableWidget::OnPointerMove(const PointerEvent& event)
 {
+    m_HoverPosition = event.m_Position;
+    const int row = RowAt(event.m_Position);
+    const int column = row >= 0 ? ColumnAt(event.m_Position) : -1;
+    const int header = HeaderAt(event.m_Position);
+    if (row != m_HoverRow || column != m_HoverColumn || header != m_HoverHeader)
+    {
+        m_HoverRow = row;
+        m_HoverColumn = column;
+        m_HoverHeader = header;
+        RequestRepaint();
+    }
     if (m_ResizeColumn >= 0)
         SetColumnWidth(m_ResizeColumn, std::max(24.0f, m_ResizeWidth + event.m_Position.m_X - m_ResizeOrigin));
     else
@@ -438,12 +572,16 @@ void TableWidget::OnPointerMove(const PointerEvent& event)
 void TableWidget::OnPointerUp(const PointerEvent& event)
 {
     m_ResizeColumn = -1;
+    m_PressedRow = m_PressedColumn = m_PressedHeader = -1;
+    SetState(Pressed, false);
     ScrollWidget::OnPointerUp(event);
 }
 
 void TableWidget::OnCaptureLost()
 {
     m_ResizeColumn = -1;
+    m_PressedRow = m_PressedColumn = m_PressedHeader = -1;
+    SetState(Pressed, false);
     ScrollWidget::OnCaptureLost();
 }
 

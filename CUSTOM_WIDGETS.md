@@ -1,5 +1,10 @@
 # Custom widgets and GPU painting
 
+Custom controls can register named CSS paint parts with `RegisterStylePart` and
+read their cached typed styles through `GetPartStyle`. See
+[WIDGET_STYLING.md](WIDGET_STYLING.md) for an example, supported state bits, and
+the distinction between shared static parts and fixed animated parts.
+
 EStudioUI supports both ordinary C++ inheritance and composition. `Widget`,
 `Label`, `Button`, `TextBox`, `NumericInput`, and `Slider` are extension points.
 Use `PaintWidget` when a control also needs its own vector drawing. Its

@@ -22,6 +22,9 @@ class CssMotion
     //! Updates a target's underlying style and returns its current presentation.
     const Style& Resolve(Widget& widget, int layer, Style base, const StyleSheet& sheet);
 
+    //! Replaces a layer's underlying paint defaults without recompiling its tracks or selectors.
+    const Style& Rebase(Widget& widget, int layer, Style base);
+
     //! Advances cached tracks without evaluating CSS selectors or layout.
     void Update(double time);
 
