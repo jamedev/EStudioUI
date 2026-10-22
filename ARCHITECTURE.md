@@ -16,6 +16,8 @@ without exposing third-party types in its public widget headers.
 | `State`, `StateStore`, `Binding` | Typed snapshots, validated coherent revisions, savepoints, control synchronization and reconciliation |
 | `Action`, `ActionState`, `Shortcut` | Transactional command presentation, lifetime-bound worker handles, scoped gesture precedence and ambiguity handling |
 | `InputEvent`, `PopupSession` | Owning native-independent payloads, thread-local input boundaries, bounded asynchronous popup/modal results |
+| `PlatformServices`, `ClipboardData`, `FileDialogSession`, `WindowMetrics` | Injectable native capabilities, owned transfers, asynchronous results, logical/physical coordinate mapping |
+| `SemanticTree`, `SemanticInfo` | Lazy lifetime-unique actual-widget index, logical popup hierarchy, pure on-demand queries, canonical actions and initial Windows UI Automation |
 | `UiContext` | Widget tree, CSS resolution, constrained measurement, strategy allocation, clipping, focus, capture |
 | `Widget`, `Label`, `Button`, `TextBox` | Owned model, cached shaping, behavior, emitted signals |
 | `SizeRule`, `Layout` | Fixed/content/fill contracts and shared bounded weighted distribution |
@@ -31,6 +33,24 @@ without exposing third-party types in its public widget headers.
 | `TextBuffer` | Valid UTF-8, grapheme/word navigation, selection, bounded undo/redo |
 | `FontFace` | HarfBuzz shaping, FreeType outline decoding, CPU geometry cache |
 | `Renderer` | One ordered instance stream, analytic shape and Slug-derived text shaders |
+
+## Native-service and semantic lifetime
+
+Platform services share the context's bounded dispatcher. Windows picker workers
+own copied options/results and one COM STA; a reserved completion slot survives
+queue overload. Cancellation settles the logical session before native unwind.
+Window/adaptor retirement retains HWND/GLFW resources while native work remains,
+without joining an active picker on an ordinary owner turn. Manual hosts retain
+their native owner/context until HasPendingPlatformWork becomes false.
+
+Semantics index actual widgets lazily, use lifetime-unique IDs and weak references,
+and query current metadata/last-prepared transformed bounds without preparing a
+frame. Custom metadata hooks run in the inspection phase. Canonical actions use
+the existing input/focus/validator path; native COM-thread requests cross typed
+owner handles with bounded waits. Initial UI Automation change reporting keeps a
+bounded observation set and skips semantic scans without native listeners.
+Composition, virtual collection children and full native readiness remain open;
+see [PLATFORM.md](PLATFORM.md).
 
 ## Frame and cache behavior
 

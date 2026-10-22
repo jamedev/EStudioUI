@@ -20,6 +20,20 @@ packaging are deferred until that use informs reusable boundaries, including
 services for applications without a UI. Standalone modules are planned, not
 current package capabilities; see the roadmaps for acceptance criteria.
 
+## Native services and widget semantics (0.15, initial F11 increment)
+
+Use the **Platform services** header button for a working clipboard, asynchronous
+file/folder picker, file-drop, owned-window and semantic-inspection gallery.
+Windows adds real rich clipboard formats, native STA pickers and an initial
+UI Automation bridge for basic widget actions. Headless adapters are deterministic;
+capabilities explicitly distinguish native, emulated and unsupported services.
+See [PLATFORM.md](PLATFORM.md), the compiled
+[platform example](examples/PlatformServices.cpp), and
+[verification](verification/PLATFORM_0_15.md). No new third-party dependency.
+
+F11 remains in progress: IME/composition with F10a, virtualized collection semantics
+and broader native accessibility/DPI evidence are still pending. Gate B stays open.
+
 ## Shared actions, input, focus, and popup sessions (0.14)
 
 The 0.14.1 maintenance update fixes retained secondary windows staying visible
@@ -48,7 +62,7 @@ remains usable from input handlers while nested frames/event pumping are guarded
 
 See [INPUT.md](INPUT.md), the compiled [input example](examples/InputActions.cpp),
 and [0.14 verification](verification/INPUT_0_14.md) for APIs and measured limits.
-F11 accessibility/platform services and F10a native composition remain pending.
+The initial F11 services are described above; F10a native composition remains pending.
 
 ![Shared actions and nested modal content rendered by EStudioUI](verification/input-foundation.png)
 

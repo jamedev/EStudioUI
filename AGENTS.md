@@ -96,3 +96,14 @@
   queue/frame traversal, and preserve CSS/intrinsic caches on viewport changes.
   Verify actual intermediate framebuffer pixels and the separate Windows SC_SIZE
   modal-loop probe; neither software GL nor CPU probes establish hardware 60 FPS.
+
+- Use PlatformServices and owned clipboard/picker/drop values for native integration.
+  Preserve explicit Native/Emulated/Unsupported capabilities, reserved completion
+  delivery under overload, owner-side sessions, and nonblocking native retirement.
+  Keep a native picker owner alive until its STA has unwound; no nested framework loop.
+- Accessibility uses lazy SemanticTree identities, logical popup ancestry, canonical
+  control actions and transformed/DPI bounds. Keep custom metadata hooks pure,
+  direct access owner-only, native provider requests dispatcher-bound, and query/event
+  work bounded. No per-frame full-tree rebuild or per-collection-row widget expansion.
+  Run actual Windows probes separately from injected services and record remaining
+  composition, virtual semantic children, real AT and mixed-monitor evidence honestly.

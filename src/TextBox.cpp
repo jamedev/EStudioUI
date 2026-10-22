@@ -10,6 +10,7 @@ namespace EStudioUI
 {
 TextBox::TextBox(std::string text) : Widget("textbox")
 {
+    SetCursor(CursorShape::Text);
     RegisterStylePart("selection", 0,
                       [](const Style& owner, unsigned)
                       {

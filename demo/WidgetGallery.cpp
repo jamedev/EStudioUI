@@ -78,6 +78,21 @@ WidgetGallery::WidgetGallery(Window& window, TabWidget& tabs, const std::filesys
     m_ConstraintPage = WidgetRef(&constraintsPage);
     m_Constraints = std::make_unique<ConstraintGallery>(window, constraintsPage);
     m_Input = std::make_unique<InputGallery>(window, tabs.AddTab("Input & actions"));
+    auto& platformPage = tabs.AddTab("Platform");
+    m_Platform = std::make_unique<PlatformGallery>(window, platformPage, assets);
+    if (auto* header = window.Ui().Root().FindById("themes"))
+        header->Add<Button>("Platform services")
+            .Clicked()
+            .Connect(
+                [this, page = WidgetRef(&platformPage)]
+                {
+                    for (int index = 0; index < m_Tabs.GetTabCount(); ++index)
+                        if (&m_Tabs.GetPage(index) == page.Get())
+                        {
+                            m_Tabs.SetCurrentIndex(index);
+                            break;
+                        }
+                });
 }
 
 void WidgetGallery::BuildCollections(Widget& page)
@@ -455,6 +470,7 @@ void WidgetGallery::Verify(const std::filesystem::path& assets, const std::files
     m_Tabs.SetCurrentIndex(13);
     m_Window.RenderFrame(ui.GetTime());
     m_Input->Verify(assets, output);
+    m_Platform->Verify(output);
     m_Window.RenderFrame(ui.GetTime());
     std::ofstream report(output / "widgets-report.txt");
     report << "EStudioUI 0.3 widget integration: PASS\n"

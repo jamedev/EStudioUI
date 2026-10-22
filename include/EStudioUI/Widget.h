@@ -1,6 +1,7 @@
 #pragma once
 
 #include "InputEvent.h"
+#include "SemanticTypes.h"
 #include "Shortcut.h"
 
 #include "Signal.h"
@@ -29,6 +30,7 @@ class CssMotion;
 class FontFace;
 class Renderer;
 class Action;
+class SemanticTree;
 
 namespace Detail
 {
@@ -163,6 +165,21 @@ class Widget
     //! Requests a context menu; right-click and the Menu key bubble to listeners.
     Signal<Point>& ContextMenuRequested();
 
+    //! Enables native file-drop delivery for this widget; events bubble through eligible ancestors.
+    void SetAcceptDrops(bool accept);
+
+    //! Returns whether this widget accepts file-drop events.
+    bool AcceptsDrops() const;
+
+    //! Delivers owned file-drop values after opt-in acceptance.
+    Signal<const FileDropEvent&>& FilesDropped();
+
+    //! Sets a pointer shape; nullopt inherits the nearest logical ancestor's choice.
+    void SetCursor(std::optional<CursorShape> shape);
+
+    //! Returns this widget's explicit pointer shape, or nullopt for inheritance.
+    std::optional<CursorShape> GetCursor() const;
+
     //! Returns whether this widget currently owns keyboard focus.
     bool IsFocused() const;
 
@@ -211,8 +228,18 @@ class Widget
     //! Finds a descendant, including this node, by CSS identifier.
     Widget* FindById(const std::string& id);
 
+    //! Overrides the accessible name; nullopt restores the control's caption/default.
+    void SetAccessibleName(std::optional<std::string> name);
+
+    //! Overrides the accessible explanation; nullopt restores the control default.
+    void SetAccessibleDescription(std::optional<std::string> description);
+
+    //! Overrides the logical role; custom controls also override their metadata/action hooks.
+    void SetAccessibleRole(std::optional<SemanticRole> role);
+
   protected:
     friend class UiContext;
+    friend class SemanticTree;
     friend class WidgetRef;
     friend class ConstraintItem;
     friend class Detail::BindingAccess;
@@ -222,6 +249,12 @@ class Widget
 
     //! Retains containing window services across callbacks without retaining this widget.
     std::shared_ptr<void> RetainOwner() const;
+
+    //! Returns owned accessibility metadata; this inspection hook must not mutate UI or shared state.
+    virtual SemanticInfo DescribeSemantics() const;
+
+    //! Performs one advertised canonical interaction; observers may safely delete this control.
+    virtual SemanticStatus OnSemanticAction(const SemanticCommand& command);
 
     //! Returns intrinsic content size before padding, border, and explicit CSS.
     virtual Point Measure(FontFace& font) const;
@@ -304,6 +337,9 @@ class Widget
 
   private:
     friend class CssMotion;
+
+    //! Wakes an existing semantic client without invalidating GPU painting.
+    void NotifySemanticsChanged();
 
     //! Captures the owner before any widget state is initialized.
     ThreadAffinity m_Affinity;
@@ -500,6 +536,24 @@ class Widget
 
     //! Delivers application-owned popup requests.
     Signal<Point> m_ContextMenuRequested;
+
+    //! Explicit accessible name independent of CSS or caption text.
+    std::optional<std::string> m_AccessibleName;
+
+    //! Explicit accessible help independent of GPU paint records.
+    std::optional<std::string> m_AccessibleDescription;
+
+    //! Optional custom accessible control family.
+    std::optional<SemanticRole> m_AccessibleRole;
+
+    //! Opts this node into file-drop bubbling.
+    bool m_AcceptsDrops = false;
+
+    //! Overrides the inherited pointer shape without affecting layout.
+    std::optional<CursorShape> m_Cursor;
+
+    //! Delivers copied file-drop payloads through the ordinary signal boundary.
+    Signal<const FileDropEvent&> m_FilesDropped;
 };
 
 //! Observes a widget without extending its lifetime.

@@ -16,16 +16,22 @@ struct ApplicationWindow
 
     //! Requests closure while preserving callback stack lifetime.
     std::function<void()> m_Close;
+
+    //! Reports native workers that still depend on this registration's native resources.
+    std::function<bool()> m_HasPendingNativeWork;
 };
 
 //! Checks the process-wide native runtime owner before touching GLFW state.
 void VerifyApplicationAccess();
 
+//! Rejects new native windows while the runtime is shutting down.
+void VerifyWindowCreation();
+
 //! Adds a weak registration so ordinary Window ownership remains unchanged.
 void RegisterApplicationWindow(const std::shared_ptr<ApplicationWindow>& window);
 
 //! Retains native resources until the current callback or application traversal finishes.
-void RetireApplicationWindow(std::shared_ptr<void> window);
+void RetireApplicationWindow(std::shared_ptr<void> window, std::function<bool()> ready = {});
 
 //! Releases deferred resources only outside native callbacks and scheduler traversal.
 void FlushRetiredWindows();

@@ -3,6 +3,8 @@
 #include <EStudioUI/UiContext.h>
 #include <EStudioUI/CssMotion.h>
 #include <EStudioUI/Action.h>
+#include <EStudioUI/SemanticTree.h>
+#include <EStudioUI/ClipboardData.h>
 
 #include <algorithm>
 #include <bit>
@@ -29,6 +31,8 @@ Widget::~Widget()
         if (!m_Actions.empty())
             m_Context->UnregisterActions(*this);
         m_Context->ReleaseSelectorOwner(*this);
+        if (m_Context->m_Semantics)
+            m_Context->m_Semantics->Unregister(*this);
     }
     m_Lifetime.reset();
     m_LifetimeStop.request_stop();
@@ -66,7 +70,11 @@ void Widget::Attach(UiContext* context, Widget* parent)
         parent->VerifyAccess();
     if (m_Context && !m_Actions.empty())
         m_Context->UnregisterActions(*this);
+    if (m_Context && m_Context->m_Semantics)
+        m_Context->m_Semantics->Unregister(*this);
     m_Context = context;
+    if (m_Context && m_Context->m_Semantics)
+        m_Context->m_Semantics->Register(*this);
     m_Parent = parent;
     m_StyleDirty = m_SubtreeStyleDirty = m_DescendantStyleDirty = m_ArrangeDirty = true;
     m_IntrinsicValid = m_MeasureValid = false;
@@ -503,6 +511,13 @@ void Widget::OnKey(Key, bool, bool, Modifiers)
 bool Widget::OnInput(const InputEvent& event)
 {
     VerifyAccess();
+    if (const auto* drop = std::get_if<FileDropEvent>(&event))
+    {
+        if (!m_AcceptsDrops)
+            return false;
+        m_FilesDropped.Emit(*drop);
+        return true;
+    }
     if (const auto* key = std::get_if<KeyboardEvent>(&event))
         OnKey(key->m_Key, key->m_Down, key->m_Repeat, EditingModifiers(key->m_Modifiers));
     else if (const auto* text = std::get_if<TextInputEvent>(&event))
@@ -523,6 +538,42 @@ bool Widget::OnInput(const InputEvent& event)
     else if (const auto* wheel = std::get_if<ScrollEvent>(&event))
         return OnScroll(wheel->m_Delta, EditingModifiers(wheel->m_Modifiers));
     return true;
+}
+
+void Widget::SetAcceptDrops(bool accept)
+{
+    VerifyStructuralMutation();
+    m_AcceptsDrops = accept;
+}
+
+bool Widget::AcceptsDrops() const
+{
+    VerifyAccess();
+    return m_AcceptsDrops;
+}
+
+Signal<const FileDropEvent&>& Widget::FilesDropped()
+{
+    VerifyAccess();
+    return m_FilesDropped;
+}
+
+void Widget::SetCursor(std::optional<CursorShape> shape)
+{
+    VerifyStructuralMutation();
+    if (shape && (*shape < CursorShape::Arrow || *shape > CursorShape::NotAllowed))
+        throw std::invalid_argument("Invalid widget cursor shape.");
+    if (shape != m_Cursor)
+    {
+        m_Cursor = shape;
+        Invalidate(Invalidation::HitTest);
+    }
+}
+
+std::optional<CursorShape> Widget::GetCursor() const
+{
+    VerifyAccess();
+    return m_Cursor;
 }
 
 bool Widget::OnInputPreview(const InputEvent& event)
@@ -770,5 +821,44 @@ Widget* WidgetRef::Get() const
         return nullptr;
     ThreadAffinity::VerifyThread(m_OwnerThread, "WidgetRef::Get");
     return m_Lifetime.expired() ? nullptr : m_Widget;
+}
+} // namespace EStudioUI
+
+namespace EStudioUI
+{
+void Widget::SetAccessibleName(std::optional<std::string> name)
+{
+    VerifyStructuralMutation();
+    if (name)
+        ValidatePlatformText(*name);
+    m_AccessibleName = std::move(name);
+    NotifySemanticsChanged();
+}
+
+void Widget::SetAccessibleDescription(std::optional<std::string> description)
+{
+    VerifyStructuralMutation();
+    if (description)
+        ValidatePlatformText(*description);
+    m_AccessibleDescription = std::move(description);
+    NotifySemanticsChanged();
+}
+
+void Widget::SetAccessibleRole(std::optional<SemanticRole> role)
+{
+    VerifyStructuralMutation();
+    if (role && (*role < SemanticRole::Group || *role > SemanticRole::Canvas))
+        throw std::invalid_argument("Invalid accessible role.");
+    m_AccessibleRole = role;
+    NotifySemanticsChanged();
+}
+
+void Widget::NotifySemanticsChanged()
+{
+    if (m_Context && m_Context->m_Semantics)
+    {
+        m_Context->m_Semantics->Changed();
+        m_Context->m_Dispatcher.PostLatest("semantic-wake:" + std::to_string(m_Context->m_Root.m_TargetKey), [] {});
+    }
 }
 } // namespace EStudioUI

@@ -19,14 +19,36 @@ namespace
 {
 struct Runtime
 {
+    struct Retired
+    {
+        std::shared_ptr<void> m_Owner;
+        std::function<bool()> m_Ready;
+    };
+
     ThreadAffinity m_Affinity;
     std::vector<std::weak_ptr<Detail::ApplicationWindow>> m_Windows;
-    std::vector<std::shared_ptr<void>> m_Retired;
+    std::vector<Retired> m_Retired;
     std::size_t m_DispatchDepth = 0;
     bool m_Processing = false;
     bool m_Running = false;
     bool m_ExplicitApplication = false;
     bool m_Quit = false;
+    bool m_Flushing = false;
+    bool m_ClosingWindows = false;
+    bool m_ShuttingDown = false;
+
+    ~Runtime()
+    {
+        m_ShuttingDown = true;
+        CloseWindows();
+        while (HasNativeWork())
+        {
+            glfwPollEvents();
+            glfwWaitEventsTimeout(.01);
+            Detail::FlushRetiredWindows();
+        }
+        Detail::FlushRetiredWindows();
+    }
 
     std::vector<std::shared_ptr<Detail::ApplicationWindow>> Snapshot()
     {
@@ -50,8 +72,34 @@ struct Runtime
     void CloseWindows()
     {
         m_Quit = true;
+        if (m_ClosingWindows)
+            return;
+
+        struct Scope
+        {
+            bool& m_Active;
+
+            explicit Scope(bool& active) : m_Active(active)
+            {
+                m_Active = true;
+            }
+
+            ~Scope()
+            {
+                m_Active = false;
+            }
+        } closing(m_ClosingWindows);
+
         for (const auto& window : Snapshot())
             window->m_Close();
+    }
+
+    bool HasNativeWork()
+    {
+        for (const auto& window : Snapshot())
+            if (window->m_HasPendingNativeWork && window->m_HasPendingNativeWork())
+                return true;
+        return false;
     }
 
     double Process()
@@ -59,7 +107,7 @@ struct Runtime
         m_Affinity.VerifyAccess("Application event processing");
         if (m_Processing || m_DispatchDepth || Detail::IsDeliveringInput())
             throw std::logic_error("Application event processing cannot be nested inside a callback.");
-        if (OpenCount() == 0)
+        if (OpenCount() == 0 && !HasNativeWork())
         {
             Detail::FlushRetiredWindows();
             return -1;
@@ -110,26 +158,52 @@ void VerifyApplicationAccess()
     GetRuntime().m_Affinity.VerifyAccess("Native application access");
 }
 
+void VerifyWindowCreation()
+{
+    VerifyApplicationAccess();
+    if (GetRuntime().m_ShuttingDown || GetRuntime().m_ClosingWindows)
+        throw std::logic_error("A native window cannot be created while the application is closing its windows.");
+}
+
 void RegisterApplicationWindow(const std::shared_ptr<ApplicationWindow>& window)
 {
     VerifyApplicationAccess();
     GetRuntime().m_Windows.push_back(window);
 }
 
-void RetireApplicationWindow(std::shared_ptr<void> window)
+void RetireApplicationWindow(std::shared_ptr<void> window, std::function<bool()> ready)
 {
     VerifyApplicationAccess();
-    GetRuntime().m_Retired.push_back(std::move(window));
+    GetRuntime().m_Retired.push_back({std::move(window), std::move(ready)});
     FlushRetiredWindows();
 }
 
 void FlushRetiredWindows()
 {
     auto& state = GetRuntime();
-    if (state.m_DispatchDepth || state.m_Processing || state.m_Retired.empty())
+    if (state.m_DispatchDepth || state.m_Processing || state.m_Flushing || state.m_Retired.empty())
         return;
+
+    struct Scope
+    {
+        bool& m_Active;
+
+        explicit Scope(bool& active) : m_Active(active)
+        {
+            m_Active = true;
+        }
+
+        ~Scope()
+        {
+            m_Active = false;
+        }
+    } flushing(state.m_Flushing);
+
     auto retired = std::move(state.m_Retired);
     state.m_Retired.clear();
+    for (auto& entry : retired)
+        if (entry.m_Ready && !entry.m_Ready())
+            state.m_Retired.push_back(std::move(entry));
     retired.clear();
 }
 
@@ -223,10 +297,10 @@ int Application::RunWindows()
         }
     } running(state);
 
-    while (!state.m_Quit && state.OpenCount())
+    while ((!state.m_Quit && state.OpenCount()) || state.HasNativeWork())
     {
         const double deadline = state.Process();
-        if (state.m_Quit || state.OpenCount() == 0)
+        if ((state.m_Quit || state.OpenCount() == 0) && !state.HasNativeWork())
             break;
         if (deadline >= 0)
             glfwWaitEventsTimeout(std::max(0.0001, deadline - glfwGetTime()));
@@ -244,7 +318,7 @@ bool Application::ProcessEvents()
         throw std::logic_error(
             "Application event processing cannot run inside a state update; defer it until the update finishes.");
     GetRuntime().Process();
-    return GetRuntime().OpenCount() != 0;
+    return GetRuntime().OpenCount() != 0 || GetRuntime().HasNativeWork();
 }
 
 void Application::Quit()

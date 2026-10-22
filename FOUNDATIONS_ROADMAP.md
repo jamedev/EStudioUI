@@ -35,10 +35,10 @@ command history, geometry, and persistence; these are not promised modules or
 current standalone SDKs. Public API usability and supported extension points
 remain acceptance criteria throughout.
 
-## Implementation status: 0.14, input, actions, focus, and popup sessions
+## Implementation status: 0.15, initial platform and semantic services
 
 The 0.14.1 maintenance increment fixes retained native window closure, stable
-GPU capture after presentation, and MSVC conversion warnings before F11 begins.
+GPU capture after presentation, and MSVC conversion warnings before the initial F11 increment.
 Its regression evidence is in
 [verification/WINDOW_CAPTURE_0_14_1.md](verification/WINDOW_CAPTURE_0_14_1.md).
 
@@ -66,7 +66,8 @@ and its remaining platform limits.
 | F06 | Core implemented: typed external snapshot models, stable IDs, batched edits/structural changes, shared selection, prevalidated sort/filter chains, delegates, worker publication, bounded content sizing, and expanded-branch row maps; integration evidence recorded with 0.11 |
 | F08 | Implemented in 0.12: width-first constrained measurement, baselines and composition sources, shared box/grid/form/flow strategies, bounded caches, percentage-cycle fallback, owned child/track diagnostics; verification recorded below |
 | F09 | Implemented in 0.14: owning input payloads, rich native metadata, transactional shared actions and worker handles, scoped/ambiguity-safe shortcuts, local focus scopes, nested popup/modal sessions, menu nesting and phase/lifetime guards |
-| F11, F10a | Remaining Gate B work: platform/accessibility contracts and representative native services, and essential text/input for ordinary controls |
+| F11 | Initial 0.15 increment: injectable native services/capabilities, rich Windows clipboard, asynchronous native pickers, file drops, logical/DPI metrics, owned windows, lazy widget semantics and an initial UI Automation bridge; composition, virtualized providers and broader real accessibility/DPI evidence remain open |
+| F10a | Remaining Gate B work: essential control text/input, fallback and native composition integrated with F11 |
 | F10b, F12, F16 | Planned: later document editing, feature-driven resource hardening, and reusable history/workspace services |
 | F14 | Deferred until broad widget/workspace use informs reusable module extraction and SDK packaging; not a Gate B prerequisite |
 
@@ -108,6 +109,16 @@ was added. [verification/INPUT_0_14.md](verification/INPUT_0_14.md) records CPU,
 concurrency, framebuffer, and native-adapter evidence and remaining platform limits.
 Full font fallback/IME, semantic accessibility/native services, document editing,
 and deferred module packaging retain their F10a/F11/F10b/F14 scopes.
+
+**The initial F11 increment is implemented in 0.15.** [PLATFORM.md](PLATFORM.md)
+documents the service boundary, native capability matrix, asynchronous picker
+lifetime/overload behavior, lazy semantic tree and initial Windows UI Automation
+patterns. [examples/PlatformServices.cpp](examples/PlatformServices.cpp) is compiled
+with the ordinary demo. No new third-party runtime dependency was added.
+[verification/PLATFORM_0_15.md](verification/PLATFORM_0_15.md) records the evidence.
+F11 remains **in progress**: native composition with F10a, virtualized semantic
+children, remaining UIA events/patterns and real assistive-technology/mixed-DPI
+checks must be completed before broader readiness claims. Gate B remains open.
 
 ## Original assessment of the 0.8 implementation
 
@@ -316,7 +327,8 @@ Choose any solver dependency only after requirements and license review.
 
 The F09 portion is delivered in 0.14; the following pipeline requirements remain
 the design contract. Actual signatures, costs, native-adapter limits, and examples
-are in [INPUT.md](INPUT.md). The F11 semantic/platform portion remains planned.
+are in [INPUT.md](INPUT.md). The initial F11 platform/semantic increment is documented
+in [PLATFORM.md](PLATFORM.md); it does not close the full F11 gate.
 
 Define a stable event envelope separating committed text, logical shortcut keys,
 physical keys/scancodes, repeat, modifiers, timestamps, pointer identity/button,

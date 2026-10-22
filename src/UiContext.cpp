@@ -2,6 +2,8 @@
 #include <EStudioUI/Renderer.h>
 #include <EStudioUI/CssMotion.h>
 #include <EStudioUI/BoxLayout.h>
+#include <EStudioUI/MemoryPlatformServices.h>
+#include <EStudioUI/SemanticTree.h>
 
 #include <algorithm>
 #include <cmath>
@@ -39,6 +41,7 @@ UiContext::~UiContext()
     if (!IsOwnerThread() || m_Phase != UiPhase::Idle)
         std::terminate();
     m_Closing = true;
+    ClosePlatformServices();
     const auto popups = std::move(m_Popups);
     for (auto entry = popups.rbegin(); entry != popups.rend(); ++entry)
         entry->m_Session.Complete({PopupCloseReason::ContextClosed, 0});
@@ -64,6 +67,80 @@ void UiContext::SetOwnerLifetime(std::weak_ptr<void> owner)
     m_Dispatcher.SetOwnerLifetime(std::move(owner));
 }
 
+PlatformServices& UiContext::Platform()
+{
+    VerifyAccess();
+    if (!m_Platform)
+    {
+        auto services = std::make_unique<MemoryPlatformServices>(m_Dispatcher);
+        if (m_PlatformClosing || m_Closing)
+        {
+            services->Close();
+            m_Platform = std::move(services);
+        }
+        else
+            SetPlatformServices(std::move(services));
+    }
+    return *m_Platform;
+}
+
+void UiContext::SetPlatformServices(std::unique_ptr<PlatformServices> services)
+{
+    VerifyStructuralMutation();
+    const auto ownerLifetime = RetainOwner();
+    if (!services || m_PlatformClosing || m_Closing ||
+        services->GetDispatcher().GetStopToken() != m_Dispatcher.GetStopToken() || services->IsClosed())
+        throw std::invalid_argument("An active platform adapter must use this live context's dispatcher.");
+    if (m_RetiredPlatforms.size() >= 8 && m_Platform && m_Platform->HasPendingNativeWork())
+        throw std::length_error("This context already retains eight unwinding native adapters.");
+    services->SetOperationGuard(
+        [this]
+        {
+            VerifyDispatchPhase();
+            if (StateStore::IsUpdatingOnThisThread())
+                throw std::logic_error("Native services cannot observe a staged state transaction.");
+        },
+        m_OwnerLifetime);
+    auto previous = std::move(m_Platform);
+    m_Platform = std::move(services);
+    if (previous)
+    {
+        if (previous->HasPendingNativeWork())
+        {
+            auto* retiring = previous.get();
+            m_RetiredPlatforms.push_back(std::move(previous));
+            retiring->Close();
+        }
+        else
+            previous->Close();
+    }
+}
+
+void UiContext::ClosePlatformServices()
+{
+    VerifyAccess();
+    m_PlatformClosing = true;
+    if (m_Platform)
+        m_Platform->Close();
+}
+
+void UiContext::PumpPlatformServices()
+{
+    const auto ownerLifetime = RetainOwner();
+    VerifyTraversalEntry();
+    if (m_Platform)
+        m_Platform->Pump();
+    std::erase_if(m_RetiredPlatforms, [](const auto& services) { return !services->HasPendingNativeWork(); });
+}
+
+bool UiContext::HasPendingPlatformWork() const
+{
+    VerifyAccess();
+    return (m_Platform && m_Platform->HasPendingNativeWork()) ||
+           std::any_of(m_RetiredPlatforms.begin(), m_RetiredPlatforms.end(),
+                       [](const auto& services) { return services->HasPendingNativeWork(); });
+}
+
 std::shared_ptr<void> UiContext::RetainOwner() const
 {
     VerifyAccess();
@@ -74,6 +151,16 @@ UiDispatcher UiContext::GetDispatcher() const
 {
     VerifyAccess();
     return m_Dispatcher;
+}
+
+SemanticTree& UiContext::Semantics()
+{
+    VerifyTraversalEntry();
+    // Create platform defaults before entering pure semantic inspection hooks.
+    Platform();
+    if (!m_Semantics)
+        m_Semantics.reset(new SemanticTree(*this));
+    return *m_Semantics;
 }
 
 StateStore& UiContext::States()
@@ -133,6 +220,8 @@ Widget& UiContext::Root()
 void UiContext::Invalidate()
 {
     VerifyAccess();
+    if (m_Semantics)
+        m_Semantics->Changed();
     m_Dirty = true;
     m_FullStyleDirty = true;
     m_ResetMeasurements = true;
@@ -147,6 +236,8 @@ void UiContext::Invalidate(Widget& widget, Invalidation flags)
     VerifyAccess();
     if (flags == Invalidation::None)
         return;
+    if (m_Semantics)
+        m_Semantics->Changed();
     m_Repaint = true;
     if (HasInvalidation(flags, Invalidation::Selector | Invalidation::Structure))
     {

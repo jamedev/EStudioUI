@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.24)
-project(EStudioUI VERSION 0.14.1 LANGUAGES C CXX)
+project(EStudioUI VERSION 0.15.0 LANGUAGES C CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -85,6 +85,9 @@ add_library(EStudioUI STATIC
     src/Widget.cpp src/UiContext.cpp src/Label.cpp src/Button.cpp src/TextBox.cpp src/Window.cpp
     src/SizeRule.cpp src/Layout.cpp src/ToolButton.cpp src/ToolBar.cpp src/TabWidget.cpp
     src/InputEvent.cpp src/Shortcut.cpp src/Action.cpp src/PopupSession.cpp src/UiInput.cpp
+    src/SemanticTypes.cpp src/SemanticTree.cpp src/NativeAccessibility.cpp
+    src/PlatformTypes.cpp src/ClipboardData.cpp src/FileDialogSession.cpp src/PlatformServices.cpp src/MemoryPlatformServices.cpp
+    src/NativePlatformServices.cpp src/WindowsSupport.cpp src/WindowsClipboard.cpp src/WindowsFileDialog.cpp
     src/Measure.cpp src/LayoutStrategy.cpp src/BoxLayout.cpp src/GridLayout.cpp src/FormLayout.cpp src/FlowLayout.cpp
     src/ConstraintExpression.cpp src/Constraint.cpp src/ConstraintItem.cpp src/ConstraintLayout.cpp src/NativeResizePump.cpp
     src/ContextMenu.cpp src/ScrollWidget.cpp src/ListWidget.cpp src/TreeWidget.cpp src/TableWidget.cpp src/OpenGLWidget.cpp
@@ -103,7 +106,7 @@ target_compile_features(EStudioUI PUBLIC cxx_std_20)
 target_include_directories(EStudioUI PUBLIC include)
 target_include_directories(EStudioUI SYSTEM PRIVATE "${ESTUDIOUI_KIWI_INCLUDE_DIR}")
 if(WIN32)
-    target_link_libraries(EStudioUI PRIVATE comctl32)
+    target_link_libraries(EStudioUI PRIVATE comctl32 ole32 oleaut32 shell32 uuid uiautomationcore)
 endif()
 target_link_libraries(EStudioUI PRIVATE EStudioUIGl glfw Freetype::Freetype harfbuzz::harfbuzz ${ESTUDIOUI_UTF8PROC_TARGET})
 target_link_libraries(EStudioUI PUBLIC Threads::Threads)
@@ -123,12 +126,14 @@ if(ESTUDIOUI_BUILD_DEMO)
         demo/SketchGallery.cpp demo/CanvasPrimitiveProbe.cpp demo/CanvasProbe.cpp demo/CanvasCurvesProbe.cpp
         demo/CustomWidgetGallery.cpp demo/PainterProbe.cpp demo/InputControlsProbe.cpp
         demo/WidgetStylesGallery.cpp demo/WidgetStylesProbe.cpp demo/ApplicationProbe.cpp demo/FoundationGallery.cpp
-        demo/StateGallery.cpp demo/ModelGallery.cpp demo/LayoutGallery.cpp demo/ConstraintGallery.cpp demo/InputGallery.cpp)
+        demo/StateGallery.cpp demo/ModelGallery.cpp demo/LayoutGallery.cpp demo/ConstraintGallery.cpp demo/InputGallery.cpp demo/PlatformGallery.cpp)
     target_link_libraries(EStudioUIDemo PRIVATE EStudioUI::EStudioUI EStudioUIGl glfw)
     add_executable(EStudioUIConstraintExample examples/ConstraintLayout.cpp)
     target_link_libraries(EStudioUIConstraintExample PRIVATE EStudioUI::EStudioUI)
     add_executable(EStudioUIInputExample examples/InputActions.cpp)
     target_link_libraries(EStudioUIInputExample PRIVATE EStudioUI::EStudioUI)
+    add_executable(EStudioUIPlatformExample examples/PlatformServices.cpp)
+    target_link_libraries(EStudioUIPlatformExample PRIVATE EStudioUI::EStudioUI)
     if(MSVC)
         target_compile_options(EStudioUIDemo PRIVATE /utf-8)
     endif()
@@ -199,7 +204,7 @@ if(ESTUDIOUI_BUILD_TESTS)
     foreach(suite CanvasScene CanvasGeometry SketchDocument CanvasWidget InputControls SplitToolButton Painter
                   StyleParts StyledCollections StyledScroll CompositeStyle
                   Dispatch ThreadAffinity Task QueuedSignal ControlAffinity ServiceAffinity
-                  State Binding Invalidation ControlUpdate Model ModelView Layout ConstraintLayout InputFoundation ActionDomain)
+                  State Binding Invalidation ControlUpdate Model ModelView Layout ConstraintLayout InputFoundation ActionDomain Platform Semantic)
         add_executable(EStudioUI${suite}Tests tests/${suite}Tests.cpp)
         target_link_libraries(EStudioUI${suite}Tests PRIVATE EStudioUI::EStudioUI)
         target_compile_definitions(EStudioUI${suite}Tests PRIVATE
@@ -211,6 +216,16 @@ if(ESTUDIOUI_BUILD_TESTS)
     endforeach()
 
     if(WIN32)
+        add_executable(EStudioUINativePlatformTests tests/NativePlatformTests.cpp)
+        target_include_directories(EStudioUINativePlatformTests PRIVATE src)
+        target_link_libraries(EStudioUINativePlatformTests PRIVATE EStudioUI::EStudioUI uiautomationcore ole32 oleaut32 uuid)
+        target_compile_definitions(EStudioUINativePlatformTests PRIVATE
+            ESTUDIOUI_FONT_PATH="${CMAKE_CURRENT_SOURCE_DIR}/third_party/fonts/NotoSans.ttf")
+        if(MSVC)
+            target_compile_options(EStudioUINativePlatformTests PRIVATE /utf-8)
+        endif()
+        add_test(NAME NativePlatform COMMAND EStudioUINativePlatformTests)
+        set_tests_properties(NativePlatform PROPERTIES TIMEOUT 90)
         add_executable(EStudioUINativeResizeTests tests/NativeResizeTests.cpp src/NativeResizePump.cpp)
         target_include_directories(EStudioUINativeResizeTests PRIVATE src)
         target_link_libraries(EStudioUINativeResizeTests PRIVATE comctl32)

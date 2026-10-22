@@ -37,6 +37,14 @@ extension contracts, lifetime rules, or per-feature performance evidence.
   and lifetime rules. Popup/modal results are asynchronous owner-side sessions.
   See [INPUT.md](INPUT.md) and the compiled input example for the ordinary path.
 
+Native services follow the same small-path rule: `window.Platform()` selects the
+adapter, `ShowFileDialog(options).OnFinished(...)` returns an asynchronous result,
+and capabilities/errors stay explicit. Use weak widget observers or typed handles
+for result callbacks. Accessible names are one ordinary setter; built-in semantics
+reuse canonical control behavior. The compiled [platform example](examples/PlatformServices.cpp)
+and [PLATFORM.md](PLATFORM.md) cover this initial F11 API; applications do not
+configure COM apartments or join picker workers.
+
 For example, the foundation API supports this small, complete function:
 
 ```cpp

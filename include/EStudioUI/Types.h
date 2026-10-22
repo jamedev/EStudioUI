@@ -6,6 +6,19 @@
 
 namespace EStudioUI
 {
+//! Portable standard pointer shapes used by widgets and native services.
+enum class CursorShape
+{
+    Arrow,
+    Text,
+    Crosshair,
+    Hand,
+    ResizeHorizontal,
+    ResizeVertical,
+    ResizeAll,
+    NotAllowed
+};
+
 //! A position or displacement in logical pixels.
 struct Point
 {

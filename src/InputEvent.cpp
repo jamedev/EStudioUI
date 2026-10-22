@@ -3,6 +3,7 @@
 #include <cmath>
 #include <stdexcept>
 #include <type_traits>
+#include <algorithm>
 
 namespace EStudioUI
 {
@@ -54,7 +55,8 @@ void ValidateInput(const InputEvent& event)
             using T = std::decay_t<decltype(value)>;
             if (!std::isfinite(value.m_Timestamp) || value.m_Timestamp < 0)
                 throw std::invalid_argument("An input timestamp must be finite and nonnegative.");
-            if constexpr (std::is_same_v<T, PointerEvent> || std::is_same_v<T, ScrollEvent>)
+            if constexpr (std::is_same_v<T, PointerEvent> || std::is_same_v<T, ScrollEvent> ||
+                          std::is_same_v<T, FileDropEvent>)
                 if (!std::isfinite(value.m_Position.m_X) || !std::isfinite(value.m_Position.m_Y))
                     throw std::invalid_argument("Input coordinates must be finite.");
             if constexpr (std::is_same_v<T, KeyboardEvent>)
@@ -75,6 +77,22 @@ void ValidateInput(const InputEvent& event)
             if constexpr (std::is_same_v<T, ScrollEvent>)
                 if (!std::isfinite(value.m_Delta.m_X) || !std::isfinite(value.m_Delta.m_Y))
                     throw std::invalid_argument("Wheel deltas must be finite.");
+            if constexpr (std::is_same_v<T, FileDropEvent>)
+            {
+                if (value.m_Files.empty() || value.m_Files.size() > 512)
+                    throw std::invalid_argument("A file drop requires between one and 512 owned paths.");
+                std::size_t remaining = 8 * 1024 * 1024;
+                for (const auto& path : value.m_Files)
+                {
+                    const auto& native = path.native();
+                    const auto bytes = path.u8string().size();
+                    if (path.empty() ||
+                        std::find(native.begin(), native.end(), std::filesystem::path::value_type{}) != native.end() ||
+                        bytes > remaining)
+                        throw std::invalid_argument("File-drop paths must be bounded and cannot contain NULs.");
+                    remaining -= bytes;
+                }
+            }
         },
         event);
 }

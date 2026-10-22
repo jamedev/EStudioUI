@@ -129,9 +129,11 @@ bool UiContext::DispatchInput(const InputEvent& event)
         }
         return false;
     }
-    const auto& wheel = std::get<ScrollEvent>(input);
-    m_PointerPosition = wheel.m_Position;
-    auto* target = InputHitTest(wheel.m_Position);
+    const auto* wheel = std::get_if<ScrollEvent>(&input);
+    const auto* drop = std::get_if<FileDropEvent>(&input);
+    const auto position = wheel ? wheel->m_Position : drop->m_Position;
+    m_PointerPosition = position;
+    auto* target = InputHitTest(position);
     if (!target)
         return false;
     const WidgetRef reference(target);
@@ -151,12 +153,17 @@ bool UiContext::DispatchInput(const InputEvent& event)
         if (node == boundary)
             break;
     }
+    const auto bubbleRevision = m_PopupRevision;
     for (const auto& entry : path)
         if (auto* node = entry.Get(); node && node->IsVisible() && node->IsEnabled())
         {
-            auto local = wheel;
-            local.m_Position = ToLayoutPoint(*node, wheel.m_Position);
-            if (node->OnInput(local))
+            auto local = input;
+            const auto point = ToLayoutPoint(*node, position);
+            if (auto* localWheel = std::get_if<ScrollEvent>(&local))
+                localWheel->m_Position = point;
+            if (auto* localDrop = std::get_if<FileDropEvent>(&local))
+                localDrop->m_Position = point;
+            if (node->OnInput(local) || bubbleRevision != m_PopupRevision)
                 return true;
         }
     return false;
@@ -193,6 +200,8 @@ bool UiContext::PreviewInput(Widget& target, const InputEvent& event)
         }
         if (auto* wheel = std::get_if<ScrollEvent>(&local))
             wheel->m_Position = ToLayoutPoint(*node, wheel->m_Position);
+        if (auto* drop = std::get_if<FileDropEvent>(&local))
+            drop->m_Position = ToLayoutPoint(*node, drop->m_Position);
         if (node->OnInputPreview(local) || revision != m_PopupRevision)
             return true;
     }
@@ -953,11 +962,24 @@ void UiContext::SetClipboard(std::function<std::string()> get, std::function<voi
     m_SetClipboard = std::move(set);
 }
 
+CursorShape UiContext::GetPointerCursor() const
+{
+    VerifyAccess();
+    for (auto entry = m_HoverPath.begin(); entry != m_HoverPath.end(); ++entry)
+        if (const auto* widget = entry->Get())
+            if (const auto shape = widget->GetCursor())
+                return *shape;
+    return m_Root.GetCursor().value_or(CursorShape::Arrow);
+}
+
 std::string UiContext::GetClipboard() const
 {
     const auto ownerLifetime = RetainOwner();
     VerifyAccess();
-    return m_GetClipboard ? m_GetClipboard() : std::string{};
+    if (m_GetClipboard)
+        return m_GetClipboard();
+    auto result = const_cast<UiContext*>(this)->Platform().ReadClipboard();
+    return result.m_Result ? result.m_Data.m_Text.value_or("") : std::string{};
 }
 
 void UiContext::SetClipboardText(std::string_view text) const
@@ -966,5 +988,7 @@ void UiContext::SetClipboardText(std::string_view text) const
     VerifyAccess();
     if (m_SetClipboard)
         m_SetClipboard(text);
+    else
+        const_cast<UiContext*>(this)->Platform().SetClipboardText(std::string(text));
 }
 } // namespace EStudioUI

@@ -7,6 +7,7 @@
 #include "StateStore.h"
 #include "Action.h"
 #include "PopupSession.h"
+#include "PlatformServices.h"
 
 #include <functional>
 #include <stdexcept>
@@ -16,6 +17,7 @@
 namespace EStudioUI
 {
 class CssMotion;
+class SemanticTree;
 
 //! Identifies traversals during which synchronous structural changes are unsafe.
 enum class UiPhase
@@ -94,6 +96,9 @@ class UiContext
     //! Returns a copyable endpoint that producers may use without touching UI state.
     UiDispatcher GetDispatcher() const;
 
+    //! Lazily indexes actual widgets for on-demand semantic queries; never advances a UI frame.
+    SemanticTree& Semantics();
+
     //! Captures a typed target that only the owning dispatcher resolves into a widget.
     template <typename T> UiHandle<T> GetHandle(T& target) const
     {
@@ -144,6 +149,18 @@ class UiContext
 
     //! Returns the root widget.
     Widget& Root();
+
+    //! Returns window-native services, or a lazy deterministic adapter for standalone contexts.
+    PlatformServices& Platform();
+
+    //! Installs a uniquely owned adapter on this context's queue; pending old requests end as OwnerClosed.
+    void SetPlatformServices(std::unique_ptr<PlatformServices> services);
+
+    //! Delivers native results and retires replaced adapters; manual hosts call this at an idle owner turn.
+    void PumpPlatformServices();
+
+    //! Reports native work that requires a manual host to retain its native owner and keep pumping.
+    bool HasPendingPlatformWork() const;
 
     //! Replaces CSS atomically, retaining the previous theme on error.
     bool SetStyleSheet(std::string_view css, std::string& error);
@@ -298,9 +315,16 @@ class UiContext
     friend class CssMotion;
     friend class Window;
     friend class AnimationSystem;
+    friend class SemanticTree;
 
     //! Associates a containing window without creating a context ownership cycle.
     void SetOwnerLifetime(std::weak_ptr<void> owner);
+
+    //! Ends platform sessions before closing the owner queue or native window.
+    void ClosePlatformServices();
+
+    //! Resolves the current hover path's inherited pointer shape without scanning the widget tree.
+    CursorShape GetPointerCursor() const;
 
     //! Keeps the containing window alive until a callback-driving operation returns.
     std::shared_ptr<void> RetainOwner() const;
@@ -331,6 +355,18 @@ class UiContext
 
     //! Owns observable state independently of widgets and expires it during context teardown.
     std::unique_ptr<StateStore> m_States;
+
+    //! Owns the lazy semantic index; ordinary rendering does not traverse or rebuild it.
+    std::unique_ptr<SemanticTree> m_Semantics;
+
+    //! Owns injectable services; it is destroyed before the native containing window.
+    std::unique_ptr<PlatformServices> m_Platform;
+
+    //! Prevents completion observers from installing new native work during shutdown.
+    bool m_PlatformClosing = false;
+
+    //! Retains replaced adapters until native workers can be released without blocking the UI.
+    std::vector<std::unique_ptr<PlatformServices>> m_RetiredPlatforms;
 
     //! Tracks guarded traversals without changing ordinary input callback semantics.
     mutable UiPhase m_Phase = UiPhase::Idle;

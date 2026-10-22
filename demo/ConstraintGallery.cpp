@@ -92,15 +92,14 @@ void VerifyCallbackResize(Window& owner, const std::filesystem::path& assets, st
     {
         std::this_thread::sleep_for(std::chrono::milliseconds(20));
         const int paints = box.m_Paints;
-        glfwSetWindowSize(native, 360 + step * 11, 200 + step * 5);
+        probe.SetSize(360 + step * 11, 200 + step * 5);
         refresh(native);
         Check(box.m_Paints > paints, "native callback presents before returning without ProcessEvents or RenderFrame");
-        int width = 0, height = 0;
-        glfwGetWindowSize(native, &width, &height);
-        Check(std::abs(box.GetBounds().m_Width - static_cast<float>(width)) < 0.02f,
+        const auto viewport = probe.Platform().GetWindowMetrics().m_LogicalSize;
+        Check(std::abs(box.GetBounds().m_Width - viewport.m_X) < 0.02f,
               "callback frame uses the latest logical viewport");
         glfwMakeContextCurrent(native);
-        const auto pixel = probe.Graphics().ReadPixel({static_cast<float>(width - 5), 5});
+        const auto pixel = probe.Graphics().ReadPixel({viewport.m_X - 5, 5});
         Check(pixel.m_G > 0.55f && pixel.m_R < 0.25f, "newly exposed framebuffer area contains actual rendered pixels");
         for (int event = 0; event < 8; ++event)
             refresh(native);
@@ -118,7 +117,7 @@ void VerifyCallbackResize(Window& owner, const std::filesystem::path& assets, st
     probe.Ui().States().Batch(
         [&]
         {
-            glfwSetWindowSize(native, 450, 240);
+            probe.SetSize(450, 240);
             refresh(native);
             Check(box.m_Paints == beforeBatch, "native callbacks cannot expose an uncommitted state batch");
         });
@@ -132,7 +131,7 @@ void VerifyCallbackResize(Window& owner, const std::filesystem::path& assets, st
     const int beforePaint = box.m_Paints;
     box.m_OnNextPaint = [&]
     {
-        glfwSetWindowSize(native, 470, 250);
+        probe.SetSize(470, 250);
         refresh(native);
         Check(box.m_Paints == beforePaint + 1, "resize during paint cannot recursively traverse the frame");
     };

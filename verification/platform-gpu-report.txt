@@ -1,0 +1,4 @@
+F11 initial platform/semantic GPU integration: PASS
+Injected clipboard/picker; owning production GLFW file drop; stable semantic queries; owned windows.
+50 semantic queries: zero style/layout recalculations. Real framebuffer capture: platform-services.ppm.
+This deterministic probe does not claim native clipboard, picker or assistive-technology readiness.

@@ -3,7 +3,9 @@
 #include "Types.h"
 
 #include <string>
+#include <filesystem>
 #include <variant>
+#include <vector>
 
 namespace EStudioUI
 {
@@ -33,8 +35,24 @@ struct ScrollEvent
     double m_Timestamp = 0;
 };
 
+//! Owns a native file drop independently of callback-provided path buffers.
+struct FileDropEvent
+{
+    //! Drop position in logical window coordinates, transformed for the receiver.
+    Point m_Position;
+
+    //! Copied file or folder paths.
+    std::vector<std::filesystem::path> m_Files;
+
+    //! Source modifier state.
+    Modifiers m_Modifiers;
+
+    //! Monotonic source timestamp in seconds.
+    double m_Timestamp = 0;
+};
+
 //! Owns one native-independent input payload suitable for recording or queued publication.
-using InputEvent = std::variant<KeyboardEvent, TextInputEvent, PointerEvent, ScrollEvent>;
+using InputEvent = std::variant<KeyboardEvent, TextInputEvent, PointerEvent, ScrollEvent, FileDropEvent>;
 
 //! Returns compatibility modifiers that cannot treat AltGr as an editing shortcut.
 Modifiers EditingModifiers(Modifiers modifiers);

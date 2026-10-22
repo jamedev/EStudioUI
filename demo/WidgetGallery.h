@@ -12,6 +12,7 @@
 #include "LayoutGallery.h"
 #include "ConstraintGallery.h"
 #include "InputGallery.h"
+#include "PlatformGallery.h"
 
 #include <EStudioUI/ContextMenu.h>
 #include <EStudioUI/ListWidget.h>
@@ -146,6 +147,8 @@ class WidgetGallery
 
     //! Owns shared-action, input, nested menu, and modal-result acceptance examples.
     std::unique_ptr<InputGallery> m_Input;
+    //! Owns native-service and semantic inspection examples.
+    std::unique_ptr<PlatformGallery> m_Platform;
     //! Observes the visible shortcut to a tab beyond a narrow tab strip.
     WidgetRef m_ConstraintShortcut;
 };

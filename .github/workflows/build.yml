@@ -18,6 +18,7 @@ jobs:
     runs-on: windows-2022
     timeout-minutes: 30
     env:
+      ESTUDIOUI_NATIVE_PLATFORM_TESTS: 1
       VCPKG_DEFAULT_BINARY_CACHE: ${{ github.workspace }}/.tools/vcpkg-binary-cache
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6

@@ -7,6 +7,8 @@
 
 namespace EStudioUI
 {
+class Window;
+
 //! GLFW window and context creation options.
 struct WindowOptions
 {
@@ -27,6 +29,12 @@ struct WindowOptions
 
     //! Allows background presentation when the window does not have input focus.
     bool m_RenderWhenUnfocused = false;
+
+    //! Optional native/logical owner; closing it also closes this window without transferring C++ ownership.
+    Window* m_Owner = nullptr;
+
+    //! Optional uniquely owned service adapter factory; ordinary applications use the platform default.
+    std::function<std::unique_ptr<PlatformServices>(PlatformHost)> m_PlatformFactory;
 };
 
 //! Owns a GLFW window, modern GL renderer, font service, and GUI context.
@@ -50,6 +58,9 @@ class Window
 
     //! Returns the window's GL renderer and diagnostics.
     Renderer& Graphics();
+
+    //! Returns the same injectable native services exposed by this window's UI context.
+    PlatformServices& Platform();
 
     //! Returns the diagnostic identity of the window's OpenGL context.
     std::uintptr_t GetContextIdentity() const;

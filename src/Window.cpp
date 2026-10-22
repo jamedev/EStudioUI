@@ -2,9 +2,12 @@
 #include <EStudioUI/Application.h>
 #include <EStudioUI/TextBox.h>
 #include <EStudioUI/FramePacer.h>
+#include <EStudioUI/MemoryPlatformServices.h>
 
 #include "ApplicationRuntime.h"
 #include "NativeResizePump.h"
+#include "NativeAccessibility.h"
+#include "NativePlatformServices.h"
 
 #include <glad/gl.h>
 #define GLFW_INCLUDE_NONE
@@ -20,6 +23,7 @@
 #include <cmath>
 #include <exception>
 #include <iostream>
+#include <limits>
 #include <stdexcept>
 
 namespace EStudioUI
@@ -213,6 +217,7 @@ struct Window::Impl : std::enable_shared_from_this<Window::Impl>
     std::unique_ptr<UiContext> m_Ui;
     std::unique_ptr<Renderer> m_Renderer;
     std::unique_ptr<Detail::NativeResizePump> m_ResizePump;
+    std::unique_ptr<Detail::NativeAccessibility> m_Accessibility;
     Signal<Key> m_KeyPressed;
     std::exception_ptr m_CallbackError;
     bool m_Initialized = false;
@@ -230,10 +235,178 @@ struct Window::Impl : std::enable_shared_from_this<Window::Impl>
     Point m_LastClickPosition;
     int m_Clicks = 0;
     std::uint64_t m_InputRevision = 0;
-    std::string m_TestClipboard;
+    WindowMetrics m_Metrics;
+    std::array<GLFWcursor*, 8> m_Cursors{};
+    std::unique_ptr<std::stop_callback<std::function<void()>>> m_ParentStop;
+    std::optional<CursorShape> m_LastUiCursor;
+
+    void UpdateCursor()
+    {
+        const auto desired = m_Ui->GetPointerCursor();
+        if (!m_LastUiCursor || *m_LastUiCursor != desired)
+        {
+            m_LastUiCursor = desired;
+            m_Ui->Platform().SetCursor(desired);
+        }
+    }
+
+    void UpdateMetrics()
+    {
+        int width = 0, height = 0, framebufferWidth = 0, framebufferHeight = 0;
+        glfwGetWindowSize(m_Window, &width, &height);
+        glfwGetFramebufferSize(m_Window, &framebufferWidth, &framebufferHeight);
+        float scaleX = 1, scaleY = 1;
+        if (!m_Headless)
+            glfwGetWindowContentScale(m_Window, &scaleX, &scaleY);
+        const int platform = glfwGetPlatform();
+        const bool pixelCoordinates = platform == GLFW_PLATFORM_WIN32 || platform == GLFW_PLATFORM_X11;
+        m_Metrics.m_ContentScale = {scaleX, scaleY};
+        m_Metrics.m_InputScale = pixelCoordinates ? Point{scaleX, scaleY} : Point{1, 1};
+        m_Metrics.m_LogicalSize = {static_cast<float>(width) / m_Metrics.m_InputScale.m_X,
+                                   static_cast<float>(height) / m_Metrics.m_InputScale.m_Y};
+        m_Metrics.m_FramebufferSize = {static_cast<float>(framebufferWidth), static_cast<float>(framebufferHeight)};
+        m_Metrics.m_PixelScale = {
+            width > 0 && framebufferWidth > 0 ? static_cast<float>(framebufferWidth) / m_Metrics.m_LogicalSize.m_X : 1,
+            height > 0 && framebufferHeight > 0 ? static_cast<float>(framebufferHeight) / m_Metrics.m_LogicalSize.m_Y
+                                                : 1};
+        m_Metrics.m_HasScreenCoordinates = false;
+#ifdef _WIN32
+        if (!m_Headless)
+        {
+            POINT origin{};
+            if (ClientToScreen(glfwGetWin32Window(m_Window), &origin))
+            {
+                m_Metrics.m_ScreenOrigin = {static_cast<float>(origin.x), static_cast<float>(origin.y)};
+                m_Metrics.m_HasScreenCoordinates = true;
+            }
+        }
+#else
+        if (platform == GLFW_PLATFORM_X11)
+        {
+            int x = 0, y = 0;
+            glfwGetWindowPos(m_Window, &x, &y);
+            m_Metrics.m_ScreenOrigin = {static_cast<float>(x), static_cast<float>(y)};
+            m_Metrics.m_HasScreenCoordinates = true;
+        }
+#endif
+        m_Metrics.Validate();
+    }
+
+    PlatformResult SelectCursor(CursorShape shape)
+    {
+        if (m_Closed)
+            return {PlatformStatus::Closed, "The native window is closed."};
+        if (m_Headless)
+            return {};
+        static constexpr int shapes[]{GLFW_ARROW_CURSOR,         GLFW_IBEAM_CURSOR,      GLFW_CROSSHAIR_CURSOR,
+                                      GLFW_POINTING_HAND_CURSOR, GLFW_RESIZE_EW_CURSOR,  GLFW_RESIZE_NS_CURSOR,
+                                      GLFW_RESIZE_ALL_CURSOR,    GLFW_NOT_ALLOWED_CURSOR};
+        const auto index = static_cast<std::size_t>(shape);
+        glfwGetError(nullptr);
+        if (!m_Cursors[index])
+            m_Cursors[index] = glfwCreateStandardCursor(shapes[index]);
+        if (m_Cursors[index])
+            glfwSetCursor(m_Window, m_Cursors[index]);
+        const char* message = nullptr;
+        const int error = glfwGetError(&message);
+        return error || !m_Cursors[index] ? PlatformResult{PlatformStatus::Unsupported,
+                                                           message ? message : "Native cursor unavailable.", error}
+                                          : PlatformResult{};
+    }
+
+    PlatformHost MakePlatformHost()
+    {
+        PlatformHost host;
+        host.m_Dispatcher = m_Ui->GetDispatcher();
+        host.m_OwnerLifetime = weak_from_this();
+        for (const auto feature : {PlatformFeature::FileDrop, PlatformFeature::Cursors, PlatformFeature::Scaling})
+            host.m_Capabilities.Set(feature, m_Headless ? PlatformSupport::Emulated : PlatformSupport::Native);
+        host.m_Capabilities.Set(PlatformFeature::OwnedWindows,
+#ifdef _WIN32
+                                m_Headless ? PlatformSupport::Emulated : PlatformSupport::Native
+#else
+                                PlatformSupport::Emulated
+#endif
+        );
+        if (m_Metrics.m_HasScreenCoordinates)
+            host.m_Capabilities.Set(PlatformFeature::ScreenCoordinates, PlatformSupport::Native);
+#ifdef _WIN32
+        if (!m_Headless)
+        {
+            host.m_NativeWindow = reinterpret_cast<std::uintptr_t>(glfwGetWin32Window(m_Window));
+            host.m_Capabilities.Set(PlatformFeature::Accessibility, PlatformSupport::Native);
+        }
+#endif
+        const std::weak_ptr<Impl> weak = weak_from_this();
+        host.m_GetMetrics = [weak]
+        {
+            if (const auto state = weak.lock())
+                return state->m_Metrics;
+            return WindowMetrics{};
+        };
+        host.m_SetCursor = [weak](CursorShape shape)
+        {
+            const auto state = weak.lock();
+            return state ? state->SelectCursor(shape) : PlatformResult{PlatformStatus::Closed};
+        };
+        host.m_SetIcon = [weak](const WindowIcon& icon)
+        {
+            const auto state = weak.lock();
+            if (!state || state->m_Closed)
+                return PlatformResult{PlatformStatus::Closed};
+            if (state->m_Headless || glfwGetPlatform() == GLFW_PLATFORM_COCOA ||
+                glfwGetPlatform() == GLFW_PLATFORM_WAYLAND)
+                return PlatformResult{PlatformStatus::Unsupported, "Window icons are unavailable on this backend."};
+            GLFWimage image{icon.m_Width, icon.m_Height, const_cast<unsigned char*>(icon.m_Pixels.data())};
+            glfwGetError(nullptr);
+            glfwSetWindowIcon(state->m_Window, 1, &image);
+            const char* message = nullptr;
+            const int error = glfwGetError(&message);
+            return error ? PlatformResult{PlatformStatus::Failed, message ? message : "Native icon failed.", error}
+                         : PlatformResult{};
+        };
+        if (!m_Headless && glfwGetPlatform() != GLFW_PLATFORM_COCOA && glfwGetPlatform() != GLFW_PLATFORM_WAYLAND)
+            host.m_Capabilities.Set(PlatformFeature::WindowIcons, PlatformSupport::Native);
+        host.m_FocusWindow = [weak]
+        {
+            const auto state = weak.lock();
+            if (!state || state->m_Closed)
+                return PlatformResult{PlatformStatus::Closed};
+            glfwGetError(nullptr);
+            if (!state->m_Headless)
+                glfwFocusWindow(state->m_Window);
+            const char* message = nullptr;
+            const int error = glfwGetError(&message);
+            return error ? PlatformResult{PlatformStatus::Failed, message ? message : "Native focus request failed.",
+                                          error}
+                         : PlatformResult{};
+        };
+        host.m_GetClipboardText = [weak]
+        {
+            const auto state = weak.lock();
+            const auto* text = state && !state->m_Closed ? glfwGetClipboardString(state->m_Window) : nullptr;
+            return std::string(text ? text : "");
+        };
+        host.m_SetClipboardText = [weak](std::string_view text)
+        {
+            const auto state = weak.lock();
+            if (!state || state->m_Closed)
+                return PlatformResult{PlatformStatus::Closed};
+            const std::string owned(text);
+            glfwGetError(nullptr);
+            glfwSetClipboardString(state->m_Window, owned.c_str());
+            const char* message = nullptr;
+            const int error = glfwGetError(&message);
+            return error ? PlatformResult{PlatformStatus::Failed, message ? message : "Native clipboard failed.", error}
+                         : PlatformResult{};
+        };
+        host.m_WakeNativeLoop = [] { glfwPostEmptyEvent(); };
+        return host;
+    }
 
     ~Impl()
     {
+        m_Accessibility.reset();
         m_ResizePump.reset();
         m_TargetLifetime.request_stop();
         if (m_Ui)
@@ -246,6 +419,9 @@ struct Window::Impl : std::enable_shared_from_this<Window::Impl>
             glfwMakeContextCurrent(m_Window);
         m_Renderer.reset();
         m_Font.reset();
+        for (auto* cursor : m_Cursors)
+            if (cursor)
+                glfwDestroyCursor(cursor);
         if (m_Window)
             glfwDestroyWindow(m_Window);
         if (m_Initialized && --s_GlfwUsers == 0)
@@ -308,10 +484,18 @@ struct Window::Impl : std::enable_shared_from_this<Window::Impl>
         if (m_Closed)
             return;
         m_Closed = true;
+        if (m_Accessibility)
+            m_Accessibility->Close();
+        if (m_Ui)
+            m_Ui->ClosePlatformServices();
         if (m_ResizePump)
             m_ResizePump->Cancel();
         if (m_Window)
         {
+#ifdef _WIN32
+            if (!m_Headless)
+                SetWindowLongPtrW(glfwGetWin32Window(m_Window), GWLP_HWNDPARENT, 0);
+#endif
             glfwSetWindowShouldClose(m_Window, GLFW_TRUE);
             // The C++ owner may retain a closed Window. Remove its native surface
             // immediately; release context resources when that owner is destroyed.
@@ -348,7 +532,12 @@ struct Window::Impl : std::enable_shared_from_this<Window::Impl>
             return;
         glfwMakeContextCurrent(m_Window);
         if (drain)
+        {
+            m_Ui->PumpPlatformServices();
+            if (!m_Owner || m_Closed)
+                return;
             m_Ui->GetDispatcher().Drain();
+        }
         if (!m_Owner || m_Closed)
             return;
         glfwMakeContextCurrent(m_Window);
@@ -357,14 +546,20 @@ struct Window::Impl : std::enable_shared_from_this<Window::Impl>
         glfwGetFramebufferSize(m_Window, &framebufferWidth, &framebufferHeight);
         if (width <= 0 || height <= 0 || framebufferWidth <= 0 || framebufferHeight <= 0)
             return;
-        m_Ui->Prepare(static_cast<float>(width), static_cast<float>(height));
-        m_Ui->PrepareSurfaces(time, static_cast<float>(framebufferWidth) / static_cast<float>(width),
-                              static_cast<float>(framebufferHeight) / static_cast<float>(height));
-        m_Renderer->BeginFrame(static_cast<float>(width), static_cast<float>(height), framebufferWidth,
+        UpdateMetrics();
+        m_Ui->Prepare(m_Metrics.m_LogicalSize.m_X, m_Metrics.m_LogicalSize.m_Y);
+        m_Ui->PrepareSurfaces(time, m_Metrics.m_PixelScale.m_X, m_Metrics.m_PixelScale.m_Y);
+        m_Renderer->BeginFrame(m_Metrics.m_LogicalSize.m_X, m_Metrics.m_LogicalSize.m_Y, framebufferWidth,
                                framebufferHeight, m_Ui->Root().GetStyle().m_Background);
         m_Ui->Paint(*m_Renderer, time);
         m_Renderer->EndFrame();
         m_Ui->FrameSubmitted();
+        if (m_Owner && !m_Closed)
+        {
+            UpdateCursor();
+            if (m_Accessibility)
+                m_Accessibility->Flush();
+        }
     }
 
     double Service()
@@ -394,10 +589,15 @@ struct Window::Impl : std::enable_shared_from_this<Window::Impl>
         if (!IsOpen())
             return -1;
         glfwMakeContextCurrent(m_Window);
+        m_Ui->PumpPlatformServices();
+        if (!IsOpen())
+            return -1;
+        glfwMakeContextCurrent(m_Window);
         auto dispatcher = m_Ui->GetDispatcher();
         dispatcher.Drain();
         if (!IsOpen())
             return -1;
+        UpdateCursor();
         glfwMakeContextCurrent(m_Window);
         const double now = glfwGetTime();
         const bool active =
@@ -405,7 +605,11 @@ struct Window::Impl : std::enable_shared_from_this<Window::Impl>
                            !glfwGetWindowAttrib(m_Window, GLFW_ICONIFIED) && (m_Focused || m_RenderWhenUnfocused));
         double wake = dispatcher.HasPending() ? now : -1;
         if (!active)
+        {
+            if (m_Accessibility)
+                m_Accessibility->Flush();
             return wake;
+        }
 
         const auto* editor = dynamic_cast<TextBox*>(m_Ui->GetFocus());
         if (editor && !editor->IsReadOnly())
@@ -436,6 +640,8 @@ struct Window::Impl : std::enable_shared_from_this<Window::Impl>
             if (wake < 0 || frame < wake)
                 wake = frame;
         }
+        if (m_Accessibility && IsOpen())
+            m_Accessibility->Flush();
         return wake;
     }
 
@@ -511,6 +717,8 @@ struct Window::Impl : std::enable_shared_from_this<Window::Impl>
         const bool notify = key && key->m_Down && !key->m_Repeat;
         const auto pressed = key ? key->m_Key : Key::Unknown;
         m_Ui->DispatchInput(event);
+        if (m_Owner && !m_Closed)
+            UpdateCursor();
         if (notify && m_Owner && !m_Closed)
         {
             glfwMakeContextCurrent(m_Window);
@@ -523,7 +731,7 @@ struct Window::Impl : std::enable_shared_from_this<Window::Impl>
         double x = 0;
         double y = 0;
         glfwGetCursorPos(m_Window, &x, &y);
-        return {static_cast<float>(x), static_cast<float>(y)};
+        return m_Metrics.FromNative({static_cast<float>(x), static_cast<float>(y)});
     }
 
     Modifiers InputModifiers(int flags) const
@@ -562,7 +770,15 @@ struct Window::Impl : std::enable_shared_from_this<Window::Impl>
 
 Window::Window(const WindowOptions& options, const std::filesystem::path& fontPath)
 {
-    Detail::VerifyApplicationAccess();
+    Detail::VerifyWindowCreation();
+    std::shared_ptr<Impl> parent;
+    if (options.m_Owner)
+    {
+        options.m_Owner->VerifyAccess();
+        if (options.m_Owner->IsClosed())
+            throw std::invalid_argument("A native owner must be an open window.");
+        parent = options.m_Owner->m_Impl;
+    }
     m_Impl = std::make_shared<Impl>();
     auto& self = *m_Impl;
     self.m_Headless = options.m_Headless;
@@ -586,6 +802,8 @@ Window::Window(const WindowOptions& options, const std::filesystem::path& fontPa
     glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
     glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
     glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
+    if (!options.m_Headless)
+        glfwWindowHint(GLFW_SCALE_TO_MONITOR, GLFW_TRUE);
 #ifdef __APPLE__
     glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GLFW_TRUE);
 #endif
@@ -606,26 +824,20 @@ Window::Window(const WindowOptions& options, const std::filesystem::path& fontPa
     self.m_Font = std::make_unique<FontFace>(fontPath);
     self.m_Ui = std::make_unique<UiContext>(*self.m_Font);
     self.m_Ui->SetOwnerLifetime(m_Impl);
+    self.m_Ui->Root().SetAccessibleName(options.m_Title);
     self.m_Renderer = std::make_unique<Renderer>(*self.m_Font);
     self.m_Ui->GetDispatcher().SetWakeup([] { glfwPostEmptyEvent(); });
-    self.m_Ui->SetClipboard(
-        [&self]
-        {
-            if (self.m_Headless)
-                return self.m_TestClipboard;
-            const auto* text = glfwGetClipboardString(self.m_Window);
-            return std::string(text ? text : "");
-        },
-        [&self](std::string_view text)
-        {
-            if (self.m_Headless)
-                self.m_TestClipboard = text;
-            else
-            {
-                const std::string copy(text);
-                glfwSetClipboardString(self.m_Window, copy.c_str());
-            }
-        });
+    self.UpdateMetrics();
+    auto host = self.MakePlatformHost();
+    auto services = options.m_PlatformFactory ? options.m_PlatformFactory(std::move(host))
+                    : options.m_Headless      ? std::make_unique<MemoryPlatformServices>(std::move(host))
+                                              : Detail::CreateNativePlatformServices(std::move(host));
+    self.m_Ui->SetPlatformServices(std::move(services));
+#ifdef _WIN32
+    if (!self.m_Headless)
+        self.m_Accessibility =
+            std::make_unique<Detail::NativeAccessibility>(*self.m_Ui, glfwGetWin32Window(self.m_Window), m_Impl);
+#endif
 
     glfwSetWindowSizeCallback(self.m_Window,
                               [](GLFWwindow* window, int, int)
@@ -633,14 +845,33 @@ Window::Window(const WindowOptions& options, const std::filesystem::path& fontPa
                                   Impl::Dispatch(window,
                                                  [&](Impl& state)
                                                  {
+                                                     state.UpdateMetrics();
                                                      state.m_Ui->RequestRepaint();
                                                      state.NativeFrame();
                                                  });
                               });
-    glfwSetFramebufferSizeCallback(self.m_Window, [](GLFWwindow* window, int, int)
-                                   { Impl::Dispatch(window, [](Impl& state) { state.m_Ui->RequestRepaint(); }); });
-    glfwSetWindowContentScaleCallback(self.m_Window, [](GLFWwindow* window, float, float)
-                                      { Impl::Dispatch(window, [](Impl& state) { state.m_Ui->RequestRepaint(); }); });
+    glfwSetFramebufferSizeCallback(self.m_Window,
+                                   [](GLFWwindow* window, int, int)
+                                   {
+                                       Impl::Dispatch(window,
+                                                      [](Impl& state)
+                                                      {
+                                                          state.UpdateMetrics();
+                                                          state.m_Ui->RequestRepaint();
+                                                      });
+                                   });
+    glfwSetWindowContentScaleCallback(self.m_Window,
+                                      [](GLFWwindow* window, float, float)
+                                      {
+                                          Impl::Dispatch(window,
+                                                         [](Impl& state)
+                                                         {
+                                                             state.UpdateMetrics();
+                                                             state.m_Ui->RequestRepaint();
+                                                         });
+                                      });
+    glfwSetWindowPosCallback(self.m_Window, [](GLFWwindow* window, int, int)
+                             { Impl::Dispatch(window, [](Impl& state) { state.UpdateMetrics(); }); });
     glfwSetWindowRefreshCallback(self.m_Window,
                                  [](GLFWwindow* window)
                                  {
@@ -654,15 +885,17 @@ Window::Window(const WindowOptions& options, const std::filesystem::path& fontPa
     glfwSetCursorPosCallback(self.m_Window,
                              [](GLFWwindow* window, double x, double y)
                              {
-                                 Impl::Dispatch(window,
-                                                [&](Impl& state)
-                                                {
-                                                    PointerEvent event{{static_cast<float>(x), static_cast<float>(y)},
-                                                                       state.CurrentModifiers()};
-                                                    event.m_Buttons = state.PointerButtons();
-                                                    event.m_Timestamp = glfwGetTime();
-                                                    state.DeliverInput(event);
-                                                });
+                                 Impl::Dispatch(
+                                     window,
+                                     [&](Impl& state)
+                                     {
+                                         PointerEvent event{
+                                             state.m_Metrics.FromNative({static_cast<float>(x), static_cast<float>(y)}),
+                                             state.CurrentModifiers()};
+                                         event.m_Buttons = state.PointerButtons();
+                                         event.m_Timestamp = glfwGetTime();
+                                         state.DeliverInput(event);
+                                     });
                              });
     glfwSetCursorEnterCallback(self.m_Window,
                                [](GLFWwindow* window, int entered)
@@ -752,7 +985,46 @@ Window::Window(const WindowOptions& options, const std::filesystem::path& fontPa
                                { Impl::Dispatch(window, [&](Impl& state) { state.SetFocused(focused != 0); }); });
     glfwSetWindowCloseCallback(self.m_Window, [](GLFWwindow* window)
                                { Impl::Dispatch(window, [](Impl& state) { state.RequestClose(); }); });
-    self.m_Ui->Prepare(static_cast<float>(options.m_Width), static_cast<float>(options.m_Height));
+    glfwSetDropCallback(self.m_Window,
+                        [](GLFWwindow* window, int count, const char** paths)
+                        {
+                            Impl::Dispatch(window,
+                                           [&](Impl& state)
+                                           {
+                                               FileDropEvent drop;
+                                               drop.m_Position = state.Cursor();
+                                               drop.m_Modifiers = state.CurrentModifiers();
+                                               drop.m_Timestamp = glfwGetTime();
+                                               std::size_t remaining = 8 * 1024 * 1024;
+                                               bool valid = count > 0 && count <= 512 && paths;
+                                               for (int i = 0; valid && i < count; ++i)
+                                               {
+                                                   if (!paths[i])
+                                                   {
+                                                       valid = false;
+                                                       break;
+                                                   }
+                                                   const std::string_view path(paths[i]);
+                                                   if (path.empty() || path.size() > remaining)
+                                                   {
+                                                       valid = false;
+                                                       break;
+                                                   }
+                                                   remaining -= path.size();
+                                                   drop.m_Files.emplace_back(std::u8string(
+                                                       reinterpret_cast<const char8_t*>(path.data()), path.size()));
+                                               }
+                                               if (!valid)
+                                               {
+                                                   state.m_Ui->Platform().RecordNativeResult(
+                                                       {PlatformStatus::Failed,
+                                                        "The native file drop exceeds its path/payload budget."});
+                                                   return;
+                                               }
+                                               state.DeliverInput(std::move(drop));
+                                           });
+                        });
+    self.m_Ui->Prepare(self.m_Metrics.m_LogicalSize.m_X, self.m_Metrics.m_LogicalSize.m_Y);
     self.m_Owner = this;
 #ifdef _WIN32
     if (!options.m_Headless)
@@ -784,7 +1056,32 @@ Window::Window(const WindowOptions& options, const std::filesystem::path& fontPa
         if (const auto state = weak.lock())
             state->RequestClose();
     };
+    self.m_Registration->m_HasPendingNativeWork = [weak]
+    {
+        const auto state = weak.lock();
+        return state && state->m_Ui && state->m_Ui->HasPendingPlatformWork();
+    };
     Detail::RegisterApplicationWindow(self.m_Registration);
+    if (parent)
+    {
+#ifdef _WIN32
+        if (!self.m_Headless)
+        {
+            SetLastError(0);
+            if (!SetWindowLongPtrW(glfwGetWin32Window(self.m_Window), GWLP_HWNDPARENT,
+                                   reinterpret_cast<LONG_PTR>(glfwGetWin32Window(parent->m_Window))) &&
+                GetLastError())
+                throw std::runtime_error("Could not set the native window owner.");
+        }
+#endif
+        self.m_ParentStop =
+            std::make_unique<std::stop_callback<std::function<void()>>>(parent->m_TargetLifetime.get_token(),
+                                                                        [weak]
+                                                                        {
+                                                                            if (const auto state = weak.lock())
+                                                                                state->RequestClose();
+                                                                        });
+    }
 }
 
 Window::~Window()
@@ -795,7 +1092,13 @@ Window::~Window()
     {
         m_Impl->m_Owner = nullptr;
         m_Impl->RequestClose();
-        Detail::RetireApplicationWindow(std::move(m_Impl));
+        const std::weak_ptr<Impl> weak = m_Impl;
+        Detail::RetireApplicationWindow(std::move(m_Impl),
+                                        [weak]
+                                        {
+                                            const auto state = weak.lock();
+                                            return !state || !state->m_Ui || !state->m_Ui->HasPendingPlatformWork();
+                                        });
     }
 }
 
@@ -815,6 +1118,12 @@ Renderer& Window::Graphics()
 {
     VerifyAccess();
     return *m_Impl->m_Renderer;
+}
+
+PlatformServices& Window::Platform()
+{
+    VerifyAccess();
+    return m_Impl->m_Ui->Platform();
 }
 
 std::uintptr_t Window::GetContextIdentity() const
@@ -912,7 +1221,14 @@ void Window::SetSize(int width, int height)
     {
         const auto self = m_Impl;
         Detail::ApplicationDispatchScope scope;
-        glfwSetWindowSize(self->m_Window, std::max(1, width), std::max(1, height));
+        const auto dimension = [](int value, float scale)
+        {
+            return static_cast<int>(std::clamp(std::round(static_cast<double>(std::max(1, value)) * scale), 1.0,
+                                               static_cast<double>(std::numeric_limits<int>::max())));
+        };
+        glfwSetWindowSize(self->m_Window, dimension(width, self->m_Metrics.m_InputScale.m_X),
+                          dimension(height, self->m_Metrics.m_InputScale.m_Y));
+        self->UpdateMetrics();
         if (self->m_Owner && !self->m_Closed)
             self->m_Ui->RequestRepaint();
     }
