@@ -191,6 +191,13 @@ whose pixels are not assumed to survive swaps. The event loop avoids presenting
 idle frames entirely. The design trades a few scissored draws for much less
 fragment shading rather than treating one draw call as the performance goal.
 
+`ReadPixel` and `SavePpm` read the last completed retained GPU framebuffer with
+the owning GL context current. Native swaps and unrelated read-framebuffer,
+read-selector, pixel-pack-buffer, or row-packing state cannot redirect captures;
+all affected state is restored. Captures require a successful frame and preserve
+its logical/physical dimensions while a new frame is being recorded. They add no
+readback or CPU image copy to ordinary rendering/presentation.
+
 `SetPartialRedrawEnabled(false)` selects the full redraw reference path, submitting
 every recorded primitive without damage culling. `SetGpuTimingEnabled(true)`
 enables an eight-slot `GL_TIME_ELAPSED` query ring; only available results are
@@ -280,9 +287,12 @@ and rethrow in the C++ event loop. Queued exceptions settle a receipt instead.
 `Application` fairly services every registered window through one GLFW loop,
 including bounded delivery to hidden/inactive windows. Native wakeups coalesce.
 Each window advances its UI clock before draining posted work, then prepares and
-renders when needed under the existing frame pacer. Closing one window retires
-its delivery endpoint; other windows continue. Callback-driven native destruction
-is deferred until active dispatch/frame scopes release their resources.
+renders when needed under the existing frame pacer. Closing one window immediately
+hides its native surface and retires its delivery endpoint; other windows continue.
+Close is idempotent. A retained C++ Window still owns its UI/context resources until
+destruction; callback-driven native destruction is deferred until active
+dispatch/frame scopes release their resources. The Async gallery reclaims retained
+closed windows before opening another.
 
 `UiDispatcher` bounds pending records and per-turn work; it executes callbacks
 outside queue locks. `PostLatest` replaces pending target/key publications with

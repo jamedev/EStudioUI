@@ -4,6 +4,10 @@
 #include <EStudioUI/PaintWidget.h>
 #include <EStudioUI/ToolBar.h>
 
+#define GLFW_INCLUDE_NONE
+#include <GLFW/glfw3.h>
+
+#include <algorithm>
 #include <chrono>
 #include <fstream>
 #include <stdexcept>
@@ -198,6 +202,7 @@ void FoundationGallery::DeleteTarget()
 
 void FoundationGallery::OpenWindow()
 {
+    std::erase_if(m_Windows, [](const auto& window) { return window->IsClosed(); });
     WindowOptions options;
     options.m_Width = 580;
     options.m_Height = 250;
@@ -212,9 +217,53 @@ void FoundationGallery::OpenWindow()
     window->Ui().Root().Add<Label>("This window shares the application's event loop.");
     window->Ui().Root().Add<Label>("The main window keeps receiving input and worker results.");
     auto& close = window->Ui().Root().Add<Button>("Close this window");
+    close.SetId("foundation-close-window");
     const auto target = window->GetHandle();
     close.Clicked().Connect([target] { target.Post([](Window& receiver) { receiver.Close(); }); });
     m_Windows.push_back(std::move(window));
+}
+
+void FoundationGallery::VerifyWindows()
+{
+    for (const bool nativeClose : {false, true})
+    {
+        OpenWindow();
+        Check(m_Windows.size() == 1, "reopening the gallery reclaims the previously closed window");
+        auto& window = *m_Windows.back();
+        const auto target = window.GetHandle();
+        auto* native = reinterpret_cast<GLFWwindow*>(window.GetContextIdentity());
+        // The null platform also tracks visibility; showing it makes this assertion
+        // catch the original retained-owner bug on both CI and a native desktop.
+        glfwShowWindow(native);
+        Check(glfwGetWindowAttrib(native, GLFW_VISIBLE) != 0, "the secondary window starts visible");
+        window.RenderFrame();
+        if (nativeClose)
+        {
+            const auto callback = glfwSetWindowCloseCallback(native, nullptr);
+            glfwSetWindowCloseCallback(native, callback);
+            Check(callback != nullptr, "the native close adapter is installed");
+            glfwSetWindowShouldClose(native, GLFW_TRUE);
+            callback(native);
+        }
+        else
+        {
+            auto* button = window.Ui().Root().FindById("foundation-close-window");
+            Check(button != nullptr, "the gallery exposes its actual secondary close button");
+            const auto bounds = button->GetBounds();
+            const Point point{bounds.m_X + bounds.m_Width * .5f, bounds.m_Y + bounds.m_Height * .5f};
+            window.Ui().PointerDown(point);
+            window.Ui().PointerUp(point);
+            window.GetDispatcher().Drain();
+        }
+        Check(window.IsClosed() && !glfwGetWindowAttrib(native, GLFW_VISIBLE),
+              "both close paths remove the native surface while its C++ owner remains alive");
+        Check(target.Post([](Window&) {}).GetStatus() == DispatchStatus::Rejected,
+              "a retained closed window rejects further worker commands");
+        window.Close();
+        Check(!m_Window.IsClosed(), "closing the secondary window leaves the main window open");
+    }
+    m_Windows.clear();
+    glfwMakeContextCurrent(reinterpret_cast<GLFWwindow*>(m_Window.GetContextIdentity()));
 }
 
 void FoundationGallery::Await()
@@ -272,12 +321,15 @@ void FoundationGallery::Verify(const std::filesystem::path& output)
     Check(deferred && probe.GetChildren().size() == 1, "next frame commits deferred paint-side structural work");
     ui.Root().RemoveChild(probe);
     m_Window.RenderFrame(ui.GetTime());
+    VerifyWindows();
     const auto stats = ui.GetDispatcher().GetStats();
     std::ofstream report(output / "foundation-gallery.txt");
     report << "Background scene generation and real GPU publication: PASS\n"
            << "200,000 items built with an isolated worker-owned scene and BVH.\n"
            << "Latest-request replacement, explicit cancellation, target deletion, and fresh target delivery passed.\n"
            << "Paint mutation rejected; deferred mutation delivered at the next owner boundary.\n"
+           << "The actual Async close button and production native-close adapter hide retained windows.\n"
+           << "Reopening reclaims closed windows; late commands reject; the main window remains open.\n"
            << "Successful results: " << m_Completions->load() << "; queue high-water: " << stats.m_HighWaterMark
            << "; coalesced publications: " << stats.m_Superseded << ".\n"
            << "Settled frame submits zero draw calls. Software GL establishes correctness, not hardware throughput.\n";

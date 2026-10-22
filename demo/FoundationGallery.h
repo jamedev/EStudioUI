@@ -19,7 +19,7 @@ class FoundationGallery
     //! Cancels pending deliveries before owned windows and worker resources are released.
     ~FoundationGallery();
 
-    //! Verifies completion, replacement, target deletion, cancellation, and retained idle rendering.
+    //! Verifies background delivery, retained idle rendering, and actual secondary-window closure.
     void Verify(const std::filesystem::path& output);
 
   private:
@@ -37,6 +37,9 @@ class FoundationGallery
 
     //! Opens another registered window without starting a nested event loop.
     void OpenWindow();
+
+    //! Exercises the gallery's close button, native close callback, and closed-window retirement.
+    void VerifyWindows();
 
     //! Pumps owner-side delivery until the latest task settles, with a finite test deadline.
     void Await();

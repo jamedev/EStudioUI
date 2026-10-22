@@ -6,10 +6,12 @@
 #include <EStudioUI/NumericInput.h>
 #include <EStudioUI/Window.h>
 
+#include <glad/gl.h>
 #define GLFW_INCLUDE_NONE
 #include <GLFW/glfw3.h>
 
 #include <atomic>
+#include <array>
 #include <chrono>
 #include <condition_variable>
 #include <fstream>
@@ -17,6 +19,7 @@
 #include <mutex>
 #include <stdexcept>
 #include <thread>
+#include <vector>
 
 namespace EStudioUI
 {
@@ -96,6 +99,83 @@ void Delivered(const DispatchReceipt& receipt)
     Check(receipt.WaitFor(5s), "posted work wakes the sleeping application loop");
     receipt.RethrowIfFailed();
     Check(receipt.GetStatus() == DispatchStatus::Completed, "accepted native work completes");
+}
+
+void VerifyFrameCapture(Window& window, const std::filesystem::path& output)
+{
+    window.SetSize(321, 181);
+    window.RenderFrame();
+    int width = 0, height = 0;
+    auto* native = reinterpret_cast<GLFWwindow*>(window.GetContextIdentity());
+    glfwGetFramebufferSize(native, &width, &height);
+    unsigned char presented[4]{};
+    glReadPixels(5, height - 6, 1, 1, GL_RGBA, GL_UNSIGNED_BYTE, presented);
+    Check(presented[0] < 26 && presented[2] > 229,
+          "the completed GPU frame is also copied into the native presentation buffer");
+
+    const std::array<GLenum, 7> parameters{
+        GL_READ_FRAMEBUFFER_BINDING, GL_READ_BUFFER,    GL_PIXEL_PACK_BUFFER_BINDING, GL_PACK_ALIGNMENT,
+        GL_PACK_ROW_LENGTH,          GL_PACK_SKIP_ROWS, GL_PACK_SKIP_PIXELS};
+    std::array<GLint, 7> previous{};
+    for (std::size_t i = 0; i < parameters.size(); ++i)
+        glGetIntegerv(parameters[i], &previous[i]);
+    GLuint packBuffer = 0;
+    glGenBuffers(1, &packBuffer);
+    const auto restore = [&]
+    {
+        glBindFramebuffer(GL_READ_FRAMEBUFFER, static_cast<GLuint>(previous[0]));
+        glReadBuffer(static_cast<GLenum>(previous[1]));
+        glBindBuffer(GL_PIXEL_PACK_BUFFER, static_cast<GLuint>(previous[2]));
+        for (std::size_t i = 3; i < parameters.size(); ++i)
+            glPixelStorei(parameters[i], previous[i]);
+        glDeleteBuffers(1, &packBuffer);
+    };
+    try
+    {
+        glBindFramebuffer(GL_READ_FRAMEBUFFER, 0);
+        glReadBuffer(GL_NONE);
+        glBindBuffer(GL_PIXEL_PACK_BUFFER, packBuffer);
+        glBufferData(GL_PIXEL_PACK_BUFFER, 64, nullptr, GL_STREAM_READ);
+        glPixelStorei(GL_PACK_ALIGNMENT, 8);
+        glPixelStorei(GL_PACK_ROW_LENGTH, width + 7);
+        glPixelStorei(GL_PACK_SKIP_ROWS, 1);
+        glPixelStorei(GL_PACK_SKIP_PIXELS, 2);
+        const std::array<GLint, 7> expected{0, GL_NONE, static_cast<GLint>(packBuffer), 8, width + 7, 1, 2};
+        const auto checkState = [&]
+        {
+            for (std::size_t i = 0; i < parameters.size(); ++i)
+            {
+                GLint value = 0;
+                glGetIntegerv(parameters[i], &value);
+                Check(value == expected[i], "capture restores read framebuffer, selector, PBO, and packing state");
+            }
+        };
+        const auto pixel = window.Graphics().ReadPixel({5, 5});
+        Check(pixel.m_R < .1f && pixel.m_B > .9f, "pixel capture ignores unrelated framebuffer and pack state");
+        checkState();
+        const auto path = output / "foundation-capture-state.ppm";
+        window.Graphics().SavePpm(path);
+        checkState();
+        std::ifstream image(path, std::ios::binary);
+        std::string magic;
+        int imageWidth = 0, imageHeight = 0, maximum = 0;
+        image >> magic >> imageWidth >> imageHeight >> maximum;
+        image.get();
+        Check(magic == "P6" && imageWidth == width && imageHeight == height && maximum == 255,
+              "capture preserves actual framebuffer dimensions, including an odd row width");
+        std::vector<unsigned char> pixels(static_cast<std::size_t>(width) * static_cast<std::size_t>(height) * 3);
+        image.read(reinterpret_cast<char*>(pixels.data()), static_cast<std::streamsize>(pixels.size()));
+        Check(image.gcount() == static_cast<std::streamsize>(pixels.size()), "PPM capture contains complete rows");
+        const auto offset = (static_cast<std::size_t>(5 * width) + 5) * 3;
+        Check(pixels[offset] < 26 && pixels[offset + 2] > 229, "PPM capture reads the completed GPU image");
+        Check(glGetError() == GL_NO_ERROR, "capture and restored external GL state produce no errors");
+    }
+    catch (...)
+    {
+        restore();
+        throw;
+    }
+    restore();
 }
 } // namespace
 
@@ -193,6 +273,16 @@ void VerifyApplication(const std::filesystem::path& assets, const std::filesyste
     }
     {
         Window clockProbe(options, assets / "NotoSans.ttf");
+        bool captureRejected = false;
+        try
+        {
+            clockProbe.Graphics().ReadPixel({0, 0});
+        }
+        catch (const std::logic_error&)
+        {
+            captureRejected = true;
+        }
+        Check(captureRejected, "capture before the first completed frame is diagnosed");
         std::string clockError;
         Check(clockProbe.Ui().SetStyleSheet("window { background: black; padding: 0; }", clockError), clockError);
         auto& box = clockProbe.Ui().Root().Add<Widget>();
@@ -230,6 +320,7 @@ void VerifyApplication(const std::filesystem::path& assets, const std::filesyste
               "posted animation timing produces the actual half-duration framebuffer blend");
         clockProbe.RenderFrame(2);
         Check(clockProbe.Graphics().ReadPixel({5, 5}).m_B > .9f, "posted animation reaches its exact final endpoint");
+        VerifyFrameCapture(clockProbe, output);
     }
     PaintState painted;
     first->Ui().Root().Add<PaintCounter>(painted, true);
@@ -328,6 +419,12 @@ void VerifyApplication(const std::filesystem::path& assets, const std::filesyste
                 Delivered(firstTarget.Post(
                     [&](Window& window)
                     {
+                        // Model a native swap that discards the back buffer. Capture must
+                        // read the completed UI image, independently of that buffer's contents.
+                        glBindFramebuffer(GL_DRAW_FRAMEBUFFER, 0);
+                        glDisable(GL_SCISSOR_TEST);
+                        glClearColor(1, 1, 0, 1);
+                        glClear(GL_COLOR_BUFFER_BIT);
                         const auto pixel = window.Graphics().ReadPixel({5, 5});
                         Check(pixel.m_B > .9f && pixel.m_R < .1f,
                               "first queued model update reaches actual GPU pixels");
@@ -385,6 +482,8 @@ void VerifyApplication(const std::filesystem::path& assets, const std::filesyste
            << "Direct animation setters safely destroyed their owning window without postponing tree cleanup.\n"
            << "Manual dispatcher draining retained deleted-window receivers through callback completion.\n"
            << "First-window closure preserved second-window responsiveness and actual framebuffer updates.\n"
+           << "Pixel capture survives native back-buffer overwrite after a scheduled presentation.\n"
+           << "PPM/pixel capture restore framebuffer, read selector, PBO, and pixel packing state.\n"
            << "Owner-thread diagnostics, nested-loop rejection, deterministic-clock continuation passed.\n";
 }
 } // namespace EStudioUI

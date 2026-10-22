@@ -63,7 +63,7 @@ class WrappedProbe final : public Widget
         const float width = constraints.m_Width.value_or(400);
         return {{40, 20},
                 {400, m_Bad ? std::numeric_limits<float>::quiet_NaN() : std::ceil(400 / std::max(1.0f, width)) * 20},
-                15,
+                15.0f,
                 true};
     }
 };

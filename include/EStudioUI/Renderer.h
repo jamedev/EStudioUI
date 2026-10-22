@@ -132,10 +132,10 @@ class Renderer
     //! Uploads changed buffers and submits batches in painting order.
     void EndFrame();
 
-    //! Reads a logical-pixel location from the current framebuffer.
+    //! Reads the last completed GPU frame with this renderer's context current, independently of native swaps.
     Color ReadPixel(Point point) const;
 
-    //! Writes the current framebuffer as a portable binary PPM image.
+    //! Writes the last completed GPU frame as PPM with this renderer's context current.
     void SavePpm(const std::filesystem::path& path) const;
 
     //! Returns the last submitted frame's counters.

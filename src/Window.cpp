@@ -305,14 +305,21 @@ struct Window::Impl : std::enable_shared_from_this<Window::Impl>
 
     void RequestClose()
     {
+        if (m_Closed)
+            return;
+        m_Closed = true;
         if (m_ResizePump)
             m_ResizePump->Cancel();
-        m_Closed = true;
+        if (m_Window)
+        {
+            glfwSetWindowShouldClose(m_Window, GLFW_TRUE);
+            // The C++ owner may retain a closed Window. Remove its native surface
+            // immediately; release context resources when that owner is destroyed.
+            glfwHideWindow(m_Window);
+        }
         m_TargetLifetime.request_stop();
         if (m_Ui)
             m_Ui->GetDispatcher().Close();
-        if (m_Window)
-            glfwSetWindowShouldClose(m_Window, GLFW_TRUE);
     }
 
     void Render(double time, bool drain)

@@ -22,6 +22,11 @@ current package capabilities; see the roadmaps for acceptance criteria.
 
 ## Shared actions, input, focus, and popup sessions (0.14)
 
+The 0.14.1 maintenance update fixes retained secondary windows staying visible
+after closure, captures after native buffer swaps, and two MSVC numeric-conversion
+warnings. Both Async close paths and GPU capture state have regression probes;
+see [maintenance verification](verification/WINDOW_CAPTURE_0_14_1.md).
+
 The demo opens **Input & actions** by default. One transactional command can drive
 buttons, toolbars, nested menus, split-tool choosers, and scoped shortcuts. Action
 handles queue worker requests with receiver/domain lifetime checks. Ambiguous
@@ -438,14 +443,17 @@ use ordered draws; unchanged regions retain their pixels. Embedded textures spli
 batches where needed to preserve painter order; scene rendering has its own
 submissions. The fully redrawn 640-box / 3,840-glyph stress scene uses one draw call.
 
+Pixel reads and PPM captures use the last completed retained GPU framebuffer,
+independently of native buffer swaps. They preserve external read/packing state
+and require the renderer's owning context to be current. Capturing before the
+first completed frame is diagnosed. Readback occurs only when explicitly requested.
+
 This is a prototype: text editing is single-line and left-to-right, with one font
 and no font fallback, IME pre-edit integration, full bidi, or color emoji. Layout
-supports nested rows/columns, explicit size contracts, and rectangular ancestor
-clips. Grid, automatic wrapping/height-for-width, splitters, and general-purpose
-scrolling forms remain future work. Collection controls currently use single
-selection; tables store UTF-8 strings and sort lexicographically; menus are
-single-level. Native accessibility remains future work. Large UIs need finer style/layout invalidation
-and profiling. See [ARCHITECTURE.md](ARCHITECTURE.md).
+supports box, grid, form, flow, and optional linear constraints with explicit size
+contracts and constrained measurement. Collections share typed models and stable
+selection; menus support nesting. Native accessibility and broader application
+widgets remain future work. See [ARCHITECTURE.md](ARCHITECTURE.md) and the roadmaps.
 
 ## Linux, manual CMake, and checks
 

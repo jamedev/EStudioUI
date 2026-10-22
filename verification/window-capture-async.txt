@@ -1,0 +1,8 @@
+Background scene generation and real GPU publication: PASS
+200,000 items built with an isolated worker-owned scene and BVH.
+Latest-request replacement, explicit cancellation, target deletion, and fresh target delivery passed.
+Paint mutation rejected; deferred mutation delivered at the next owner boundary.
+The actual Async close button and production native-close adapter hide retained windows.
+Reopening reclaims closed windows; late commands reject; the main window remains open.
+Successful results: 3; queue high-water: 2; coalesced publications: 310.
+Settled frame submits zero draw calls. Software GL establishes correctness, not hardware throughput.

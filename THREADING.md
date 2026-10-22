@@ -185,6 +185,12 @@ For window-level actions, `window.GetHandle().Post([](Window& live) { live.Close
 is suitable from an existing worker. Direct `Window::Close()` and
 `Window::RequestRepaint()` remain owner-thread operations.
 
+`Close()` is idempotent and immediately hides the native window as well as
+retiring its command endpoint. Native title-bar closure uses the same path.
+A retained `Window` still owns its context and UI resources until its C++ owner
+releases it; destruction during a callback remains deferred safely. Applications
+that retain window collections should remove closed owners when convenient.
+
 ## Queue policy and acknowledgements
 
 The default UI queue holds at most 4,096 pending records. An ordinary post to a

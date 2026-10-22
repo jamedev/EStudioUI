@@ -324,6 +324,48 @@ Float4 Values(Rect rect)
 {
     return {rect.m_X, rect.m_Y, rect.m_Width, rect.m_Height};
 }
+
+// Captures use the renderer's GPU image, not a native buffer whose contents may
+// be discarded by a swap. Preserve external readback state, including pack PBOs.
+class FrameReadScope
+{
+  public:
+    explicit FrameReadScope(GLuint framebuffer)
+    {
+        glGetIntegerv(GL_READ_FRAMEBUFFER_BINDING, &m_Framebuffer);
+        glGetIntegerv(GL_READ_BUFFER, &m_ReadBuffer);
+        glGetIntegerv(GL_PIXEL_PACK_BUFFER_BINDING, &m_PackBuffer);
+        glGetIntegerv(GL_PACK_ALIGNMENT, &m_Alignment);
+        glGetIntegerv(GL_PACK_ROW_LENGTH, &m_RowLength);
+        glGetIntegerv(GL_PACK_SKIP_ROWS, &m_SkipRows);
+        glGetIntegerv(GL_PACK_SKIP_PIXELS, &m_SkipPixels);
+        glBindFramebuffer(GL_READ_FRAMEBUFFER, framebuffer);
+        glReadBuffer(GL_COLOR_ATTACHMENT0);
+        glBindBuffer(GL_PIXEL_PACK_BUFFER, 0);
+        glPixelStorei(GL_PACK_ALIGNMENT, 1);
+        glPixelStorei(GL_PACK_ROW_LENGTH, 0);
+        glPixelStorei(GL_PACK_SKIP_ROWS, 0);
+        glPixelStorei(GL_PACK_SKIP_PIXELS, 0);
+    }
+
+    ~FrameReadScope()
+    {
+        glBindFramebuffer(GL_READ_FRAMEBUFFER, static_cast<GLuint>(m_Framebuffer));
+        glReadBuffer(static_cast<GLenum>(m_ReadBuffer));
+        glBindBuffer(GL_PIXEL_PACK_BUFFER, static_cast<GLuint>(m_PackBuffer));
+        glPixelStorei(GL_PACK_ALIGNMENT, m_Alignment);
+        glPixelStorei(GL_PACK_ROW_LENGTH, m_RowLength);
+        glPixelStorei(GL_PACK_SKIP_ROWS, m_SkipRows);
+        glPixelStorei(GL_PACK_SKIP_PIXELS, m_SkipPixels);
+    }
+
+    FrameReadScope(const FrameReadScope&) = delete;
+    FrameReadScope& operator=(const FrameReadScope&) = delete;
+
+  private:
+    GLint m_Framebuffer = 0, m_ReadBuffer = 0, m_PackBuffer = 0;
+    GLint m_Alignment = 0, m_RowLength = 0, m_SkipRows = 0, m_SkipPixels = 0;
+};
 } // namespace
 
 struct Renderer::Impl
@@ -442,6 +484,7 @@ struct Renderer::Impl
     };
 
     bool m_PartialRedraw = true, m_HistoryValid = false;
+    bool m_FrameReady = false;
     GLuint m_RetainedFramebuffer = 0, m_RetainedTexture = 0;
     int m_RetainedWidth = 0, m_RetainedHeight = 0;
     float m_PreviousWidth = 0, m_PreviousHeight = 0;
@@ -1373,6 +1416,7 @@ void Renderer::EndFrame()
 {
     m_Affinity.VerifyAccess("Renderer::EndFrame");
     auto& self = *m_Impl;
+    self.m_FrameReady = false;
     self.EnsureRetainedTarget();
     self.BuildDamage();
     self.BuildBatches();
@@ -1498,19 +1542,26 @@ void Renderer::EndFrame()
         self.m_HistoryValid = false;
         throw std::runtime_error("OpenGL error after rendering: " + std::to_string(error));
     }
+    self.m_FrameReady = true;
 }
 
 Color Renderer::ReadPixel(Point point) const
 {
     m_Affinity.VerifyAccess("Renderer::ReadPixel");
     const auto& self = *m_Impl;
-    const int x = std::clamp(static_cast<int>(point.m_X * static_cast<float>(self.m_FramebufferWidth) / self.m_Width),
-                             0, self.m_FramebufferWidth - 1);
-    const int y =
-        std::clamp(self.m_FramebufferHeight - 1 -
-                       static_cast<int>(point.m_Y * static_cast<float>(self.m_FramebufferHeight) / self.m_Height),
-                   0, self.m_FramebufferHeight - 1);
+    if (!self.m_FrameReady)
+        throw std::logic_error("Renderer capture requires a successfully completed frame.");
+    if (!std::isfinite(point.m_X) || !std::isfinite(point.m_Y))
+        throw std::invalid_argument("Renderer capture coordinates must be finite.");
+    const auto coordinate = [](float value, float extent, int pixels)
+    {
+        const double scaled = static_cast<double>(value) * static_cast<double>(pixels) / extent;
+        return static_cast<int>(std::clamp(scaled, 0.0, static_cast<double>(pixels - 1)));
+    };
+    const int x = coordinate(point.m_X, self.m_PreviousWidth, self.m_RetainedWidth);
+    const int y = self.m_RetainedHeight - 1 - coordinate(point.m_Y, self.m_PreviousHeight, self.m_RetainedHeight);
     unsigned char pixel[4]{};
+    const FrameReadScope reading(self.m_RetainedFramebuffer);
     glReadPixels(x, y, 1, 1, GL_RGBA, GL_UNSIGNED_BYTE, pixel);
     return {pixel[0] / 255.0f, pixel[1] / 255.0f, pixel[2] / 255.0f, pixel[3] / 255.0f};
 }
@@ -1519,16 +1570,20 @@ void Renderer::SavePpm(const std::filesystem::path& path) const
 {
     m_Affinity.VerifyAccess("Renderer::SavePpm");
     const auto& self = *m_Impl;
-    std::vector<unsigned char> pixels(static_cast<std::size_t>(self.m_FramebufferWidth) *
-                                      static_cast<std::size_t>(self.m_FramebufferHeight) * 3);
-    glPixelStorei(GL_PACK_ALIGNMENT, 1);
-    glReadPixels(0, 0, self.m_FramebufferWidth, self.m_FramebufferHeight, GL_RGB, GL_UNSIGNED_BYTE, pixels.data());
+    if (!self.m_FrameReady)
+        throw std::logic_error("Renderer capture requires a successfully completed frame.");
+    std::vector<unsigned char> pixels(static_cast<std::size_t>(self.m_RetainedWidth) *
+                                      static_cast<std::size_t>(self.m_RetainedHeight) * 3);
+    {
+        const FrameReadScope reading(self.m_RetainedFramebuffer);
+        glReadPixels(0, 0, self.m_RetainedWidth, self.m_RetainedHeight, GL_RGB, GL_UNSIGNED_BYTE, pixels.data());
+    }
     std::ofstream output(path, std::ios::binary);
     if (!output)
         throw std::runtime_error("Cannot write screenshot: " + path.string());
-    output << "P6\n" << self.m_FramebufferWidth << ' ' << self.m_FramebufferHeight << "\n255\n";
-    const auto stride = static_cast<std::size_t>(self.m_FramebufferWidth) * 3;
-    for (int y = self.m_FramebufferHeight - 1; y >= 0; --y)
+    output << "P6\n" << self.m_RetainedWidth << ' ' << self.m_RetainedHeight << "\n255\n";
+    const auto stride = static_cast<std::size_t>(self.m_RetainedWidth) * 3;
+    for (int y = self.m_RetainedHeight - 1; y >= 0; --y)
         output.write(reinterpret_cast<const char*>(pixels.data() + static_cast<std::size_t>(y) * stride),
                      static_cast<std::streamsize>(stride));
     if (!output)

@@ -126,7 +126,7 @@ LayoutPlan GridLayout::Compute(const LayoutContext& context) const
     }
     std::vector<float> heights(count);
     std::vector<bool> definiteHeights(count);
-    std::fill(ascents.begin(), ascents.end(), 0);
+    std::fill(ascents.begin(), ascents.end(), 0.0f);
     for (std::size_t i = 0; i < count; ++i)
     {
         const auto& child = context.m_Children[i];

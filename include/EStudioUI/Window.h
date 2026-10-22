@@ -81,7 +81,7 @@ class Window
     //! Requests a new frame and wakes the GLFW event loop.
     void RequestRepaint();
 
-    //! Requests closure without destroying the current callback stack.
+    //! Hides and closes the native surface; owned resources survive active callbacks and live until destruction.
     void Close();
 
     //! Exposes key presses after controls receive them, including F5/F6.

@@ -37,6 +37,11 @@ remain acceptance criteria throughout.
 
 ## Implementation status: 0.14, input, actions, focus, and popup sessions
 
+The 0.14.1 maintenance increment fixes retained native window closure, stable
+GPU capture after presentation, and MSVC conversion warnings before F11 begins.
+Its regression evidence is in
+[verification/WINDOW_CAPTURE_0_14_1.md](verification/WINDOW_CAPTURE_0_14_1.md).
+
 **Gate A is implemented.** F01-F04 now have public APIs, lifetime/phase/error
 contracts, concurrency tests, and actual multiwindow/framebuffer probes.
 [THREADING.md](THREADING.md) documents the shipped signatures and policies;
