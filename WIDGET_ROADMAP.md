@@ -19,8 +19,8 @@ implemented. Keep the C++20, GPU drawing, permissive dependencies, explicit
 ownership, CSS, and low idle-work requirements.
 
 F09 input/actions/focus is delivered in 0.14, including shared command presentations
-and nested menus on existing controls. The initial 0.15 F11 platform/semantic
-increment is documented in [PLATFORM.md](PLATFORM.md); F11 remains in progress.
+and nested menus on existing controls. The 0.16 F11 composition/virtual semantic implementation is documented in
+[PLATFORM.md](PLATFORM.md); native acceptance and F10a remain prerequisites.
 Continue its native/composition/accessibility acceptance work and F10a essential
 text/input for controls. F10b document editing and
 W04/W05 remain a later dedicated track; basic forms and workspaces do not wait

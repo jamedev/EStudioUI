@@ -140,6 +140,36 @@ class TableWidget final : public ScrollWidget
     Rect GetViewport() const override;
 
   protected:
+    //! Describes selection and logical structure without materializing row widgets.
+    SemanticInfo DescribeSemantics() const override;
+
+    //! Returns a direct logical child count.
+    std::size_t GetSemanticChildCount(SemanticKey parent) const override;
+
+    //! Resolves a logical child by position without scanning earlier records.
+    std::optional<SemanticKey> GetSemanticChildAt(SemanticKey parent, std::size_t index) const override;
+
+    //! Describes a stable live item using prepared geometry.
+    std::optional<SemanticVirtualNode> DescribeSemanticChild(SemanticKey key) const override;
+
+    //! Resolves a stable item's current sibling position.
+    std::optional<std::size_t> GetSemanticChildIndex(SemanticKey key) const override;
+
+    //! Applies selection, expansion, realization, or editing through canonical paths.
+    SemanticStatus OnSemanticChildAction(SemanticKey key, const SemanticCommand& command) override;
+
+    //! Resolves the logical item under one layout-coordinate point.
+    std::optional<SemanticKey> SemanticHitTest(Point layoutPoint) const override;
+
+    //! Returns the canonical selected set size without copying it.
+    std::size_t GetSemanticSelectionCount() const override;
+
+    //! Returns a bounded canonical selection page, including temporarily filtered items.
+    std::vector<SemanticKey> GetSemanticSelection(std::size_t offset, std::size_t limit) const override;
+
+    //! Returns the current stable item for logical keyboard focus.
+    std::optional<SemanticKey> GetSemanticFocus() const override;
+
     //! Supplies a bounded preferred viewport size.
     Point Measure(FontFace& font) const override;
 
@@ -176,7 +206,31 @@ class TableWidget final : public ScrollWidget
     //! Commits an active editor before scrolling the table body.
     bool OnScroll(Point delta, Modifiers modifiers) override;
 
+    //! Resolves one grid cell directly by current row and schema column.
+    std::optional<SemanticKey> GetSemanticGridItem(std::size_t row, std::size_t column) const override;
+
   private:
+    //! Creates a collision-free record key in the current data namespace.
+    SemanticKey SemanticRowKey(std::size_t row, std::uint64_t part = 0) const;
+
+    //! Resolves a key into current visible row coordinates, or empty when filtered/deleted.
+    std::optional<std::size_t> SemanticRowIndex(SemanticKey key) const;
+
+    //! Prepared column prefix coordinates; semantic inspection never triggers content fitting.
+    std::vector<float> m_SemanticColumnOffsets;
+
+    //! Identifies convenience-owned rows independently of sorting and removal.
+    std::vector<ItemId> m_SemanticRowIds;
+
+    //! Resolves convenience-owned row identities in constant expected work.
+    std::unordered_map<ItemId, std::size_t> m_SemanticRowIndices;
+
+    //! Expires convenience dataset keys on complete replacement.
+    std::uint64_t m_SemanticGeneration = AllocateItemId();
+
+    //! Changes only when logical record identities or their ordering change.
+    std::uint64_t m_SemanticStructureRevision = 1;
+
     //! Applies selection modifiers using stable IDs and current view order.
     void SelectCell(int row, int column, Modifiers modifiers);
 

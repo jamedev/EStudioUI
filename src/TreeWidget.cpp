@@ -48,6 +48,7 @@ void TreeWidget::SetModel(std::shared_ptr<ItemModel> model, std::size_t column)
         *this, model,
         [](Widget& owner, const ModelChange& change) { static_cast<TreeWidget&>(owner).ModelChanged(change); },
         [](Widget& owner) { static_cast<TreeWidget&>(owner).SelectionChanged(); }, std::move(selection));
+    ++m_SemanticStructureRevision;
     m_View = std::move(view);
     m_ModelColumn = column;
     m_Nodes.clear();
@@ -113,6 +114,7 @@ void TreeWidget::ModelChanged(const ModelChange& change)
     const auto lease = RetainOwner();
     if (change.m_Reset || change.m_Structure)
     {
+        ++m_SemanticStructureRevision;
         const auto canonical = m_View->GetModel()->GetRootModel()->GetSnapshot();
         std::erase_if(m_ExpandedItems, [&](ItemId item) { return !canonical.Contains(item); });
         if (m_ModelColumn >= change.m_After.GetColumns().size())
@@ -146,9 +148,8 @@ std::optional<std::size_t> TreeWidget::VisibleIndex(NodeId item) const
     EnsureRows();
     if (m_View)
         return m_RowMap.GetIndex(item);
-    const auto found = std::find_if(m_Rows.begin(), m_Rows.end(), [item](const Row& row) { return row.m_Id == item; });
-    return found == m_Rows.end() ? std::nullopt
-                                 : std::optional<std::size_t>(static_cast<std::size_t>(found - m_Rows.begin()));
+    const auto found = m_SemanticVisibleIndices.find(item);
+    return found == m_SemanticVisibleIndices.end() ? std::nullopt : std::optional<std::size_t>(found->second);
 }
 
 bool TreeWidget::ItemEnabled(NodeId item) const
@@ -214,7 +215,10 @@ TreeWidget::NodeId TreeWidget::AddItem(NodeId parent, std::string text)
         throw std::out_of_range("Invalid tree parent ID.");
     const auto id = m_NextId++;
     m_Nodes.emplace(id, Node{parent, TextBuffer::Sanitize(text), {}, false});
-    (parent ? m_Nodes.at(parent).m_Children : m_Roots).push_back(id);
+    auto& siblings = parent ? m_Nodes.at(parent).m_Children : m_Roots;
+    m_Nodes.at(id).m_Position = siblings.size();
+    siblings.push_back(id);
+    ++m_SemanticStructureRevision;
     m_RowsDirty = true;
     Invalidate(Invalidation::Content);
     return id;
@@ -231,7 +235,11 @@ void TreeWidget::RemoveItem(NodeId item)
         return;
     }
     const auto parent = m_Nodes.at(item).m_Parent;
-    std::erase(parent ? m_Nodes.at(parent).m_Children : m_Roots, item);
+    auto& siblings = parent ? m_Nodes.at(parent).m_Children : m_Roots;
+    std::erase(siblings, item);
+    for (std::size_t index = 0; index < siblings.size(); ++index)
+        m_Nodes.at(siblings[index]).m_Position = index;
+    ++m_SemanticStructureRevision;
     std::vector<NodeId> pending{item};
     bool selectionRemoved = false;
     while (!pending.empty())
@@ -267,6 +275,7 @@ void TreeWidget::Clear()
         model->Replace(std::move(empty).Build());
         return;
     }
+    ++m_SemanticStructureRevision;
     m_Nodes.clear();
     m_Roots.clear();
     m_RowsDirty = true;
@@ -321,6 +330,7 @@ void TreeWidget::SetExpanded(NodeId item, bool expanded)
             m_ExpandedItems.insert(item);
         else
             m_ExpandedItems.erase(item);
+        ++m_SemanticStructureRevision;
         m_RowsDirty = true;
         Invalidate(Invalidation::Arrange | Invalidation::HitTest | Invalidation::Paint);
         m_ExpandedChanged.Emit(item, expanded);
@@ -330,6 +340,7 @@ void TreeWidget::SetExpanded(NodeId item, bool expanded)
     if (node.m_Expanded == expanded)
         return;
     node.m_Expanded = expanded;
+    ++m_SemanticStructureRevision;
     m_RowsDirty = true;
     m_Hover = -1;
     Invalidate(Invalidation::Content);
@@ -354,6 +365,7 @@ void TreeWidget::EnsureRows() const
         return;
     }
     m_Rows.clear();
+    m_SemanticVisibleIndices.clear();
     std::vector<Row> pending;
     for (auto it = m_Roots.rbegin(); it != m_Roots.rend(); ++it)
         pending.push_back({*it, 0});
@@ -361,6 +373,7 @@ void TreeWidget::EnsureRows() const
     {
         const auto row = pending.back();
         pending.pop_back();
+        m_SemanticVisibleIndices.emplace(row.m_Id, m_Rows.size());
         m_Rows.push_back(row);
         const auto& node = m_Nodes.at(row.m_Id);
         if (node.m_Expanded)
@@ -383,7 +396,8 @@ void TreeWidget::SetCurrentItem(NodeId item)
         if (data.Contains(item))
         {
             for (auto parent = data.GetParent(item); parent; parent = data.GetParent(parent))
-                m_ExpandedItems.insert(parent);
+                if (m_ExpandedItems.insert(parent).second)
+                    ++m_SemanticStructureRevision;
             m_RowsDirty = true;
             if (const auto index = VisibleIndex(item))
                 EnsureVisible({0, static_cast<float>(*index) * GetStyle().m_RowHeight, 0, GetStyle().m_RowHeight});
@@ -410,7 +424,10 @@ void TreeWidget::SetCurrentItem(NodeId item)
             {0, static_cast<float>(found - m_Rows.begin()) * GetStyle().m_RowHeight, 0, GetStyle().m_RowHeight});
     }
     if (revealed)
+    {
+        ++m_SemanticStructureRevision;
         Invalidate(Invalidation::Content);
+    }
     if (m_Current == item)
         return;
     m_Current = item;
@@ -692,4 +709,220 @@ void TreeWidget::OnKey(Key key, bool down, bool, Modifiers modifiers)
     EnsureVisible({0, static_cast<float>(index) * GetStyle().m_RowHeight, 0, GetStyle().m_RowHeight});
     SelectItem(item, modifiers);
 }
+
+SemanticKey TreeWidget::SemanticItemKey(NodeId item) const
+{
+    return {item, 0, m_View ? m_View->GetModel()->GetRootModel()->GetIdentity() : m_SemanticGeneration};
+}
+
+bool TreeWidget::SemanticKeyValid(SemanticKey key) const
+{
+    if (!key.m_Item || key.m_Part || key.m_Generation != SemanticItemKey(key.m_Item).m_Generation)
+        return false;
+    return m_View ? m_View->GetModel()->GetRootModel()->GetSnapshot().Contains(key.m_Item)
+                  : m_Nodes.contains(key.m_Item);
+}
+
+SemanticInfo TreeWidget::DescribeSemantics() const
+{
+    auto info = Widget::DescribeSemantics();
+    info.m_StructureRevision = m_SemanticStructureRevision;
+    info.m_MultiSelectable = m_View && m_View->GetSelectionModel()->GetMode() == SelectionMode::Multiple;
+    return info;
+}
+
+std::size_t TreeWidget::GetSemanticChildCount(SemanticKey parent) const
+{
+    if (parent.m_Item && (!SemanticKeyValid(parent) || !IsExpanded(parent.m_Item)))
+        return 0;
+    if (m_View)
+    {
+        const auto data = m_View->GetModel()->GetSnapshot();
+        if (parent.m_Item && !data.Contains(parent.m_Item))
+            return 0;
+        return data.GetRowCount(parent.m_Item);
+    }
+    return parent.m_Item ? m_Nodes.at(parent.m_Item).m_Children.size() : m_Roots.size();
+}
+
+std::optional<SemanticKey> TreeWidget::GetSemanticChildAt(SemanticKey parent, std::size_t index) const
+{
+    if (index >= GetSemanticChildCount(parent))
+        return {};
+    return SemanticItemKey(m_View          ? m_View->GetModel()->GetSnapshot().GetItem(index, parent.m_Item)
+                           : parent.m_Item ? m_Nodes.at(parent.m_Item).m_Children[index]
+                                           : m_Roots[index]);
+}
+
+std::optional<SemanticVirtualNode> TreeWidget::DescribeSemanticChild(SemanticKey key) const
+{
+    if (!SemanticKeyValid(key))
+        return {};
+    SemanticVirtualNode node;
+    auto& info = node.m_Info;
+    info.m_Role = SemanticRole::TreeItem;
+    const auto canonical = m_View ? m_View->GetModel()->GetRootModel()->GetSnapshot() : ModelSnapshot{};
+    const auto parent = m_View ? canonical.GetParent(key.m_Item) : m_Nodes.at(key.m_Item).m_Parent;
+    if (parent)
+        node.m_Parent = SemanticItemKey(parent);
+    info.m_Name = m_View ? TextBuffer::Sanitize(m_Delegate->GetText(canonical, key.m_Item, m_ModelColumn))
+                         : m_Nodes.at(key.m_Item).m_Text;
+    info.m_Selected = m_View ? m_View->GetSelectionModel()->IsSelected(key.m_Item) : m_Current == key.m_Item;
+    info.m_Expandable = m_View ? canonical.GetRowCount(key.m_Item) != 0 : !m_Nodes.at(key.m_Item).m_Children.empty();
+    info.m_Expanded = info.m_Expandable && IsExpanded(key.m_Item);
+    info.m_StructureRevision = m_SemanticStructureRevision;
+    info.m_Actions = SemanticAction::Select | SemanticAction::AddToSelection | SemanticAction::RemoveFromSelection |
+                     SemanticAction::ScrollIntoView | SemanticAction::Invoke;
+    if (info.m_Expandable)
+        info.m_Actions = info.m_Actions | SemanticAction::Expand | SemanticAction::Collapse;
+    node.m_Focused = m_Current == key.m_Item;
+    std::optional<std::size_t> row;
+    if (!m_RowsDirty)
+    {
+        if (m_View)
+            row = m_RowMap.GetIndex(key.m_Item);
+        else if (const auto found = m_SemanticVisibleIndices.find(key.m_Item); found != m_SemanticVisibleIndices.end())
+            row = found->second;
+    }
+    if (row)
+    {
+        const auto viewport = GetViewport();
+        node.m_Bounds =
+            Rect{viewport.m_X,
+                 viewport.m_Y + static_cast<float>(*row) * GetStyle().m_RowHeight - GetStoredScrollOffset().m_Y,
+                 viewport.m_Width, GetStyle().m_RowHeight}
+                .Intersect(viewport);
+    }
+    if (m_View)
+    {
+        const auto enabled = canonical.GetValue(key.m_Item, m_ModelColumn, ModelRole::Enabled);
+        node.m_Enabled = !std::holds_alternative<bool>(enabled) || std::get<bool>(enabled);
+    }
+    return node;
+}
+
+std::optional<std::size_t> TreeWidget::GetSemanticChildIndex(SemanticKey key) const
+{
+    if (!SemanticKeyValid(key))
+        return {};
+    if (m_View)
+    {
+        const auto data = m_View->GetModel()->GetSnapshot();
+        return data.Contains(key.m_Item) ? data.GetPosition(key.m_Item) : std::nullopt;
+    }
+    return m_Nodes.at(key.m_Item).m_Position;
+}
+
+SemanticStatus TreeWidget::OnSemanticChildAction(SemanticKey key, const SemanticCommand& command)
+{
+    if (!SemanticKeyValid(key))
+        return SemanticStatus::Unavailable;
+    const auto item = key.m_Item;
+    if (command.m_Action == SemanticAction::Expand || command.m_Action == SemanticAction::Collapse)
+    {
+        SetExpanded(item, command.m_Action == SemanticAction::Expand);
+        return SemanticStatus::Succeeded;
+    }
+    if (command.m_Action == SemanticAction::ScrollIntoView)
+    {
+        if (m_View && !m_View->GetModel()->GetSnapshot().Contains(item))
+            return SemanticStatus::Unavailable;
+        for (auto parent = ParentOf(item); parent; parent = ParentOf(parent))
+        {
+            if (m_View)
+                m_ExpandedItems.insert(parent);
+            else
+                m_Nodes.at(parent).m_Expanded = true;
+        }
+        ++m_SemanticStructureRevision;
+        m_RowsDirty = true;
+        EnsureRows();
+        const auto row = VisibleIndex(item);
+        if (!row)
+            return SemanticStatus::Unavailable;
+        EnsureVisible({0, static_cast<float>(*row) * GetStyle().m_RowHeight, 0, GetStyle().m_RowHeight});
+        Invalidate(Invalidation::Arrange | Invalidation::HitTest | Invalidation::Paint);
+        return SemanticStatus::Succeeded;
+    }
+    if (command.m_Action == SemanticAction::Invoke)
+    {
+        m_Activated.Emit(item);
+        return SemanticStatus::Succeeded;
+    }
+    if (command.m_Action == SemanticAction::Select || command.m_Action == SemanticAction::Focus ||
+        command.m_Action == SemanticAction::AddToSelection)
+    {
+        if (m_View)
+        {
+            const auto selection = m_View->GetSelectionModel();
+            if (command.m_Action == SemanticAction::AddToSelection && selection->GetMode() == SelectionMode::Single &&
+                !selection->GetSnapshot()->m_Items.empty() && !selection->IsSelected(item))
+                return SemanticStatus::InvalidValue;
+            selection->Select(item, m_ModelColumn,
+                              command.m_Action == SemanticAction::AddToSelection ? SelectionAction::Add
+                                                                                 : SelectionAction::Replace);
+        }
+        else
+        {
+            if (command.m_Action == SemanticAction::AddToSelection && m_Current && m_Current != item)
+                return SemanticStatus::InvalidValue;
+            SetCurrentItem(item);
+        }
+        return SemanticStatus::Succeeded;
+    }
+    if (command.m_Action == SemanticAction::RemoveFromSelection)
+    {
+        if (m_View)
+        {
+            const auto selection = m_View->GetSelectionModel();
+            if (selection->IsSelected(item))
+                selection->Select(item, m_ModelColumn, SelectionAction::Toggle);
+        }
+        else if (m_Current == item)
+            SetCurrentItem(0);
+        return SemanticStatus::Succeeded;
+    }
+    return SemanticStatus::Unsupported;
+}
+
+std::optional<SemanticKey> TreeWidget::SemanticHitTest(Point point) const
+{
+    if (m_RowsDirty || !GetViewport().Contains(point))
+        return {};
+    const auto row = static_cast<std::size_t>(
+        std::max(0.0f, point.m_Y - GetViewport().m_Y + GetStoredScrollOffset().m_Y) / GetStyle().m_RowHeight);
+    if (m_View)
+        return row < m_RowMap.GetCount() ? std::optional<SemanticKey>(SemanticItemKey(m_RowMap.GetRow(row).m_Item))
+                                         : std::nullopt;
+    return row < m_Rows.size() ? std::optional<SemanticKey>(SemanticItemKey(m_Rows[row].m_Id)) : std::nullopt;
+}
+
+std::size_t TreeWidget::GetSemanticSelectionCount() const
+{
+    return m_View ? m_View->GetSelectionModel()->GetSnapshot()->m_Items.size() : m_Current ? 1 : 0;
+}
+
+std::vector<SemanticKey> TreeWidget::GetSemanticSelection(std::size_t offset, std::size_t limit) const
+{
+    std::vector<SemanticKey> result;
+    if (!m_View)
+    {
+        if (!offset && limit && m_Current)
+            result.push_back(SemanticItemKey(m_Current));
+        return result;
+    }
+    const auto selection = m_View->GetSelectionModel()->GetSnapshot();
+    auto item = selection->m_Items.begin();
+    std::advance(item, std::min(offset, selection->m_Items.size()));
+    for (; item != selection->m_Items.end() && result.size() < limit; ++item)
+        result.push_back(SemanticItemKey(*item));
+    return result;
+}
+
+std::optional<SemanticKey> TreeWidget::GetSemanticFocus() const
+{
+    const auto item = GetCurrentItem();
+    return item ? std::optional<SemanticKey>(SemanticItemKey(item)) : std::nullopt;
+}
+
 } // namespace EStudioUI

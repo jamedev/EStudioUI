@@ -284,6 +284,12 @@ bool UiContext::DispatchShortcut(const KeyboardEvent& event)
 bool UiContext::RouteKey(const KeyboardEvent& event)
 {
     m_LastShortcut = ShortcutStatus::Unmatched;
+    if (m_CompositionClient.Get() && m_CompositionClient.Get() == m_Focus.Get())
+    {
+        if (event.m_Down && event.m_Key == Key::Escape)
+            CancelTextComposition();
+        return true;
+    }
     const auto modifiers = EditingModifiers(event.m_Modifiers);
     if (event.m_Down && event.m_Key == Key::Escape && !m_Popups.empty() &&
         m_Popups.back().m_Options.m_DismissOnEscape && !event.m_Modifiers.m_AltGraph)
@@ -327,6 +333,53 @@ void UiContext::KeyEvent(Key key, bool down, bool repeat, Modifiers modifiers)
 void UiContext::TextInput(std::string_view text)
 {
     DispatchInput(TextInputEvent{std::string(text), GetTime()});
+}
+
+bool UiContext::DispatchComposition(const TextCompositionEvent& event)
+{
+    const auto ownerLifetime = RetainOwner();
+    VerifyTraversalEntry();
+    if (m_DispatchingInput)
+        throw std::logic_error("Nested text composition delivery is unsupported; post the update instead.");
+    ValidateTextComposition(event);
+    const auto state = GetTextInputState();
+    if (!state.m_Client || (event.m_Client && event.m_Client != state.m_Client) ||
+        (event.m_Epoch && event.m_Epoch != state.m_Epoch) ||
+        (!state.m_Active && event.m_Kind != TextCompositionKind::Cancel))
+        return false;
+    const auto target = m_Focus;
+    const Detail::InputDispatchScope inputScope;
+    const FlagScope scope(m_DispatchingInput);
+    PrepareInput();
+    if (!target.Get() || target.Get() != m_Focus.Get() || m_TextInputEpoch != state.m_Epoch)
+        return false;
+    auto* client = dynamic_cast<TextInputClient*>(target.Get());
+    if (!client)
+        return false;
+    auto owned = event;
+    owned.m_Client = state.m_Client;
+    owned.m_Epoch = state.m_Epoch;
+    if (event.m_Kind != TextCompositionKind::Preedit)
+        m_CompositionClient = {};
+    const bool accepted = client->OnTextComposition(owned);
+    if (target.Get() && target.Get() == m_Focus.Get())
+        ++m_TextInputRevision;
+    if (accepted && event.m_Kind == TextCompositionKind::Preedit && target.Get() && target.Get() == m_Focus.Get() &&
+        m_TextInputEpoch == state.m_Epoch)
+        m_CompositionClient = target;
+    return accepted;
+}
+
+void UiContext::CancelTextComposition()
+{
+    const auto ownerLifetime = RetainOwner();
+    VerifyDispatchPhase();
+    ++m_TextInputEpoch;
+    ++m_TextInputRevision;
+    m_CompositionClient = {};
+    const auto target = m_Focus;
+    if (auto* client = target.Get() ? dynamic_cast<TextInputClient*>(target.Get()) : nullptr)
+        client->OnTextComposition({TextCompositionKind::Cancel, {}, 0, target.Get()->m_TargetKey, m_TextInputEpoch});
 }
 
 PointerEvent UiContext::MakePointerEvent(const Widget& widget, Point position, Modifiers modifiers, int clicks) const
@@ -606,6 +659,9 @@ void UiContext::SetFocus(Widget* widget)
         return;
     const WidgetRef next(widget);
     const auto previousFocus = m_Focus;
+    CancelTextComposition();
+    if (previousFocus.Get() != m_Focus.Get())
+        return;
     m_Focus = next;
     Invalidate(m_Root, Invalidation::Selector);
     if (auto* previous = previousFocus.Get())

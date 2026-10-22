@@ -307,8 +307,11 @@ Slider `grid-color` supplies the default groove, `selection-background-color` su
 active track and focused handle border, `color` paints the handle, and
 `border-color` supplies its idle outline. Named `::groove`, `::fill`, and `::handle`
 parts override these defaults. Their transitions and keyframes share the widget's
-existing animation scheduler. Text boxes expose `::selection`, `::caret`, and
-`::placeholder` without creating children.
+existing animation scheduler. Text boxes expose `::selection`, `::caret`,
+`::placeholder`, and `::preedit` without creating children. The preedit part draws
+the native composition underline; `background-color` controls its color and
+`height` its thickness. Temporary composition uses the ordinary GPU text path and
+does not change the canonical text or validation state until commit.
 
 Dense arcs, splines, and paths use the same shared item CSS palette as lines;
 annotation text uses `color` and opacity while its font size is stored in world

@@ -40,6 +40,15 @@ UiContext::~UiContext()
 {
     if (!IsOwnerThread() || m_Phase != UiPhase::Idle)
         std::terminate();
+    try
+    {
+        CancelTextComposition();
+    }
+    catch (...)
+    {
+        // Native delivery is already disconnected; extension cancellation cannot stop owner teardown.
+        m_CompositionClient = {};
+    }
     m_Closing = true;
     ClosePlatformServices();
     const auto popups = std::move(m_Popups);
@@ -217,9 +226,73 @@ Widget& UiContext::Root()
     return m_Root;
 }
 
+std::uint64_t UiContext::GetTextInputRevision() const
+{
+    VerifyAccess();
+    return m_TextInputRevision;
+}
+
+void UiContext::NotifyTextInputChanged()
+{
+    VerifyDispatchPhase();
+    ++m_TextInputRevision;
+    if (m_Semantics)
+        m_Semantics->Changed();
+}
+
+TextInputState UiContext::GetTextInputState() const
+{
+    VerifyTraversalEntry();
+    TextInputState state;
+    state.m_Active = false;
+    state.m_Epoch = m_TextInputEpoch;
+    const auto* focused = m_Focus.Get();
+    const auto* client = focused ? dynamic_cast<const TextInputClient*>(focused) : nullptr;
+    if (!client || !focused->IsVisible() || !focused->IsEnabled() || !IsWithin(focused, &InputRoot()))
+        return state;
+    {
+        const PhaseScope scope(*this, UiPhase::Inspection);
+        state = client->GetTextInputState();
+    }
+    ValidatePlatformText(state.m_Text);
+    if (state.m_Text.size() > 1024 * 1024 || state.m_Anchor > state.m_Text.size() ||
+        state.m_Caret > state.m_Text.size())
+        throw std::invalid_argument("A text input snapshot exceeds its bounded text or selection range.");
+    for (const auto offset : {state.m_Anchor, state.m_Caret})
+        if (offset < state.m_Text.size() && (static_cast<unsigned char>(state.m_Text[offset]) & 0xC0U) == 0x80U)
+            throw std::invalid_argument("Text input selection must use UTF-8 code-point boundaries.");
+    const auto caret = state.m_CaretBounds;
+    if (!std::isfinite(caret.m_X) || !std::isfinite(caret.m_Y) || !std::isfinite(caret.m_Width) ||
+        !std::isfinite(caret.m_Height) || caret.m_Width < 0 || caret.m_Height < 0)
+        throw std::invalid_argument("Text input caret bounds must be finite and nonnegative.");
+    Point points[4] = {{caret.m_X, caret.m_Y},
+                       {caret.m_X + caret.m_Width, caret.m_Y},
+                       {caret.m_X, caret.m_Y + caret.m_Height},
+                       {caret.m_X + caret.m_Width, caret.m_Y + caret.m_Height}};
+    for (auto& point : points)
+        point = ToWindowPoint(*focused, point);
+    float left = points[0].m_X, top = points[0].m_Y, right = left, bottom = top;
+    for (const auto point : points)
+    {
+        left = std::min(left, point.m_X);
+        top = std::min(top, point.m_Y);
+        right = std::max(right, point.m_X);
+        bottom = std::max(bottom, point.m_Y);
+    }
+    state.m_CaretBounds = {left, top, right - left, bottom - top};
+    state.m_Client = focused->m_TargetKey;
+    state.m_Epoch = m_TextInputEpoch;
+    state.m_Active = state.m_Active && !state.m_ReadOnly;
+    const auto metrics = const_cast<UiContext*>(this)->Platform().GetWindowMetrics();
+    state.m_ScreenCaretBounds =
+        metrics.m_HasScreenCoordinates ? std::optional<Rect>(metrics.ToScreen(state.m_CaretBounds)) : std::nullopt;
+    return state;
+}
+
 void UiContext::Invalidate()
 {
     VerifyAccess();
+    ++m_TextInputRevision;
     if (m_Semantics)
         m_Semantics->Changed();
     m_Dirty = true;
@@ -234,6 +307,10 @@ void UiContext::Invalidate()
 void UiContext::Invalidate(Widget& widget, Invalidation flags)
 {
     VerifyAccess();
+    if (HasInvalidation(flags, Invalidation::Selector | Invalidation::InheritedStyle | Invalidation::Style |
+                                   Invalidation::Measure | Invalidation::Arrange | Invalidation::HitTest |
+                                   Invalidation::Structure))
+        ++m_TextInputRevision;
     if (flags == Invalidation::None)
         return;
     if (m_Semantics)
@@ -1129,6 +1206,7 @@ void UiContext::Prepare(float width, float height)
     }
     m_Dirty = m_FullStyleDirty || m_Root.m_SubtreeStyleDirty || m_Root.m_ArrangeDirty || !m_Root.m_MeasureValid ||
               m_HitTestDirty;
+    ++m_TextInputRevision;
 }
 
 void UiContext::Arrange()

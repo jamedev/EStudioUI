@@ -1,9 +1,11 @@
-# Platform services and widget semantics (0.15, initial F11 increment)
+# Platform services, composition and accessibility (0.16)
 
 Use `window.Platform()` or `ui.Platform()` for native services. A window installs
 its adapter automatically; standalone contexts default to deterministic memory
 services. No additional third-party library is required. Windows integrations
-use the Windows SDK. This increment does **not** finish F11 or Gate B.
+use the Windows SDK, including IMM32 and UI Automation. F10a font fallback and
+complete script/direction support remain separate work. Native acceptance is
+recorded separately from implementation and deterministic contract tests.
 
 ## Supported adapters
 
@@ -18,8 +20,9 @@ use the Windows SDK. This increment does **not** finish F11 or Gate B.
 | Logical sizing and input scaling | Native | Backend-specific native mapping | Emulated |
 | Physical desktop coordinates | Native client-to-screen | X11; unsupported on Cocoa/Wayland here | Unsupported unless explicitly injected |
 | Owned windows | Native HWND owner plus logical close relationship | Logical close relationship, reported emulated | Emulated |
-| Basic widget accessibility | Initial Windows UI Automation bridge | Unsupported | Semantic queries only |
-| Drag source / IME composition | Unsupported in this increment | Unsupported | Unsupported |
+| Widget and virtual-item accessibility | Windows UI Automation bridge | Unsupported | Semantic queries only |
+| IME composition | Windows IMM composition adapter | Unsupported | Explicit shared composition events |
+| Outgoing drag source | Unsupported | Unsupported | Unsupported |
 
 `GetCapabilities()` distinguishes `Native`, `Emulated`, and `Unsupported` per
 `PlatformFeature`. Individual calls can still fail or be busy. Check their
@@ -159,20 +162,29 @@ and modal barriers disable underlying semantic actions. HitTest uses the exact
 shared transformed/rounded input geometry; reported rectangles are conservative
 axis-aligned bounds when rotated or rounded clipping is involved.
 
-The service builds an index of actual widgets once when first requested, then
-maintains it on attach/detach. It never creates collection-row/canvas-item nodes
-or rebuilds a tree on each frame. GetChildren pages are capped at 256 identities;
-paging scans the actual sibling list up to the requested offset. No paint,
-Prepare, style resolution, or layout is triggered by a query. Geometry describes
-the last prepared frame. Direct queries/actions belong to the UI owner and are
-rejected during input/frame traversal or staged shared-state updates.
+The service indexes actual widgets once when first requested, then maintains that
+index on attach/detach. Virtual rows, cells, tree records and scene items are
+queried on demand without allocating row widgets or a persistent node map for the
+complete model. A `SemanticId` contains an actual widget lifetime identity plus
+record, sub-item and dataset coordinates. Use `auto` or `SemanticId` for IDs;
+code that stored the earlier scalar ID must migrate to this value type. Do not
+persist IDs between application sessions.
+
+`GetChildCount`, `GetChildAt`, `GetSibling` and `GetGridItem` support direct indexed
+access to virtual records. `GetChildren` and `GetSelection` pages are capped at
+256 identities. Actual widget siblings still use their owned sibling list; a
+selected-set page can scan to its requested offset. No paint, Prepare, style
+resolution or layout is triggered by a query. Geometry describes the last
+prepared frame. Direct queries/actions belong to the UI owner and are rejected
+during input/frame traversal or staged shared-state updates.
 
 Built-in buttons, checkable tool buttons, text boxes, sliders and numeric controls
 expose canonical activation/toggle/value/range/focus actions. Values respect
 read-only/validator/range policies. An invalid numeric value is rejected, not
 silently clamped. Deleting a target expires its identity; a replacement cannot
-inherit stale native provider access. Other existing families have container
-roles but no advertised virtual-row/grid/selection patterns yet.
+inherit stale native provider access. Lists, trees, tables and canvases additionally
+expose virtual items through their canonical model/selection and reveal paths.
+Capabilities and action masks describe the behavior supported by each node.
 
 Custom controls override the protected `DescribeSemantics()` and
 `OnSemanticAction()` hooks, alongside their existing paint/input extension points.
@@ -182,12 +194,53 @@ phases on exceptions. Explicit accessible name/help/role overrides apply above
 hook defaults. Keep action masks truthful and implement actions through the same
 canonical behavior used by pointer/keyboard commands.
 
-## Initial Windows accessibility bridge and verification
+## Text composition and custom editors
+
+TextBox participates automatically; application code does not handle native
+messages or manually synchronize the IME. Preedit is temporary GPU presentation,
+separate from committed `GetText()`, validation notifications, and undo history.
+Commit replaces the original selection as one validated edit. Cancel restores the
+canonical text and selection. Programmatic changes, focus changes, popup barriers,
+and owner closure invalidate the old composition session.
+
+`UiContext::GetTextInputState()` returns owned surrounding text, UTF-8 selection
+byte offsets and the last prepared caret rectangle in logical window and optional
+physical desktop coordinates. `DispatchComposition()` accepts owned preedit,
+commit or cancel events tagged with that state's client and epoch. Zero tags
+explicitly target the current owner-side client; native adapters always use the
+captured nonzero session. Late events for a different focus epoch are rejected.
+The protocol caps surrounding text at 1 MiB and each composition event at 64 KiB,
+and rejects malformed UTF-8 or invalid offsets before delivery.
+
+Custom editor widgets can implement `TextInputClient` alongside Widget. Its state
+hook is pure inspection; its composition hook runs on the UI owner and must keep
+temporary text separate and route commits through the editor's canonical edit
+and validation operations. Call `NotifyTextInputChanged()` after direct custom
+text/selection changes so native snapshots can be refreshed without copying the
+surrounding string on unchanged frames. TextBox also exposes selection and text-range geometry
+for native text accessibility. It remains a single-line editor; composition does
+not turn TextBuffer into a document model.
+
+Windows consumes composition/result messages before default translation can
+insert duplicate GLFW characters, owns queued UTF-8 events, supplies surrounding
+text for IMM document-feed requests and updates candidate/caret geometry after
+layout, scrolling, transforms or native-window changes. Native teardown cancels
+composition before disconnecting the HWND. Input methods using unsupported native
+services and full TSF-specific integration need separate capability/evidence work.
+Complete font fallback and bidirectional shaping belong to F10a; the platform
+protocol does not claim them.
+
+The `textbox::preedit` CSS part controls the temporary underline without adding a
+child widget. Its background is the line color and its height is line thickness.
+
+## Windows accessibility bridge and verification
 
 Real Windows windows attach a WM_GETOBJECT UI Automation fragment provider.
 Native clients can navigate actual widget nodes, read stable runtime identities,
-names, state and physical bounds, hit-test/focus, and use basic Invoke, Value,
-RangeValue and Toggle patterns. Client-thread requests cross typed dispatcher
+names, state and physical bounds, hit-test/focus, and use Invoke, Value, RangeValue and Toggle patterns. Existing virtual collection
+nodes add Selection/SelectionItem, Grid/GridItem, ExpandCollapse, ScrollItem and
+VirtualizedItem patterns where supported. Single-line TextBox exposes Text/Text2
+ranges with selection, caret, hit testing and clipped range rectangles. Client-thread requests cross typed dispatcher
 handles; they never read widgets from a worker. Queries/synchronous value edits
 have a one-second bounded dispatch wait. Pending timed-out requests are cancelled;
 an already-running callback cannot be interrupted. Invoke enqueues canonical activation; Toggle and value/focus requests commit
@@ -195,11 +248,13 @@ through the synchronous owner path. Closed queues/windows expire live provider a
 clients may retain copied/cached property values after disconnect; that data does
 not grant access to the UI.
 
-The bridge tracks at most 64 previously queried nodes for initial name/value/
-enabled/offscreen/range/toggle events and actual focus changes. It checks a cheap
-semantic revision and performs no semantic scan when no clients listen. This is
-an initial bounded event implementation, not complete notification/TextPattern/
-virtualization support or a screen-reader-readiness claim. Native window/COM
+The bridge tracks a bounded set of at most 64 previously queried nodes for
+property, structure, selection, text and focus changes. It checks cheap semantic
+and host-state revisions and performs no semantic scan when no clients listen.
+Native GetSelection has no paging API: it returns a complete array up to 4,096
+items and reports Unsupported above that budget rather than silently truncating.
+These explicit limits keep client-driven work bounded; they are not a promise
+that every assistive technology or every UI Automation pattern is supported. Native window/COM
 thread reentrancy remains guarded; queries made during an unsafe owner traversal
 return an explicit native failure rather than pumping a nested loop.
 
@@ -219,9 +274,10 @@ $env:ESTUDIOUI_NATIVE_PLATFORM_TESTS = '1'
 Remove-Item Env:ESTUDIOUI_NATIVE_PLATFORM_TESTS
 ```
 
-Windows CI opts into those probes. Normal Build.ps1 still runs the hidden-window
-UI Automation probe without changing the clipboard or opening pickers. See
-[verification](verification/PLATFORM_0_15.md) for measured results. IME/composition
-with F10a, virtualized semantic children, remaining UIA events/patterns, real
-Narrator/other assistive-technology sessions, mixed-DPI monitor migration and
-native hardware GPU timing remain open acceptance work.
+Windows CI opts into those probes. Normal Build.ps1 runs the hidden-window
+UI Automation and native composition protocol probes without changing the
+clipboard or opening pickers. See [0.16 verification](verification/PLATFORM_0_16.md)
+for measured results and [native acceptance](verification/PLATFORM_ACCEPTANCE.md)
+for input-method, Narrator and mixed-monitor checks. Automated UI Automation or
+synthetic native composition messages do not replace those interactive checks.
+Native hardware GPU timing and additional platform adapters remain F15 evidence.

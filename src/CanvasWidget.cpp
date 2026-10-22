@@ -286,6 +286,10 @@ CanvasWidget::~CanvasWidget()
 void CanvasWidget::SetScene(std::shared_ptr<CanvasScene> scene)
 {
     VerifyStructuralMutation();
+    ++m_SemanticGeneration;
+    ++m_SemanticStructureRevision;
+    m_SemanticSceneStructureRevision = 0;
+    m_SemanticFocusedItem = {};
     m_Scene = scene ? std::move(scene) : std::make_shared<CanvasScene>();
     m_Preview.clear();
     m_SelectionRectangle.reset();
@@ -308,6 +312,12 @@ const CanvasScene& CanvasWidget::GetScene() const
 void CanvasWidget::SceneChanged()
 {
     VerifyStructuralMutation();
+    const auto structure = m_Scene->GetStructureRevision();
+    if (structure != m_SemanticSceneStructureRevision)
+    {
+        ++m_SemanticStructureRevision;
+        m_SemanticSceneStructureRevision = structure;
+    }
     m_CachedRevision = std::numeric_limits<std::uint64_t>::max();
     RequestRepaint();
 }
@@ -877,4 +887,134 @@ bool CanvasWidget::OnScroll(Point delta, Modifiers)
     SetCamera({before.m_X - dx / zoom, before.m_Y - dy / zoom}, zoom);
     return true;
 }
+
+SemanticInfo CanvasWidget::DescribeSemantics() const
+{
+    auto info = Widget::DescribeSemantics();
+    info.m_Role = SemanticRole::Canvas;
+    info.m_MultiSelectable = true;
+    info.m_StructureRevision = m_SemanticStructureRevision;
+    return info;
+}
+
+std::size_t CanvasWidget::GetSemanticChildCount(SemanticKey parent) const
+{
+    return parent.m_Item ? 0 : m_Scene->Size();
+}
+
+std::optional<SemanticKey> CanvasWidget::GetSemanticChildAt(SemanticKey parent, std::size_t index) const
+{
+    if (parent.m_Item || index >= m_Scene->Size())
+        return {};
+    const auto id = m_Scene->GetItems()[index].m_Id;
+    return SemanticKey{(static_cast<std::uint64_t>(id.m_Generation) << 32) | id.m_Index, 0, m_SemanticGeneration};
+}
+
+std::optional<SemanticVirtualNode> CanvasWidget::DescribeSemanticChild(SemanticKey key) const
+{
+    if (!key.m_Item || key.m_Part || key.m_Generation != m_SemanticGeneration)
+        return {};
+    const CanvasItemId id{static_cast<std::uint32_t>(key.m_Item), static_cast<std::uint32_t>(key.m_Item >> 32)};
+    const auto* item = m_Scene->Get(id);
+    if (!item)
+        return {};
+    SemanticVirtualNode node;
+    auto& info = node.m_Info;
+    info.m_Role = SemanticRole::CanvasItem;
+    static constexpr const char* names[] = {"Line", "Rectangle", "Circle", "Arc", "Spline", "Path", "Text", "Group"};
+    info.m_Name = names[static_cast<std::size_t>(item->m_Geometry.m_Kind)];
+    if (item->m_Geometry.m_Kind == CanvasPrimitive::Text && item->m_Geometry.m_Data)
+        info.m_Name = item->m_Geometry.m_Data->m_Text;
+    info.m_Selected = item->m_Selected;
+    info.m_Actions = SemanticAction::Select | SemanticAction::AddToSelection | SemanticAction::RemoveFromSelection |
+                     SemanticAction::ScrollIntoView;
+    node.m_Focused = id == m_SemanticFocusedItem;
+    auto world = item->m_Geometry.Bounds();
+    const auto viewport = GetContentBounds();
+    const auto visible = GetViewportWorldBounds();
+    if (world.Intersects(visible))
+    {
+        const auto left = std::max(world.m_X, visible.m_X);
+        const auto top = std::max(world.m_Y, visible.m_Y);
+        const auto right = std::min(world.m_X + world.m_Width, visible.m_X + visible.m_Width);
+        const auto bottom = std::min(world.m_Y + world.m_Height, visible.m_Y + visible.m_Height);
+        const auto position = ToScreen({left, top});
+        node.m_Bounds = Rect{position.m_X - 2, position.m_Y - 2, static_cast<float>((right - left) * m_Zoom) + 4,
+                             static_cast<float>((bottom - top) * m_Zoom) + 4}
+                            .Intersect(viewport);
+    }
+    return node;
+}
+
+std::optional<std::size_t> CanvasWidget::GetSemanticChildIndex(SemanticKey key) const
+{
+    if (key.m_Generation != m_SemanticGeneration || key.m_Part)
+        return {};
+    return m_Scene->GetIndex({static_cast<std::uint32_t>(key.m_Item), static_cast<std::uint32_t>(key.m_Item >> 32)});
+}
+
+SemanticStatus CanvasWidget::OnSemanticChildAction(SemanticKey key, const SemanticCommand& command)
+{
+    const CanvasItemId id{static_cast<std::uint32_t>(key.m_Item), static_cast<std::uint32_t>(key.m_Item >> 32)};
+    const auto* item = key.m_Generation == m_SemanticGeneration && !key.m_Part ? m_Scene->Get(id) : nullptr;
+    if (!item)
+        return SemanticStatus::Unavailable;
+    if (command.m_Action == SemanticAction::ScrollIntoView)
+    {
+        const auto bounds = item->m_Geometry.Bounds();
+        const CanvasPoint center{bounds.m_X + bounds.m_Width * 0.5, bounds.m_Y + bounds.m_Height * 0.5};
+        const auto viewport = GetContentBounds();
+        const auto zoom = std::min({m_Zoom, viewport.m_Width / std::max(1e-6, bounds.m_Width + 20 / m_Zoom),
+                                    viewport.m_Height / std::max(1e-6, bounds.m_Height + 20 / m_Zoom)});
+        SetCamera(center, std::max(1e-6, zoom));
+        return SemanticStatus::Succeeded;
+    }
+    if (command.m_Action == SemanticAction::Select || command.m_Action == SemanticAction::Focus)
+    {
+        m_Scene->ClearSelection();
+        m_Scene->SetSelected(id, true);
+        m_SemanticFocusedItem = id;
+    }
+    else if (command.m_Action == SemanticAction::AddToSelection)
+        m_Scene->SetSelected(id, true);
+    else if (command.m_Action == SemanticAction::RemoveFromSelection)
+        m_Scene->SetSelected(id, false);
+    else
+        return SemanticStatus::Unsupported;
+    SceneChanged();
+    return SemanticStatus::Succeeded;
+}
+
+std::optional<SemanticKey> CanvasWidget::SemanticHitTest(Point point) const
+{
+    if (!GetContentBounds().Contains(point))
+        return {};
+    const auto id = m_Scene->HitTest(ToWorld(point), 4 / m_Zoom);
+    return id ? std::optional<SemanticKey>(
+                    {(static_cast<std::uint64_t>(id.m_Generation) << 32) | id.m_Index, 0, m_SemanticGeneration})
+              : std::nullopt;
+}
+
+std::size_t CanvasWidget::GetSemanticSelectionCount() const
+{
+    return m_Scene->GetSelectedCount();
+}
+
+std::vector<SemanticKey> CanvasWidget::GetSemanticSelection(std::size_t offset, std::size_t limit) const
+{
+    std::vector<SemanticKey> result;
+    for (const auto id : m_Scene->GetSelected(offset, limit))
+        result.push_back({(static_cast<std::uint64_t>(id.m_Generation) << 32) | id.m_Index, 0, m_SemanticGeneration});
+    return result;
+}
+
+std::optional<SemanticKey> CanvasWidget::GetSemanticFocus() const
+{
+    if (!m_Scene->Get(m_SemanticFocusedItem))
+        return {};
+    return SemanticKey{(static_cast<std::uint64_t>(m_SemanticFocusedItem.m_Generation) << 32) |
+                           m_SemanticFocusedItem.m_Index,
+                       0, m_SemanticGeneration};
+}
+
 } // namespace EStudioUI

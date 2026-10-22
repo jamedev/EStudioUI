@@ -40,6 +40,7 @@ void ListWidget::SetModel(std::shared_ptr<ItemModel> model, std::size_t column)
         *this, model,
         [](Widget& owner, const ModelChange& change) { static_cast<ListWidget&>(owner).ModelChanged(change); },
         [](Widget& owner) { static_cast<ListWidget&>(owner).SelectionChanged(); }, std::move(selection));
+    ++m_SemanticStructureRevision;
     m_View = std::move(view);
     m_ModelColumn = column;
     m_Items.clear();
@@ -115,6 +116,7 @@ void ListWidget::ModelChanged(const ModelChange& change)
     m_Hover = m_Pressed = -1;
     if (change.m_Reset || change.m_Structure)
     {
+        ++m_SemanticStructureRevision;
         if (m_ModelColumn >= change.m_After.GetColumns().size())
             m_ModelColumn = 0;
         Invalidate(Invalidation::Arrange | Invalidation::HitTest | Invalidation::Paint);
@@ -151,6 +153,20 @@ void ListWidget::SetItems(std::vector<std::string> items)
     for (auto& text : items)
         text = TextBuffer::Sanitize(text);
     m_View.reset();
+    std::vector<ItemId> semanticIds;
+    std::unordered_map<ItemId, std::size_t> semanticIndices;
+    semanticIds.reserve(items.size());
+    semanticIndices.reserve(items.size());
+    for (std::size_t row = 0; row < items.size(); ++row)
+    {
+        const auto id = AllocateItemId();
+        semanticIds.push_back(id);
+        semanticIndices.emplace(id, row);
+    }
+    m_SemanticGeneration = AllocateItemId();
+    ++m_SemanticStructureRevision;
+    m_SemanticRowIds = std::move(semanticIds);
+    m_SemanticRowIndices = std::move(semanticIndices);
     m_Items = std::move(items);
     const bool changed = m_Current != -1;
     m_Current = -1;
@@ -177,7 +193,16 @@ int ListWidget::AddItem(std::string text)
         model->Restructure([text = TextBuffer::Sanitize(text)](ModelBuilder& builder) { builder.Add({text}); });
         return next;
     }
-    m_Items.push_back(TextBuffer::Sanitize(text));
+    text = TextBuffer::Sanitize(text);
+    if (m_Items.size() == m_Items.capacity())
+        m_Items.reserve(std::max<std::size_t>(8, m_Items.size() * 2));
+    if (m_SemanticRowIds.size() == m_SemanticRowIds.capacity())
+        m_SemanticRowIds.reserve(std::max<std::size_t>(8, m_SemanticRowIds.size() * 2));
+    const auto id = AllocateItemId();
+    m_SemanticRowIndices.emplace(id, m_Items.size());
+    m_SemanticRowIds.push_back(id);
+    ++m_SemanticStructureRevision;
+    m_Items.push_back(std::move(text));
     Invalidate(Invalidation::Content);
     return GetItemCount() - 1;
 }
@@ -194,6 +219,11 @@ void ListWidget::RemoveItem(int index)
         model->Restructure([item](ModelBuilder& builder) { builder.Remove(item); });
         return;
     }
+    m_SemanticRowIndices.erase(m_SemanticRowIds[static_cast<std::size_t>(index)]);
+    m_SemanticRowIds.erase(m_SemanticRowIds.begin() + index);
+    for (std::size_t row = static_cast<std::size_t>(index); row < m_SemanticRowIds.size(); ++row)
+        m_SemanticRowIndices[m_SemanticRowIds[row]] = row;
+    ++m_SemanticStructureRevision;
     m_Items.erase(m_Items.begin() + index);
     const int next = m_Current == index ? -1 : m_Current > index ? m_Current - 1 : m_Current;
     m_Hover = -1;
@@ -468,4 +498,188 @@ void ListWidget::OnText(std::string_view text)
         }
     }
 }
+
+SemanticKey ListWidget::SemanticRowKey(std::size_t row, std::uint64_t part) const
+{
+    if (m_View)
+        return {m_View->GetModel()->GetSnapshot().GetItem(row), part,
+                m_View->GetModel()->GetRootModel()->GetIdentity()};
+    return {m_SemanticRowIds.at(row), part, m_SemanticGeneration};
+}
+
+std::optional<std::size_t> ListWidget::SemanticRowIndex(SemanticKey key) const
+{
+    if (!key.m_Item || key.m_Part)
+        return {};
+    if (m_View)
+    {
+        const auto model = m_View->GetModel();
+        const auto data = model->GetSnapshot();
+        if (key.m_Generation != model->GetRootModel()->GetIdentity() || !data.Contains(key.m_Item) ||
+            data.GetParent(key.m_Item))
+            return {};
+        return data.GetPosition(key.m_Item);
+    }
+    const auto found = m_SemanticRowIndices.find(key.m_Item);
+    return key.m_Generation == m_SemanticGeneration && found != m_SemanticRowIndices.end()
+               ? std::optional<std::size_t>(found->second)
+               : std::nullopt;
+}
+
+SemanticInfo ListWidget::DescribeSemantics() const
+{
+    auto info = Widget::DescribeSemantics();
+    info.m_StructureRevision = m_SemanticStructureRevision;
+    info.m_MultiSelectable = m_View && m_View->GetSelectionModel()->GetMode() == SelectionMode::Multiple;
+    return info;
+}
+
+std::size_t ListWidget::GetSemanticChildCount(SemanticKey parent) const
+{
+    return parent.m_Item ? 0 : static_cast<std::size_t>(GetItemCount());
+}
+
+std::optional<SemanticKey> ListWidget::GetSemanticChildAt(SemanticKey parent, std::size_t index) const
+{
+    return !parent.m_Item && index < static_cast<std::size_t>(GetItemCount())
+               ? std::optional<SemanticKey>(SemanticRowKey(index))
+               : std::nullopt;
+}
+
+std::optional<SemanticVirtualNode> ListWidget::DescribeSemanticChild(SemanticKey key) const
+{
+    const auto row = SemanticRowIndex(key);
+    const auto canonical = m_View ? m_View->GetModel()->GetRootModel()->GetSnapshot() : ModelSnapshot{};
+    if (!row && (!m_View || key.m_Part || key.m_Generation != m_View->GetModel()->GetRootModel()->GetIdentity() ||
+                 !canonical.Contains(key.m_Item)))
+        return {};
+    SemanticVirtualNode node;
+    auto& info = node.m_Info;
+    info.m_Role = SemanticRole::ListItem;
+    info.m_Name = row ? GetItem(static_cast<int>(*row))
+                      : TextBuffer::Sanitize(m_Delegate->GetText(canonical, key.m_Item, m_ModelColumn));
+    info.m_Selected =
+        m_View ? m_View->GetSelectionModel()->IsSelected(key.m_Item) : row && static_cast<int>(*row) == m_Current;
+    info.m_Actions = SemanticAction::Select | SemanticAction::AddToSelection | SemanticAction::RemoveFromSelection |
+                     SemanticAction::ScrollIntoView | SemanticAction::Invoke;
+    node.m_Focused = m_View ? m_View->GetSelectionModel()->GetCurrent() == key.m_Item : info.m_Selected;
+    if (row)
+    {
+        const auto viewport = GetViewport();
+        const auto offset = GetStoredScrollOffset();
+        node.m_Bounds =
+            Rect{viewport.m_X, viewport.m_Y + static_cast<float>(*row) * GetStyle().m_RowHeight - offset.m_Y,
+                 viewport.m_Width, GetStyle().m_RowHeight}
+                .Intersect(viewport);
+        node.m_Enabled = ItemEnabled(static_cast<int>(*row));
+    }
+    else
+    {
+        const auto enabled = canonical.GetValue(key.m_Item, m_ModelColumn, ModelRole::Enabled);
+        node.m_Enabled = !std::holds_alternative<bool>(enabled) || std::get<bool>(enabled);
+    }
+    return node;
+}
+
+std::optional<std::size_t> ListWidget::GetSemanticChildIndex(SemanticKey key) const
+{
+    return SemanticRowIndex(key);
+}
+
+SemanticStatus ListWidget::OnSemanticChildAction(SemanticKey key, const SemanticCommand& command)
+{
+    const auto row = SemanticRowIndex(key);
+    if (command.m_Action == SemanticAction::ScrollIntoView)
+    {
+        if (!row)
+            return SemanticStatus::Unavailable;
+        EnsureVisible({0, static_cast<float>(*row) * GetStyle().m_RowHeight, 0, GetStyle().m_RowHeight});
+        return SemanticStatus::Succeeded;
+    }
+    if (command.m_Action == SemanticAction::Invoke)
+    {
+        if (!row)
+            return SemanticStatus::Unavailable;
+        m_Activated.Emit(static_cast<int>(*row));
+        return SemanticStatus::Succeeded;
+    }
+    if (command.m_Action == SemanticAction::Focus || command.m_Action == SemanticAction::Select ||
+        command.m_Action == SemanticAction::AddToSelection)
+    {
+        if (m_View)
+        {
+            const auto selection = m_View->GetSelectionModel();
+            if (command.m_Action == SemanticAction::AddToSelection && selection->GetMode() == SelectionMode::Single &&
+                !selection->GetSnapshot()->m_Items.empty() && !selection->IsSelected(key.m_Item))
+                return SemanticStatus::InvalidValue;
+            selection->Select(key.m_Item, m_ModelColumn,
+                              command.m_Action == SemanticAction::AddToSelection ? SelectionAction::Add
+                                                                                 : SelectionAction::Replace);
+        }
+        else if (row)
+        {
+            if (command.m_Action == SemanticAction::AddToSelection && m_Current >= 0 &&
+                static_cast<int>(*row) != m_Current)
+                return SemanticStatus::InvalidValue;
+            SetCurrentIndex(static_cast<int>(*row));
+        }
+        else
+            return SemanticStatus::Unavailable;
+        return SemanticStatus::Succeeded;
+    }
+    if (command.m_Action == SemanticAction::RemoveFromSelection)
+    {
+        if (m_View)
+        {
+            const auto selection = m_View->GetSelectionModel();
+            if (selection->IsSelected(key.m_Item))
+                selection->Select(key.m_Item, m_ModelColumn, SelectionAction::Toggle);
+        }
+        else if (row && static_cast<int>(*row) == m_Current)
+            SetCurrentIndex(-1);
+        return SemanticStatus::Succeeded;
+    }
+    return SemanticStatus::Unsupported;
+}
+
+std::optional<SemanticKey> ListWidget::SemanticHitTest(Point point) const
+{
+    const int row = ItemAt(point);
+    return row >= 0 ? std::optional<SemanticKey>(SemanticRowKey(static_cast<std::size_t>(row))) : std::nullopt;
+}
+
+std::size_t ListWidget::GetSemanticSelectionCount() const
+{
+    return m_View ? m_View->GetSelectionModel()->GetSnapshot()->m_Items.size() : m_Current >= 0 ? 1 : 0;
+}
+
+std::vector<SemanticKey> ListWidget::GetSemanticSelection(std::size_t offset, std::size_t limit) const
+{
+    std::vector<SemanticKey> result;
+    if (!m_View)
+    {
+        if (!offset && limit && m_Current >= 0)
+            result.push_back(SemanticRowKey(static_cast<std::size_t>(m_Current)));
+        return result;
+    }
+    const auto selection = m_View->GetSelectionModel()->GetSnapshot();
+    auto item = selection->m_Items.begin();
+    std::advance(item, std::min(offset, selection->m_Items.size()));
+    for (; item != selection->m_Items.end() && result.size() < limit; ++item)
+        result.push_back({*item, 0, m_View->GetModel()->GetRootModel()->GetIdentity()});
+    return result;
+}
+
+std::optional<SemanticKey> ListWidget::GetSemanticFocus() const
+{
+    if (m_View)
+    {
+        const auto current = m_View->GetSelectionModel()->GetCurrent();
+        return current ? std::optional<SemanticKey>({current, 0, m_View->GetModel()->GetRootModel()->GetIdentity()})
+                       : std::nullopt;
+    }
+    return m_Current >= 0 ? std::optional<SemanticKey>(SemanticRowKey(static_cast<std::size_t>(m_Current)))
+                          : std::nullopt;
+}
+
 } // namespace EStudioUI

@@ -20,8 +20,36 @@ class TabButton final : public ToolButton
     //! Updates CSS selection without delivering an unrelated toggle signal.
     void SetSelected(bool selected)
     {
+        m_Selected = selected;
         SetState(Selected, selected);
     }
+
+  protected:
+    //! Presents an actual selector as a selectable tab rather than a generic command button.
+    SemanticInfo DescribeSemantics() const override
+    {
+        auto info = ToolButton::DescribeSemantics();
+        info.m_Role = SemanticRole::Tab;
+        info.m_Selected = m_Selected;
+        info.m_Actions = SemanticAction::Select | SemanticAction::AddToSelection | SemanticAction::RemoveFromSelection;
+        return info;
+    }
+
+    //! Reuses the same command path as pointer and keyboard tab selection.
+    SemanticStatus OnSemanticAction(const SemanticCommand& command) override
+    {
+        if (command.m_Action == SemanticAction::Select)
+            return Trigger() ? SemanticStatus::Succeeded : SemanticStatus::Disabled;
+        if (command.m_Action == SemanticAction::AddToSelection)
+            return m_Selected ? SemanticStatus::Succeeded : SemanticStatus::InvalidValue;
+        if (command.m_Action == SemanticAction::RemoveFromSelection)
+            return m_Selected ? SemanticStatus::InvalidValue : SemanticStatus::Succeeded;
+        return ToolButton::OnSemanticAction(command);
+    }
+
+  private:
+    //! Mirrors the tab container's canonical selected-page state.
+    bool m_Selected = false;
 };
 } // namespace
 
@@ -178,4 +206,27 @@ bool TabWidget::OnKeyPreview(Key key, bool down, bool, Modifiers modifiers)
         context->SetFocus(live);
     return true;
 }
+
+SemanticInfo TabWidget::DescribeSemantics() const
+{
+    auto info = Widget::DescribeSemantics();
+    info.m_SelectionRequired = !m_Tabs.empty();
+    return info;
+}
+
+std::size_t TabWidget::GetSemanticSelectionCount() const
+{
+    return m_Current >= 0 && static_cast<std::size_t>(m_Current) < m_Tabs.size() &&
+                   m_Tabs[static_cast<std::size_t>(m_Current)].m_Button.Get()
+               ? 1
+               : 0;
+}
+
+std::vector<WidgetRef> TabWidget::GetSemanticSelectedWidgets(std::size_t offset, std::size_t limit) const
+{
+    if (offset || !limit || !GetSemanticSelectionCount())
+        return {};
+    return {m_Tabs[static_cast<std::size_t>(m_Current)].m_Button};
+}
+
 } // namespace EStudioUI

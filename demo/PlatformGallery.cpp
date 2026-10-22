@@ -3,6 +3,7 @@
 #include <EStudioUI/MemoryPlatformServices.h>
 #include <EStudioUI/SemanticTree.h>
 #include <EStudioUI/TextBox.h>
+#include <EStudioUI/TextInputClient.h>
 #include <EStudioUI/ToolBar.h>
 #include <EStudioUI/Application.h>
 
@@ -150,9 +151,9 @@ PlatformGallery::PlatformGallery(Window& window, Widget& page, std::filesystem::
     auto& readout = page.Add<Label>();
     readout.SetWordWrap(true);
     m_Readout = WidgetRef(&readout);
-    auto& note = page.Add<Label>(
-        "Initial F11 increment: basic widget accessibility on Windows. IME composition, "
-        "virtual collection-row providers and broader assistive-technology checks remain on the roadmap.");
+    auto& note = page.Add<Label>("Try a Windows input method in the editor. Temporary composition is drawn by the GPU; "
+                                 "committing produces one validated edit. Platform capabilities and native acceptance "
+                                 "results are reported separately.");
     note.SetWordWrap(true);
     m_Connections.emplace_back(copy.Clicked().Connect(
         [this]
@@ -286,7 +287,7 @@ void PlatformGallery::Inspect()
          << "\nLogical client: " << metrics.m_LogicalSize.m_X << " x " << metrics.m_LogicalSize.m_Y
          << " / framebuffer: " << metrics.m_FramebufferSize.m_X << " x " << metrics.m_FramebufferSize.m_Y
          << " / pixel scale: " << metrics.m_PixelScale.m_X << ", " << metrics.m_PixelScale.m_Y
-         << "\nSemantic editor: " << node->m_Info.m_Name << " / stable ID " << node->m_Id
+         << "\nSemantic editor: " << node->m_Info.m_Name << " / stable widget ID " << node->m_Id.m_Widget
          << " / value: " << node->m_Info.m_Value;
     Status(m_Readout, info.str());
 }
@@ -368,6 +369,44 @@ void PlatformGallery::Verify(const std::filesystem::path& output)
     const auto pixel = probe.Graphics().ReadPixel({bounds.m_X + bounds.m_Width - 8, bounds.m_Y + bounds.m_Height - 8});
     Check(pixel.m_G > pixel.m_R + 0.1f, "file-drop area appears in the actual framebuffer");
     probe.Graphics().SavePpm(output / "platform-services.ppm");
+
+    auto& editor = Live<TextBox>(gallery.m_Text);
+    editor.SetText("");
+    ui.SetFocus(&editor);
+    gallery.Inspect();
+    probe.RenderFrame();
+    const auto editorBounds = editor.GetBounds();
+    const auto samples = [&]
+    {
+        std::vector<Color> values;
+        const float width = std::min(240.0f, editorBounds.m_Width);
+        for (float y = 2; y < editorBounds.m_Height - 2; y += 3)
+            for (float x = 2; x < width - 2; x += 3)
+                values.push_back(probe.Graphics().ReadPixel({editorBounds.m_X + x, editorBounds.m_Y + y}));
+        return values;
+    };
+    const auto originalPixels = samples();
+    const auto input = ui.GetTextInputState();
+    Check(input.m_Active && input.m_Client != 0, "focused editor supplies a native text-input session");
+    Check(ui.DispatchComposition({TextCompositionKind::Preedit, "GPU preedit Ω", 3, input.m_Client, input.m_Epoch}),
+          "composition updates use the shared editor protocol");
+    probe.RenderFrame();
+    Check(editor.GetText().empty() && ui.GetTextInputState().m_Composing,
+          "temporary composition never becomes canonical text");
+    Check(samples() != originalPixels, "preedit changes actual GPU pixels");
+    probe.Graphics().SavePpm(output / "platform-composition.ppm");
+    Check(ui.DispatchComposition({TextCompositionKind::Cancel, {}, 0, input.m_Client, input.m_Epoch}),
+          "composition cancellation is accepted by the current session");
+    probe.RenderFrame();
+    Check(samples() == originalPixels && editor.GetText().empty(),
+          "cancellation restores actual editor pixels and canonical text");
+    Check(ui.DispatchComposition({TextCompositionKind::Commit, "Committed Ω", 0, input.m_Client, input.m_Epoch}),
+          "native commit follows the canonical validated edit path");
+    Check(editor.GetText() == "Committed Ω", "native committed text is inserted once");
+    ui.KeyEvent(Key::Z, true, false, Modifiers{.m_Control = true});
+    Check(editor.GetText().empty(), "one undo removes the complete composition commit");
+    VerifyVirtualItems();
+
     WindowOptions childOptions = options;
     childOptions.m_Owner = &probe;
     Window child(childOptions, m_Assets / "NotoSans.ttf");
@@ -386,9 +425,12 @@ void PlatformGallery::Verify(const std::filesystem::path& output)
 
     std::ofstream report(output / "platform-report.txt");
     report
-        << "F11 initial platform/semantic GPU integration: PASS\n"
+        << "F11 platform/semantic/composition GPU integration: PASS\n"
         << "Injected clipboard/picker; owning production GLFW file drop; stable semantic queries; owned windows.\n"
         << "50 semantic queries: zero style/layout recalculations. Real framebuffer capture: platform-services.ppm.\n"
+        << "Preedit changes actual GPU pixels without a canonical edit; cancellation restores pixels; commit undoes "
+           "once.\n"
+        << "100,000 list rows and table cells reveal/select by virtual identity and agree with actual GPU geometry.\n"
         << "This deterministic probe does not claim native clipboard, picker or assistive-technology readiness.\n";
 }
 } // namespace EStudioUI

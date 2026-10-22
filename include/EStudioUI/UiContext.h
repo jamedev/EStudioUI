@@ -8,6 +8,7 @@
 #include "Action.h"
 #include "PopupSession.h"
 #include "PlatformServices.h"
+#include "TextInputClient.h"
 
 #include <functional>
 #include <stdexcept>
@@ -270,6 +271,21 @@ class UiContext
 
     //! Delivers committed UTF-8 text to the focused control.
     void TextInput(std::string_view text);
+
+    //! Queries the focused editor without layout, frame, or native event processing.
+    TextInputState GetTextInputState() const;
+
+    //! Returns a cheap generation for native snapshot caching without copying surrounding text.
+    std::uint64_t GetTextInputRevision() const;
+
+    //! Invalidates native editor snapshots after custom text, selection, or composition changes.
+    void NotifyTextInputChanged();
+
+    //! Delivers one owned composition update; stale focus identities or generations are rejected.
+    bool DispatchComposition(const TextCompositionEvent& event);
+
+    //! Cancels the focused editor's temporary presentation and expires queued native updates.
+    void CancelTextComposition();
 
     //! Sets keyboard focus, rejecting disabled or nonfocusable nodes.
     void SetFocus(Widget* widget);
@@ -557,6 +573,15 @@ class UiContext
 
     //! Observes the focus target safely across callback-driven destruction.
     WidgetRef m_Focus;
+
+    //! Expires native composition updates whenever focus or composition ownership changes.
+    std::uint64_t m_TextInputEpoch = 1;
+
+    //! Changes only with text/input geometry state, independently of caret-blink repaint requests.
+    std::uint64_t m_TextInputRevision = 1;
+
+    //! Observes the editor owning the currently accepted temporary preedit.
+    WidgetRef m_CompositionClient;
 
     //! Observes the widget receiving captured pointer events.
     WidgetRef m_Capture;

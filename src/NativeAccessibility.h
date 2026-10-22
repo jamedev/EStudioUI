@@ -8,7 +8,7 @@ class UiContext;
 
 namespace Detail
 {
-//! Attaches the initial Windows UI Automation widget provider; other hosts explicitly report unsupported.
+//! Attaches Windows UI Automation control, virtual-item and text providers.
 class NativeAccessibility
 {
   public:

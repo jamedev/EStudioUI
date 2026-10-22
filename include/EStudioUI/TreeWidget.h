@@ -78,6 +78,36 @@ class TreeWidget final : public ScrollWidget
     bool IsFocusable() const override;
 
   protected:
+    //! Describes selection and logical structure without materializing row widgets.
+    SemanticInfo DescribeSemantics() const override;
+
+    //! Returns a direct logical child count.
+    std::size_t GetSemanticChildCount(SemanticKey parent) const override;
+
+    //! Resolves a logical child by position without scanning earlier records.
+    std::optional<SemanticKey> GetSemanticChildAt(SemanticKey parent, std::size_t index) const override;
+
+    //! Describes a stable live item using prepared geometry.
+    std::optional<SemanticVirtualNode> DescribeSemanticChild(SemanticKey key) const override;
+
+    //! Resolves a stable item's current sibling position.
+    std::optional<std::size_t> GetSemanticChildIndex(SemanticKey key) const override;
+
+    //! Applies selection, expansion, realization, or editing through canonical paths.
+    SemanticStatus OnSemanticChildAction(SemanticKey key, const SemanticCommand& command) override;
+
+    //! Resolves the logical item under one layout-coordinate point.
+    std::optional<SemanticKey> SemanticHitTest(Point layoutPoint) const override;
+
+    //! Returns the canonical selected set size without copying it.
+    std::size_t GetSemanticSelectionCount() const override;
+
+    //! Returns a bounded canonical selection page, including temporarily filtered items.
+    std::vector<SemanticKey> GetSemanticSelection(std::size_t offset, std::size_t limit) const override;
+
+    //! Returns the current stable item for logical keyboard focus.
+    std::optional<SemanticKey> GetSemanticFocus() const override;
+
     //! Supplies a preferred viewport size independent of model size.
     Point Measure(FontFace& font) const override;
 
@@ -103,6 +133,21 @@ class TreeWidget final : public ScrollWidget
     void OnKey(Key key, bool down, bool repeat, Modifiers modifiers) override;
 
   private:
+    //! Returns a stable identity in the current model namespace.
+    SemanticKey SemanticItemKey(NodeId item) const;
+
+    //! Rejects keys from unrelated models or deleted records.
+    bool SemanticKeyValid(SemanticKey key) const;
+
+    //! Expires convenience dataset keys when unrelated data is attached.
+    std::uint64_t m_SemanticGeneration = AllocateItemId();
+
+    //! Changes only on logical structure and expansion publications.
+    std::uint64_t m_SemanticStructureRevision = 1;
+
+    //! Maps prepared convenience rows into geometry without query-time flattening.
+    mutable std::unordered_map<NodeId, std::size_t> m_SemanticVisibleIndices;
+
     //! Owns one node's data and stable child handles.
     struct Node
     {
@@ -117,6 +162,9 @@ class TreeWidget final : public ScrollWidget
 
         //! Stores the expansion preference.
         bool m_Expanded = false;
+
+        //! Current position under its direct logical parent.
+        std::size_t m_Position = 0;
     };
 
     //! Caches a visible row and its nesting depth.

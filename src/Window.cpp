@@ -7,6 +7,7 @@
 #include "ApplicationRuntime.h"
 #include "NativeResizePump.h"
 #include "NativeAccessibility.h"
+#include "NativeTextInput.h"
 #include "NativePlatformServices.h"
 
 #include <glad/gl.h>
@@ -218,6 +219,7 @@ struct Window::Impl : std::enable_shared_from_this<Window::Impl>
     std::unique_ptr<Renderer> m_Renderer;
     std::unique_ptr<Detail::NativeResizePump> m_ResizePump;
     std::unique_ptr<Detail::NativeAccessibility> m_Accessibility;
+    std::unique_ptr<Detail::NativeTextInput> m_TextInput;
     Signal<Key> m_KeyPressed;
     std::exception_ptr m_CallbackError;
     bool m_Initialized = false;
@@ -335,6 +337,7 @@ struct Window::Impl : std::enable_shared_from_this<Window::Impl>
         {
             host.m_NativeWindow = reinterpret_cast<std::uintptr_t>(glfwGetWin32Window(m_Window));
             host.m_Capabilities.Set(PlatformFeature::Accessibility, PlatformSupport::Native);
+            host.m_Capabilities.Set(PlatformFeature::TextComposition, PlatformSupport::Native);
         }
 #endif
         const std::weak_ptr<Impl> weak = weak_from_this();
@@ -406,6 +409,7 @@ struct Window::Impl : std::enable_shared_from_this<Window::Impl>
 
     ~Impl()
     {
+        m_TextInput.reset();
         m_Accessibility.reset();
         m_ResizePump.reset();
         m_TargetLifetime.request_stop();
@@ -484,6 +488,19 @@ struct Window::Impl : std::enable_shared_from_this<Window::Impl>
         if (m_Closed)
             return;
         m_Closed = true;
+        if (m_TextInput)
+            m_TextInput->Close();
+        if (m_Ui && m_Ui->GetPhase() == UiPhase::Idle)
+        {
+            try
+            {
+                m_Ui->CancelTextComposition();
+            }
+            catch (...)
+            {
+                m_CallbackError = std::current_exception();
+            }
+        }
         if (m_Accessibility)
             m_Accessibility->Close();
         if (m_Ui)
@@ -548,6 +565,13 @@ struct Window::Impl : std::enable_shared_from_this<Window::Impl>
             return;
         UpdateMetrics();
         m_Ui->Prepare(m_Metrics.m_LogicalSize.m_X, m_Metrics.m_LogicalSize.m_Y);
+        if (m_TextInput)
+        {
+            m_TextInput->Flush();
+            m_TextInput->RethrowError();
+        }
+        if (!m_Owner || m_Closed)
+            return;
         m_Ui->PrepareSurfaces(time, m_Metrics.m_PixelScale.m_X, m_Metrics.m_PixelScale.m_Y);
         m_Renderer->BeginFrame(m_Metrics.m_LogicalSize.m_X, m_Metrics.m_LogicalSize.m_Y, framebufferWidth,
                                framebufferHeight, m_Ui->Root().GetStyle().m_Background);
@@ -582,6 +606,13 @@ struct Window::Impl : std::enable_shared_from_this<Window::Impl>
             }
         } servicing(m_Servicing);
 
+        if (!IsOpen())
+            return -1;
+        if (m_TextInput)
+        {
+            m_TextInput->Flush();
+            m_TextInput->RethrowError();
+        }
         if (!IsOpen())
             return -1;
         glfwMakeContextCurrent(m_Window);
@@ -639,6 +670,11 @@ struct Window::Impl : std::enable_shared_from_this<Window::Impl>
             const double frame = m_Pacer.GetDeadline();
             if (wake < 0 || frame < wake)
                 wake = frame;
+        }
+        if (m_TextInput && IsOpen())
+        {
+            m_TextInput->Flush();
+            m_TextInput->RethrowError();
         }
         if (m_Accessibility && IsOpen())
             m_Accessibility->Flush();
@@ -835,8 +871,12 @@ Window::Window(const WindowOptions& options, const std::filesystem::path& fontPa
     self.m_Ui->SetPlatformServices(std::move(services));
 #ifdef _WIN32
     if (!self.m_Headless)
+    {
         self.m_Accessibility =
             std::make_unique<Detail::NativeAccessibility>(*self.m_Ui, glfwGetWin32Window(self.m_Window), m_Impl);
+        self.m_TextInput =
+            std::make_unique<Detail::NativeTextInput>(*self.m_Ui, glfwGetWin32Window(self.m_Window), m_Impl);
+    }
 #endif
 
     glfwSetWindowSizeCallback(self.m_Window,
@@ -962,6 +1002,12 @@ Window::Window(const WindowOptions& options, const std::filesystem::path& fontPa
                                           [&](Impl& state)
                                           {
                                               const auto translated = LogicalKey(key, scanCode);
+                                              if (state.m_TextInput && state.m_TextInput->IsComposing())
+                                              {
+                                                  if (action == GLFW_PRESS && translated == Key::Escape)
+                                                      state.m_Ui->CancelTextComposition();
+                                                  return;
+                                              }
                                               KeyboardEvent event{translated,
                                                                   action != GLFW_RELEASE,
                                                                   action == GLFW_REPEAT,

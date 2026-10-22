@@ -36,6 +36,15 @@ class TabWidget final : public Widget
     Signal<int>& CurrentChanged();
 
   protected:
+    //! Reports required single selection independently of tab-strip composition.
+    SemanticInfo DescribeSemantics() const override;
+
+    //! Returns whether one live tab is currently selected.
+    std::size_t GetSemanticSelectionCount() const override;
+
+    //! Resolves the selected actual tab button without scanning all pages.
+    std::vector<WidgetRef> GetSemanticSelectedWidgets(std::size_t offset, std::size_t limit) const override;
+
     //! Selects adjacent tabs when an arrow key is pressed on the tab strip.
     bool OnKeyPreview(Key key, bool down, bool repeat, Modifiers modifiers) override;
 

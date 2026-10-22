@@ -20,19 +20,22 @@ packaging are deferred until that use informs reusable boundaries, including
 services for applications without a UI. Standalone modules are planned, not
 current package capabilities; see the roadmaps for acceptance criteria.
 
-## Native services and widget semantics (0.15, initial F11 increment)
+## Native services, composition and accessibility (0.16)
 
 Use the **Platform services** header button for a working clipboard, asynchronous
 file/folder picker, file-drop, owned-window and semantic-inspection gallery.
-Windows adds real rich clipboard formats, native STA pickers and an initial
-UI Automation bridge for basic widget actions. Headless adapters are deterministic;
+Windows adds rich clipboard formats, native STA pickers, IME composition, and
+UI Automation for controls, virtual collection items and single-line text ranges. Headless adapters are deterministic;
 capabilities explicitly distinguish native, emulated and unsupported services.
 See [PLATFORM.md](PLATFORM.md), the compiled
 [platform example](examples/PlatformServices.cpp), and
-[verification](verification/PLATFORM_0_15.md). No new third-party dependency.
+[verification](verification/PLATFORM_0_16.md). No new third-party dependency.
 
-F11 remains in progress: IME/composition with F10a, virtualized collection semantics
-and broader native accessibility/DPI evidence are still pending. Gate B stays open.
+Preedit is GPU presentation separate from committed text; a commit is one validated
+undoable edit. Virtual rows/cells/tree records/canvas items have stable identities
+without per-row widgets. Native acceptance results and explicit work budgets are
+recorded in the verification guide. F10a font fallback/full script-direction work
+and interactive input-method/accessibility/DPI acceptance remain open; Gate B stays open.
 
 ## Shared actions, input, focus, and popup sessions (0.14)
 
@@ -62,7 +65,8 @@ remains usable from input handlers while nested frames/event pumping are guarded
 
 See [INPUT.md](INPUT.md), the compiled [input example](examples/InputActions.cpp),
 and [0.14 verification](verification/INPUT_0_14.md) for APIs and measured limits.
-The initial F11 services are described above; F10a native composition remains pending.
+F11 platform composition is described above; F10a font resolution/fallback and
+complete script/direction support remain next.
 
 ![Shared actions and nested modal content rendered by EStudioUI](verification/input-foundation.png)
 

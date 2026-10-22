@@ -3,11 +3,14 @@
 #include "WindowsSupport.h"
 
 #include <EStudioUI/Button.h>
+#include <EStudioUI/ListWidget.h>
 #include <EStudioUI/MemoryPlatformServices.h>
 #include <EStudioUI/NumericInput.h>
 #include <EStudioUI/SemanticTree.h>
 #include <EStudioUI/Slider.h>
 #include <EStudioUI/ToolButton.h>
+#include <EStudioUI/TableWidget.h>
+#include <EStudioUI/TreeWidget.h>
 #include <EStudioUI/UiContext.h>
 
 #include <ole2.h>
@@ -98,7 +101,7 @@ struct NativeOwner
     }
 };
 
-void Pump(UiContext& ui)
+void Pump(UiContext& ui, Detail::NativeAccessibility* accessibility = nullptr)
 {
     MSG message{};
     while (PeekMessageW(&message, nullptr, 0, 0, PM_REMOVE))
@@ -108,14 +111,18 @@ void Pump(UiContext& ui)
     }
     ui.GetDispatcher().Drain();
     ui.PumpPlatformServices();
+    if (accessibility)
+        accessibility->Flush();
     MsgWaitForMultipleObjects(0, nullptr, FALSE, 5, QS_ALLINPUT);
 }
 
-template <typename Predicate> bool Until(UiContext& ui, Predicate predicate, int milliseconds = 10000)
+template <typename Predicate>
+bool Until(UiContext& ui, Predicate predicate, int milliseconds = 10000,
+           Detail::NativeAccessibility* accessibility = nullptr)
 {
     const auto deadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(milliseconds);
     while (!predicate() && std::chrono::steady_clock::now() < deadline)
-        Pump(ui);
+        Pump(ui, accessibility);
     return predicate();
 }
 
@@ -152,10 +159,366 @@ ComPtr<IUIAutomationElement> Find(IUIAutomation& automation, IUIAutomationElemen
     VariantClear(&value);
     Require(code, "Create native automation condition");
     ComPtr<IUIAutomationElement> element;
-    Require(root.FindFirst(TreeScope_Descendants, condition.Get(), &element), "Find native semantic child");
+    Require(root.FindFirst(TreeScope_Children, condition.Get(), &element), "Find native semantic child");
     if (!element)
         throw std::runtime_error("Native semantic child was not exposed");
     return element;
+}
+
+class ProbeEvents final : public IUIAutomationPropertyChangedEventHandler,
+                          public IUIAutomationEventHandler,
+                          public IUIAutomationStructureChangedEventHandler
+{
+  public:
+    HRESULT STDMETHODCALLTYPE QueryInterface(REFIID iid, void** result) override
+    {
+        if (!result)
+            return E_POINTER;
+        *result = nullptr;
+        if (iid == __uuidof(IUnknown) || iid == __uuidof(IUIAutomationPropertyChangedEventHandler))
+            *result = static_cast<IUIAutomationPropertyChangedEventHandler*>(this);
+        else if (iid == __uuidof(IUIAutomationEventHandler))
+            *result = static_cast<IUIAutomationEventHandler*>(this);
+        else if (iid == __uuidof(IUIAutomationStructureChangedEventHandler))
+            *result = static_cast<IUIAutomationStructureChangedEventHandler*>(this);
+        else
+            return E_NOINTERFACE;
+        AddRef();
+        return S_OK;
+    }
+
+    ULONG STDMETHODCALLTYPE AddRef() override
+    {
+        return ++m_References;
+    }
+
+    ULONG STDMETHODCALLTYPE Release() override
+    {
+        const auto count = --m_References;
+        if (!count)
+            delete this;
+        return count;
+    }
+
+    HRESULT STDMETHODCALLTYPE HandlePropertyChangedEvent(IUIAutomationElement*, PROPERTYID property,
+                                                         VARIANT value) override
+    {
+        if (property == UIA_ValueValuePropertyId && value.vt == VT_BSTR && value.bstrVal &&
+            std::wstring_view(value.bstrVal) == L"After \u03a9")
+            ++m_Values;
+        return S_OK;
+    }
+
+    HRESULT STDMETHODCALLTYPE HandleAutomationEvent(IUIAutomationElement*, EVENTID event) override
+    {
+        if (event == UIA_Text_TextChangedEventId)
+            ++m_Text;
+        else if (event == UIA_Text_TextSelectionChangedEventId)
+            ++m_Selection;
+        return S_OK;
+    }
+
+    HRESULT STDMETHODCALLTYPE HandleStructureChangedEvent(IUIAutomationElement*, StructureChangeType type,
+                                                          SAFEARRAY*) override
+    {
+        if (type == StructureChangeType_ChildrenInvalidated || type == StructureChangeType_ChildRemoved)
+            ++m_Structure;
+        return S_OK;
+    }
+
+    std::atomic<int> m_Values = 0;
+    std::atomic<int> m_Text = 0;
+    std::atomic<int> m_Selection = 0;
+    std::atomic<int> m_Structure = 0;
+
+  private:
+    std::atomic<ULONG> m_References = 1;
+};
+
+class EventSubscriptions
+{
+  public:
+    explicit EventSubscriptions(IUIAutomation& automation) : m_Automation(automation)
+    {
+        m_Events.Attach(new ProbeEvents());
+    }
+
+    ~EventSubscriptions()
+    {
+        if (!m_Stopped)
+            m_Automation.RemoveAllEventHandlers();
+    }
+
+    void WatchEditor(IUIAutomationElement& editor)
+    {
+        PROPERTYID properties[] = {UIA_ValueValuePropertyId};
+        Require(m_Automation.AddPropertyChangedEventHandlerNativeArray(&editor, TreeScope_Element, nullptr,
+                                                                       m_Events.Get(), properties, 1),
+                "Subscribe to native value-property changes");
+        for (const auto event : {UIA_Text_TextChangedEventId, UIA_Text_TextSelectionChangedEventId})
+            Require(m_Automation.AddAutomationEventHandler(event, &editor, TreeScope_Element, nullptr, m_Events.Get()),
+                    "Subscribe to native text and selection changes");
+    }
+
+    void WatchStructure(IUIAutomationElement& list)
+    {
+        Require(m_Automation.AddStructureChangedEventHandler(&list, TreeScope_Element, nullptr, m_Events.Get()),
+                "Subscribe to native virtual-child structure changes");
+    }
+
+    ProbeEvents& Events() const
+    {
+        return *m_Events.Get();
+    }
+
+    void Stop()
+    {
+        Require(m_Automation.RemoveAllEventHandlers(), "Unsubscribe native events on the registering MTA thread");
+        m_Stopped = true;
+    }
+
+  private:
+    IUIAutomation& m_Automation;
+    ComPtr<ProbeEvents> m_Events;
+    bool m_Stopped = false;
+};
+
+void AwaitEvent(const std::atomic<int>& counter, int before, const char* message)
+{
+    const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(3);
+    while (counter.load() <= before && std::chrono::steady_clock::now() < deadline)
+        std::this_thread::sleep_for(std::chrono::milliseconds(1));
+    Check(counter.load() > before, message);
+}
+
+void NativeCollections(IUIAutomation& automation, IUIAutomationElement& root, EventSubscriptions& subscriptions)
+{
+    Trace("UI Automation virtual list");
+    ComPtr<IUIAutomationTreeWalker> walker;
+    Require(automation.get_ControlViewWalker(&walker), "Obtain native control tree walker");
+    auto list = Find(automation, root, L"list");
+    ComPtr<IUIAutomationSelectionPattern> selection;
+    Require(list->GetCurrentPatternAs(UIA_SelectionPatternId, IID_PPV_ARGS(&selection)),
+            "Obtain virtual list selection pattern");
+    BOOL multiple = TRUE;
+    Require(selection->get_CurrentCanSelectMultiple(&multiple), "Read list selection policy");
+    Check(!multiple, "Convenience list exposes its single-selection policy");
+    ComPtr<IUIAutomationElement> first, second, last;
+    Require(walker->GetFirstChildElement(list.Get(), &first), "Read first virtual list row");
+    Require(walker->GetNextSiblingElement(first.Get(), &second), "Read next virtual list row");
+    Require(walker->GetLastChildElement(list.Get(), &last), "Read last virtual list row without enumerating all rows");
+    Check(first && second && last, "Virtual list rows are native semantic children");
+    ComPtr<IUIAutomationSelectionItemPattern> firstSelection, secondSelection;
+    Require(first->GetCurrentPatternAs(UIA_SelectionItemPatternId, IID_PPV_ARGS(&firstSelection)),
+            "Obtain first virtual row selection pattern");
+    Require(second->GetCurrentPatternAs(UIA_SelectionItemPatternId, IID_PPV_ARGS(&secondSelection)),
+            "Obtain second virtual row selection pattern");
+    Require(firstSelection->Select(), "Select first virtual row");
+    Require(secondSelection->Select(), "Select second virtual row");
+    BOOL selected = FALSE;
+    Require(secondSelection->get_CurrentIsSelected(&selected), "Read virtual row selected state");
+    ComPtr<IUIAutomationElementArray> selectedItems;
+    Require(selection->GetCurrentSelection(&selectedItems), "Query selected virtual list rows");
+    int count = 0;
+    Require(selectedItems->get_Length(&count), "Count selected virtual list rows");
+    Check(selected && count == 1, "Native selection reads the canonical selected row only");
+    Require(secondSelection->RemoveFromSelection(), "Clear virtual row selection");
+    Require(firstSelection->AddToSelection(), "Add a virtual row to an empty selection");
+    Check(FAILED(secondSelection->AddToSelection()), "Single-selection list rejects a second additive selection");
+    ComPtr<IUIAutomationVirtualizedItemPattern> realization;
+    Require(last->GetCurrentPatternAs(UIA_VirtualizedItemPatternId, IID_PPV_ARGS(&realization)),
+            "Obtain offscreen virtual row realization pattern");
+    Require(realization->Realize(), "Realize last virtual list row");
+    ComPtr<IUIAutomationScrollItemPattern> reveal;
+    Require(last->GetCurrentPatternAs(UIA_ScrollItemPatternId, IID_PPV_ARGS(&reveal)),
+            "Obtain offscreen virtual row scroll pattern");
+    Require(reveal->ScrollIntoView(), "Reveal last virtual list row");
+    RECT bounds{};
+    Require(last->get_CurrentBoundingRectangle(&bounds), "Read revealed virtual row bounds");
+    Check(bounds.bottom > bounds.top && bounds.right > bounds.left,
+          "Native scroll reveals actual clipped virtual row geometry");
+    auto remove = Find(automation, root, L"remove-row");
+    ComPtr<IUIAutomationInvokePattern> removeAction;
+    Require(remove->GetCurrentPatternAs(UIA_InvokePatternId, IID_PPV_ARGS(&removeAction)),
+            "Obtain canonical row-removal command");
+    subscriptions.WatchStructure(*list.Get());
+    const auto structureEvents = subscriptions.Events().m_Structure.load();
+    Require(removeAction->Invoke(), "Remove a row while its native provider remains retained");
+    AwaitEvent(subscriptions.Events().m_Structure, structureEvents,
+               "Registered native client receives virtual-child structure invalidation");
+    Check(FAILED(firstSelection->Select()), "Retained provider rejects selection after its row is removed");
+    Require(secondSelection->Select(), "Retained neighboring row identity survives a preceding removal");
+
+    Trace("UI Automation virtual tree");
+    auto tree = Find(automation, root, L"tree");
+    ComPtr<IUIAutomationElement> branch;
+    Require(walker->GetFirstChildElement(tree.Get(), &branch), "Read virtual tree branch");
+    Check(branch != nullptr, "Native tree exposes its collapsed root branch");
+    ComPtr<IUIAutomationExpandCollapsePattern> expansion;
+    Require(branch->GetCurrentPatternAs(UIA_ExpandCollapsePatternId, IID_PPV_ARGS(&expansion)),
+            "Obtain virtual tree expansion pattern");
+    ExpandCollapseState state{};
+    Require(expansion->get_CurrentExpandCollapseState(&state), "Read collapsed branch state");
+    Check(state == ExpandCollapseState_Collapsed, "Native branch starts collapsed");
+    Require(expansion->Expand(), "Expand virtual tree branch");
+    Require(expansion->get_CurrentExpandCollapseState(&state), "Read expanded branch state");
+    ComPtr<IUIAutomationElement> child;
+    Require(walker->GetFirstChildElement(branch.Get(), &child), "Navigate expanded virtual tree child");
+    Check(state == ExpandCollapseState_Expanded && child, "Native expansion reveals logical child nodes");
+    Require(expansion->Collapse(), "Collapse virtual tree branch");
+    child.Reset();
+    Require(walker->GetFirstChildElement(branch.Get(), &child), "Navigate collapsed virtual tree branch");
+    Check(!child, "Collapsed descendants leave native child navigation");
+
+    Trace("UI Automation virtual grid");
+    auto table = Find(automation, root, L"table");
+    ComPtr<IUIAutomationGridPattern> grid;
+    Require(table->GetCurrentPatternAs(UIA_GridPatternId, IID_PPV_ARGS(&grid)), "Obtain virtual grid pattern");
+    int rowCount = 0, columnCount = 0;
+    Require(grid->get_CurrentRowCount(&rowCount), "Read native grid row count");
+    Require(grid->get_CurrentColumnCount(&columnCount), "Read native grid column count");
+    Check(rowCount == 100 && columnCount == 2, "Native grid reports actual model dimensions");
+    ComPtr<IUIAutomationElement> cell;
+    Require(grid->GetItem(99, 1, &cell), "Obtain offscreen grid cell directly");
+    ComPtr<IUIAutomationGridItemPattern> gridItem;
+    Require(cell->GetCurrentPatternAs(UIA_GridItemPatternId, IID_PPV_ARGS(&gridItem)),
+            "Obtain virtual cell grid-item pattern");
+    int row = -1, column = -1;
+    Require(gridItem->get_CurrentRow(&row), "Read native cell row");
+    Require(gridItem->get_CurrentColumn(&column), "Read native cell column");
+    ComPtr<IUIAutomationElement> containingGrid;
+    Require(gridItem->get_CurrentContainingGrid(&containingGrid), "Read native cell containing grid");
+    BOOL same = FALSE;
+    Require(automation.CompareElements(table.Get(), containingGrid.Get(), &same), "Compare native grid identity");
+    Check(row == 99 && column == 1 && same, "Native cell coordinates and containing grid are coherent");
+    ComPtr<IUIAutomationSelectionItemPattern> cellSelection;
+    Require(cell->GetCurrentPatternAs(UIA_SelectionItemPatternId, IID_PPV_ARGS(&cellSelection)),
+            "Obtain virtual cell selection pattern");
+    Require(cellSelection->Select(), "Select offscreen native grid cell");
+    ComPtr<IUIAutomationScrollItemPattern> cellReveal;
+    Require(cell->GetCurrentPatternAs(UIA_ScrollItemPatternId, IID_PPV_ARGS(&cellReveal)),
+            "Obtain virtual grid cell scroll pattern");
+    Require(cellReveal->ScrollIntoView(), "Reveal selected native grid cell");
+    Require(cell->get_CurrentBoundingRectangle(&bounds), "Read revealed native cell bounds");
+    Check(bounds.bottom > bounds.top && bounds.right > bounds.left,
+          "Native grid reveal uses actual cell viewport geometry");
+    ComPtr<IUIAutomationValuePattern> cellValue;
+    Require(cell->GetCurrentPatternAs(UIA_ValuePatternId, IID_PPV_ARGS(&cellValue)),
+            "Obtain editable native cell value pattern");
+    BSTR replacement = SysAllocString(L"Edited cell \u03a9");
+    if (!replacement)
+        throw std::bad_alloc();
+    const auto edited = cellValue->SetValue(replacement);
+    SysFreeString(replacement);
+    Require(edited, "Edit native grid cell through canonical model validation");
+    BSTR contents = nullptr;
+    Require(cellValue->get_CurrentValue(&contents), "Read edited native grid cell");
+    const bool cellEdited = contents && std::wstring_view(contents) == L"Edited cell \u03a9";
+    SysFreeString(contents);
+    Check(cellEdited, "Native cell value reflects the committed model edit");
+    auto lockTable = Find(automation, root, L"lock-table");
+    ComPtr<IUIAutomationInvokePattern> lockAction;
+    Require(lockTable->GetCurrentPatternAs(UIA_InvokePatternId, IID_PPV_ARGS(&lockAction)),
+            "Obtain canonical table read-only command");
+    Require(lockAction->Invoke(), "Make native table read-only");
+    BOOL readOnly = FALSE;
+    Require(cellValue->get_CurrentIsReadOnly(&readOnly), "Read native cell read-only policy");
+    replacement = SysAllocString(L"Denied cell edit");
+    if (!replacement)
+        throw std::bad_alloc();
+    const auto denied = cellValue->SetValue(replacement);
+    SysFreeString(replacement);
+    Check(readOnly && FAILED(denied), "Native cell pattern rejects edits after its canonical table becomes read-only");
+}
+
+void NativeText(IUIAutomationElement& editor, IUIAutomationValuePattern& value, ProbeEvents& events,
+                ComPtr<IUIAutomationTextRange>& retainedRange)
+{
+    Trace("UI Automation text ranges");
+    BSTR replacement = SysAllocString(L"Ae\u0301\U0001f642\u03a9");
+    if (!replacement)
+        throw std::bad_alloc();
+    const auto textEvents = events.m_Text.load();
+    const auto edited = value.SetValue(replacement);
+    SysFreeString(replacement);
+    Require(edited, "Set native text containing a combining grapheme");
+    AwaitEvent(events.m_Text, textEvents, "Registered native client receives committed-text change events");
+    ComPtr<IUIAutomationTextPattern> text;
+    Require(editor.GetCurrentPatternAs(UIA_TextPatternId, IID_PPV_ARGS(&text)), "Obtain native text pattern");
+    ComPtr<IUIAutomationTextRange> document;
+    Require(text->get_DocumentRange(&document), "Read native document range");
+    BSTR contents = nullptr;
+    Require(document->GetText(-1, &contents), "Read native document text");
+    const bool complete = contents && std::wstring_view(contents) == L"Ae\u0301\U0001f642\u03a9";
+    SysFreeString(contents);
+    Check(complete, "Native text range preserves complete UTF-16 combining text");
+    ComPtr<IUIAutomationTextRange> cloned;
+    Require(document->Clone(&cloned), "Clone native text range");
+    BOOL equal = FALSE;
+    Require(document->Compare(cloned.Get(), &equal), "Compare cloned native text range across COM");
+    Check(equal, "Native text clone preserves its exact document and endpoints");
+    Require(cloned->MoveEndpointByRange(TextPatternRangeEndpoint_Start, document.Get(), TextPatternRangeEndpoint_End),
+            "Move native endpoint to a peer range endpoint across COM");
+    int endpointComparison = -1;
+    Require(cloned->CompareEndpoints(TextPatternRangeEndpoint_Start, document.Get(), TextPatternRangeEndpoint_End,
+                                     &endpointComparison),
+            "Compare native endpoints across COM");
+    Check(endpointComparison == 0, "Native peer range movement preserves endpoint identity across COM");
+    int moved = 0;
+    Require(document->MoveEndpointByUnit(TextPatternRangeEndpoint_Start, TextUnit_Character, 2, &moved),
+            "Move native text endpoint by graphemes");
+    Require(document->GetText(-1, &contents), "Read native grapheme-moved range");
+    const bool grapheme = contents && std::wstring_view(contents) == L"\U0001f642\u03a9";
+    SysFreeString(contents);
+    Check(moved == 2 && grapheme, "Native character navigation does not split a combining grapheme");
+    Require(document->MoveEndpointByUnit(TextPatternRangeEndpoint_Start, TextUnit_Character, 1, &moved),
+            "Move native text endpoint across a surrogate pair");
+    Require(document->GetText(-1, &contents), "Read native surrogate-moved range");
+    const bool surrogate = contents && std::wstring_view(contents) == L"\u03a9";
+    SysFreeString(contents);
+    Check(moved == 1 && surrogate, "Native character navigation treats a supplementary character as one grapheme");
+    const auto selectionEvents = events.m_Selection.load();
+    Require(document->Select(), "Select native text range");
+    AwaitEvent(events.m_Selection, selectionEvents, "Registered native client receives text-selection change events");
+    ComPtr<IUIAutomationTextRangeArray> ranges;
+    Require(text->GetSelection(&ranges), "Read native editor selection");
+    int count = 0;
+    Require(ranges->get_Length(&count), "Count native editor selections");
+    Check(count == 1, "Native single-line editor exposes one canonical selection");
+    ComPtr<IUIAutomationTextRange> selectedRange;
+    Require(ranges->GetElement(0, &selectedRange), "Read native selected text range");
+    Require(selectedRange->GetText(-1, &contents), "Read native selected text");
+    const bool selectedOmega = contents && std::wstring_view(contents) == L"\u03a9";
+    SysFreeString(contents);
+    Check(selectedOmega, "Native range selection updates the editor's canonical grapheme selection");
+    SAFEARRAY* rectangles = nullptr;
+    Require(document->GetBoundingRectangles(&rectangles), "Read native text range rectangles");
+    LONG first = 0, last = -1;
+    Check(rectangles && SafeArrayGetDim(rectangles) == 1, "Native text rectangles use a one-dimensional array");
+    const auto firstBound = SafeArrayGetLBound(rectangles, 1, &first);
+    const auto lastBound = SafeArrayGetUBound(rectangles, 1, &last);
+    SafeArrayDestroy(rectangles);
+    Require(firstBound, "Read text rectangle array lower bound");
+    Require(lastBound, "Read text rectangle array upper bound");
+    Check((last - first + 1) % 4 == 0, "Native text rectangles contain complete physical coordinate tuples");
+    ComPtr<IUIAutomationTextPattern2> text2;
+    Require(editor.GetCurrentPatternAs(UIA_TextPattern2Id, IID_PPV_ARGS(&text2)),
+            "Obtain native text pattern version 2");
+    BOOL active = FALSE;
+    ComPtr<IUIAutomationTextRange> caret;
+    Require(text2->GetCaretRange(&active, &caret), "Read native caret range");
+    int comparison = -1;
+    Require(
+        caret->CompareEndpoints(TextPatternRangeEndpoint_Start, caret.Get(), TextPatternRangeEndpoint_End, &comparison),
+        "Compare native caret endpoints");
+    Check(comparison == 0, "Native caret range is degenerate at the canonical insertion position");
+    replacement = SysAllocString(L"After \u03a9");
+    if (!replacement)
+        throw std::bad_alloc();
+    const auto restored = value.SetValue(replacement);
+    SysFreeString(replacement);
+    Require(restored, "Restore native edited text");
+    Require(text->get_DocumentRange(&retainedRange), "Retain native text range for closure check");
 }
 
 void Accessibility(UiContext& ui, HWND window)
@@ -171,6 +534,33 @@ void Accessibility(UiContext& ui, HWND window)
     auto& toggle = ui.Root().Add<ToolButton>("Grid");
     toggle.SetId("toggle");
     toggle.SetCheckable(true);
+    auto& list = ui.Root().Add<ListWidget>();
+    list.SetId("list");
+    list.SetHeight(SizeRule::Fixed(100));
+    std::vector<std::string> items;
+    for (int row = 0; row < 1000; ++row)
+        items.push_back("List row " + std::to_string(row));
+    list.SetItems(std::move(items));
+    auto& tree = ui.Root().Add<TreeWidget>();
+    tree.SetId("tree");
+    tree.SetHeight(SizeRule::Fixed(100));
+    const auto branch = tree.AddItem(0, "Branch");
+    tree.AddItem(branch, "Child");
+    auto& table = ui.Root().Add<TableWidget>();
+    table.SetId("table");
+    table.SetHeight(SizeRule::Fixed(100));
+    table.SetEditable(true);
+    table.SetColumns({{"Name"}, {"Value"}});
+    std::vector<std::vector<std::string>> rows;
+    for (int row = 0; row < 100; ++row)
+        rows.push_back({"Record " + std::to_string(row), "Value " + std::to_string(row)});
+    table.SetRows(std::move(rows));
+    auto& removeRow = ui.Root().Add<Button>("Remove first row");
+    removeRow.SetId("remove-row");
+    removeRow.Clicked().Connect([&list] { list.RemoveItem(0); });
+    auto& lockTable = ui.Root().Add<Button>("Lock table");
+    lockTable.SetId("lock-table");
+    lockTable.Clicked().Connect([&table] { table.SetEditable(false); });
     ui.Prepare(800, 600);
     int invocations = 0;
     button.Clicked().Connect([&] { ++invocations; });
@@ -208,6 +598,8 @@ void Accessibility(UiContext& ui, HWND window)
                 Require(invoke->Invoke(), "Native invoke action");
                 Trace("UI Automation invoke requested");
                 auto valueElement = Find(*automation.Get(), *root.Get(), L"value");
+                EventSubscriptions subscriptions(*automation.Get());
+                subscriptions.WatchEditor(*valueElement.Get());
                 ComPtr<IUIAutomationValuePattern> value;
                 Require(valueElement->GetCurrentPatternAs(UIA_ValuePatternId, IID_PPV_ARGS(&value)),
                         "Obtain value pattern");
@@ -217,6 +609,10 @@ void Accessibility(UiContext& ui, HWND window)
                 const auto editedValue = value->SetValue(replacement);
                 SysFreeString(replacement);
                 Require(editedValue, "Native Unicode value edit");
+                AwaitEvent(subscriptions.Events().m_Values, 0,
+                           "Registered native client receives the committed value-property event");
+                AwaitEvent(subscriptions.Events().m_Text, 0,
+                           "Registered native client receives the initial committed-text event");
                 BSTR contents = nullptr;
                 Require(value->get_CurrentValue(&contents), "Read native edited value");
                 const bool edited = contents && std::wstring_view(contents) == L"After Ω";
@@ -241,6 +637,10 @@ void Accessibility(UiContext& ui, HWND window)
                 Require(toggler->get_CurrentToggleState(&checked), "Read native toggle state");
                 if (checked != ToggleState_On)
                     throw std::runtime_error("Native toggle did not commit");
+                NativeCollections(*automation.Get(), *root.Get(), subscriptions);
+                ComPtr<IUIAutomationTextRange> retainedRange;
+                NativeText(*valueElement.Get(), *value.Get(), subscriptions.Events(), retainedRange);
+                subscriptions.Stop();
                 Trace("UI Automation patterns committed");
                 readyToClose = true;
                 while (!closed)
@@ -252,6 +652,11 @@ void Accessibility(UiContext& ui, HWND window)
                 SysFreeString(denied);
                 if (SUCCEEDED(expired))
                     throw std::runtime_error("Retained native provider accepted an edit after bridge closure");
+                BSTR staleText = nullptr;
+                const auto expiredRange = retainedRange->GetText(-1, &staleText);
+                SysFreeString(staleText);
+                if (SUCCEEDED(expiredRange))
+                    throw std::runtime_error("Retained native text range queried the UI after bridge closure");
                 Trace("UI Automation retained edit rejected");
             }
             catch (...)
@@ -264,7 +669,7 @@ void Accessibility(UiContext& ui, HWND window)
             done = true;
             Trace("UI Automation client stopped");
         });
-    const bool connected = Until(ui, [&] { return done.load() || readyToClose.load(); }, 20000);
+    const bool connected = Until(ui, [&] { return done.load() || readyToClose.load(); }, 20000, &bridge);
     Trace("flush UI Automation events");
     bridge.Flush();
     Trace("disconnect UI Automation provider");
@@ -273,9 +678,9 @@ void Accessibility(UiContext& ui, HWND window)
     closed = true;
     // COM teardown may still call the owner's STA. Keep messages and the queue
     // moving until the client has actually stopped; the process watchdog bounds failure.
-    const bool promptlyStopped = Until(ui, [&] { return done.load(); }, 10000);
+    const bool promptlyStopped = Until(ui, [&] { return done.load(); }, 10000, &bridge);
     while (!done)
-        Pump(ui);
+        Pump(ui, &bridge);
     client.join();
     Check(connected, "Native automation client timed out");
     Check(promptlyStopped, "Native automation client cleanup exceeded ten seconds");
@@ -283,6 +688,9 @@ void Accessibility(UiContext& ui, HWND window)
         std::rethrow_exception(error);
     Check(invocations == 1 && text.GetText() == "After Ω" && slider.GetValue() == 12.5 && toggle.IsChecked(),
           "Real UI Automation client uses canonical control actions");
+    Check(list.GetCurrentIndex() == 0 && table.GetCurrentCell() == std::pair{99, 1} && !tree.IsExpanded(branch),
+          "Native collection patterns use canonical selection and expansion");
+    Check(table.GetCell(99, 1) == "Edited cell Ω", "Rejected native cell edit leaves the canonical model unchanged");
     Check(true, "Retained native value provider expires before HWND teardown");
 }
 
@@ -395,6 +803,7 @@ void Pickers(UiContext& ui, HWND window)
         FileDialogOptions options;
         options.m_Kind = kind;
         options.m_Title = "EStudioUI automatic cancellation probe";
+        options.m_InitialFolder = std::filesystem::temp_directory_path();
         if (kind == FileDialogKind::SaveFile)
         {
             options.m_FileName = "probe.txt";
@@ -425,7 +834,9 @@ void Pickers(UiContext& ui, HWND window)
               "Native cancellation delivers exactly one result after the STA unwinds");
     }
     Trace("retire native picker adapter");
-    auto session = ui.Platform().ShowFileDialog({});
+    FileDialogOptions options;
+    options.m_InitialFolder = std::filesystem::temp_directory_path();
+    auto session = ui.Platform().ShowFileDialog(options);
     int completions = 0;
     session.OnFinished([&](const FileDialogResult&) { ++completions; });
     HWND windows[2] = {window, nullptr};
@@ -445,7 +856,7 @@ void Pickers(UiContext& ui, HWND window)
           "Late native completion cannot redeliver a result or destroy its retained owner");
     Trace("cancel native picker during startup");
     ui.SetPlatformServices(Detail::CreateNativePlatformServices(Host(ui, window)));
-    session = ui.Platform().ShowFileDialog({});
+    session = ui.Platform().ShowFileDialog(options);
     Check(session.Cancel(), "Native picker can be cancelled before showing its window");
     Check(Until(ui, [&] { return !ui.HasPendingPlatformWork(); }),
           "Startup cancellation unwinds the native STA without a visible-dialog requirement");
@@ -471,15 +882,33 @@ int main()
         ui.SetPlatformServices(Detail::CreateNativePlatformServices(Host(ui, native.m_Window)));
         Check(ui.Platform().GetCapabilities().Get(PlatformFeature::ClipboardHtml) == PlatformSupport::Native,
               "Windows adapter reports actual rich clipboard capability");
-        Accessibility(ui, native.m_Window);
-        wchar_t nativeFlag[2]{};
-        if (GetEnvironmentVariableW(L"ESTUDIOUI_NATIVE_PLATFORM_TESTS", nativeFlag, 2) == 1 && nativeFlag[0] == L'1')
+        try
         {
-            Clipboard(ui, native.m_Window);
-            Pickers(ui, native.m_Window);
+            Accessibility(ui, native.m_Window);
+            wchar_t nativeFlag[2]{};
+            if (GetEnvironmentVariableW(L"ESTUDIOUI_NATIVE_PLATFORM_TESTS", nativeFlag, 2) == 1 &&
+                nativeFlag[0] == L'1')
+            {
+                Clipboard(ui, native.m_Window);
+                Pickers(ui, native.m_Window);
+            }
+            else
+                std::cout
+                    << "Clipboard mutation and visible picker probes require ESTUDIOUI_NATIVE_PLATFORM_TESTS=1.\n";
         }
-        else
-            std::cout << "Clipboard mutation and visible picker probes require ESTUDIOUI_NATIVE_PLATFORM_TESTS=1.\n";
+        catch (const std::exception& error)
+        {
+            std::cerr << "Native scenario failed: " << error.what() << std::endl;
+            ui.Platform().Close();
+            Trace("unwind native work after failed scenario");
+            if (!Until(ui, [&] { return !ui.HasPendingPlatformWork(); }))
+                Trace("native cleanup remains pending; process watchdog will fail this probe");
+            // Preserve native-owner lifetime and STA service even on a failed assertion.
+            // The watchdog makes a stuck worker an explicit process failure.
+            while (ui.HasPendingPlatformWork())
+                Pump(ui);
+            throw;
+        }
         std::cout << "Native platform: " << s_Checks << " checks passed.\n";
     }
     catch (const std::exception& error)

@@ -15,6 +15,7 @@ namespace EStudioUI::Detail
 namespace
 {
 constexpr UINT s_Cancel = WM_APP + 0x31b;
+constexpr UINT_PTR s_CancelTimer = 0x31b;
 
 template <typename T> class ComPointer
 {
@@ -55,6 +56,7 @@ struct WorkerState
     mutable std::mutex m_Mutex;
     HWND m_Control = nullptr;
     IFileDialog* m_Dialog = nullptr;
+    bool m_Closing = false;
     bool m_Cancelled = false;
     bool m_Finished = false;
 
@@ -71,6 +73,16 @@ struct WorkerState
         const std::lock_guard lock(m_Mutex);
         return m_Cancelled;
     }
+
+    void RequestNativeClose(IFileDialog* dialog)
+    {
+        // Only the picker STA calls this method. Shell callbacks can reenter it.
+        if (!dialog || m_Closing)
+            return;
+        m_Closing = true;
+        dialog->Close(HRESULT_FROM_WIN32(ERROR_CANCELLED));
+        m_Closing = false;
+    }
 };
 
 LRESULT CALLBACK ControlProcedure(HWND window, UINT message, WPARAM wParam, LPARAM lParam)
@@ -81,9 +93,14 @@ LRESULT CALLBACK ControlProcedure(HWND window, UINT message, WPARAM wParam, LPAR
         SetWindowLongPtrW(window, GWLP_USERDATA, reinterpret_cast<LONG_PTR>(create->lpCreateParams));
     }
     auto* state = reinterpret_cast<WorkerState*>(GetWindowLongPtrW(window, GWLP_USERDATA));
-    if (message == s_Cancel && state && state->m_Dialog)
+    if ((message == s_Cancel || (message == WM_TIMER && wParam == s_CancelTimer)) && state)
     {
-        state->m_Dialog->Close(HRESULT_FROM_WIN32(ERROR_CANCELLED));
+        // A visible picker HWND does not prove Show has finished initialization.
+        // Keep cancellation armed until Show returns, including an early Close
+        // that fails or is consumed by the shell's initialization message loop.
+        if (message == s_Cancel)
+            SetTimer(window, s_CancelTimer, 16, nullptr);
+        state->RequestNativeClose(state->m_Dialog);
         return 0;
     }
     return DefWindowProcW(window, message, wParam, lParam);
@@ -108,6 +125,112 @@ HWND CreateControl(WorkerState& state)
         throw std::runtime_error("Could not create the native picker control window.");
     return window;
 }
+
+class CancellationEvents final : public IFileDialogEvents
+{
+  public:
+    explicit CancellationEvents(WorkerState& state) : m_State(state)
+    {
+    }
+
+    HRESULT STDMETHODCALLTYPE QueryInterface(REFIID iid, void** result) override
+    {
+        if (!result)
+            return E_POINTER;
+        *result = nullptr;
+        if (iid != __uuidof(IUnknown) && iid != __uuidof(IFileDialogEvents))
+            return E_NOINTERFACE;
+        *result = static_cast<IFileDialogEvents*>(this);
+        AddRef();
+        return S_OK;
+    }
+
+    ULONG STDMETHODCALLTYPE AddRef() override
+    {
+        return ++m_References;
+    }
+
+    ULONG STDMETHODCALLTYPE Release() override
+    {
+        const auto count = --m_References;
+        if (!count)
+            delete this;
+        return count;
+    }
+
+    HRESULT STDMETHODCALLTYPE OnFileOk(IFileDialog* dialog) override
+    {
+        return CheckCancellation(dialog);
+    }
+
+    HRESULT STDMETHODCALLTYPE OnFolderChanging(IFileDialog* dialog, IShellItem*) override
+    {
+        return CheckCancellation(dialog);
+    }
+
+    HRESULT STDMETHODCALLTYPE OnFolderChange(IFileDialog* dialog) override
+    {
+        return CheckCancellation(dialog);
+    }
+
+    HRESULT STDMETHODCALLTYPE OnSelectionChange(IFileDialog* dialog) override
+    {
+        return CheckCancellation(dialog);
+    }
+
+    HRESULT STDMETHODCALLTYPE OnShareViolation(IFileDialog* dialog, IShellItem*,
+                                               FDE_SHAREVIOLATION_RESPONSE* response) override
+    {
+        if (response)
+            *response = FDESVR_DEFAULT;
+        return CheckCancellation(dialog);
+    }
+
+    HRESULT STDMETHODCALLTYPE OnTypeChange(IFileDialog* dialog) override
+    {
+        return CheckCancellation(dialog);
+    }
+
+    HRESULT STDMETHODCALLTYPE OnOverwrite(IFileDialog* dialog, IShellItem*, FDE_OVERWRITE_RESPONSE* response) override
+    {
+        if (response)
+            *response = FDEOR_DEFAULT;
+        return CheckCancellation(dialog);
+    }
+
+  private:
+    HRESULT CheckCancellation(IFileDialog* dialog)
+    {
+        // OnFolderChange/OnTypeChange also run when the shell opens the picker.
+        // This covers cancellation delivered before its modal message loop.
+        if (m_State.Cancelled())
+            m_State.RequestNativeClose(dialog);
+        return S_OK;
+    }
+
+    std::atomic<ULONG> m_References = 1;
+    WorkerState& m_State;
+};
+
+class EventLease
+{
+  public:
+    EventLease(IFileDialog& dialog, WorkerState& state) : m_Dialog(dialog)
+    {
+        *m_Events.Put() = new CancellationEvents(state);
+        Require(m_Dialog.Advise(m_Events.Get(), &m_Cookie), "Observe native picker initialization");
+    }
+
+    ~EventLease()
+    {
+        m_Dialog.Unadvise(m_Cookie);
+    }
+
+  private:
+    IFileDialog& m_Dialog;
+    ComPointer<IFileDialogEvents> m_Events;
+    DWORD m_Cookie = 0;
+};
 
 std::filesystem::path ItemPath(IShellItem& item)
 {
@@ -172,9 +295,11 @@ FileDialogResult Pick(HWND owner, const FileDialogOptions& options, WorkerState&
         Require(dialog->SetFileTypes(static_cast<UINT>(filters.size()), filters.data()), "Set native picker filters");
     if (state.Cancelled())
         return {FileDialogStatus::Cancelled};
+    const EventLease events(*dialog.Get(), state);
     state.m_Dialog = dialog.Get();
     const HRESULT shown = dialog->Show(owner);
     state.m_Dialog = nullptr;
+    KillTimer(state.m_Control, s_CancelTimer);
     if (shown == HRESULT_FROM_WIN32(ERROR_CANCELLED) || state.Cancelled())
         return {FileDialogStatus::Cancelled};
     if (FAILED(shown))

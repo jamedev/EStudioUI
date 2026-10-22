@@ -113,6 +113,7 @@ void TableWidget::SetModel(std::shared_ptr<ItemModel> model)
         EndEdit(false, false);
     if (!self.Get())
         return;
+    ++m_SemanticStructureRevision;
     m_View = std::move(view);
     m_LocalProjection.reset();
     m_Columns = std::move(columns);
@@ -250,6 +251,8 @@ void TableWidget::ModelChanged(const ModelChange& change)
         return;
 
     const auto lease = RetainOwner();
+    if (change.m_Reset || change.m_Structure)
+        ++m_SemanticStructureRevision;
     const WidgetRef self(this);
     const auto model = m_View->GetModel();
     if (change.m_Reset)
@@ -347,6 +350,10 @@ void TableWidget::SetColumns(std::vector<TableColumn> columns)
     m_Columns = std::move(columns);
     m_Widths.assign(m_Columns.size(), std::nullopt);
     m_Rows.clear();
+    m_SemanticRowIds.clear();
+    m_SemanticRowIndices.clear();
+    m_SemanticGeneration = AllocateItemId();
+    ++m_SemanticStructureRevision;
     m_ContentFontSize = -1;
     m_SortColumn = -1;
     m_ResizeColumn = -1;
@@ -379,6 +386,20 @@ void TableWidget::SetRows(std::vector<std::vector<std::string>> rows)
     m_View.reset();
     m_LocalProjection.reset();
     m_ContentPolicy = ContentMeasurePolicy::Exact;
+    std::vector<ItemId> semanticIds;
+    std::unordered_map<ItemId, std::size_t> semanticIndices;
+    semanticIds.reserve(rows.size());
+    semanticIndices.reserve(rows.size());
+    for (std::size_t row = 0; row < rows.size(); ++row)
+    {
+        const auto id = AllocateItemId();
+        semanticIds.push_back(id);
+        semanticIndices.emplace(id, row);
+    }
+    m_SemanticGeneration = AllocateItemId();
+    ++m_SemanticStructureRevision;
+    m_SemanticRowIds = std::move(semanticIds);
+    m_SemanticRowIndices = std::move(semanticIndices);
     m_Rows = std::move(rows);
     m_ContentFontSize = -1;
     m_SortColumn = -1;
@@ -412,6 +433,14 @@ int TableWidget::AddRow(std::vector<std::string> cells)
         model->Restructure([values = std::move(values)](ModelBuilder& builder) { builder.Add(values); });
         return index;
     }
+    if (m_Rows.size() == m_Rows.capacity())
+        m_Rows.reserve(std::max<std::size_t>(8, m_Rows.size() * 2));
+    if (m_SemanticRowIds.size() == m_SemanticRowIds.capacity())
+        m_SemanticRowIds.reserve(std::max<std::size_t>(8, m_SemanticRowIds.size() * 2));
+    const auto id = AllocateItemId();
+    m_SemanticRowIndices.emplace(id, m_Rows.size());
+    m_SemanticRowIds.push_back(id);
+    ++m_SemanticStructureRevision;
     m_Rows.push_back(std::move(cells));
     m_ContentFontSize = -1;
     m_SortColumn = -1;
@@ -554,14 +583,20 @@ void TableWidget::SortByColumn(int column, bool ascending)
                      });
     const int previous = m_CurrentRow;
     std::vector<std::vector<std::string>> sorted;
+    std::vector<ItemId> sortedIds;
+    sortedIds.reserve(m_Rows.size());
     sorted.reserve(m_Rows.size());
     for (std::size_t i = 0; i < order.size(); ++i)
     {
         if (static_cast<int>(order[i]) == previous)
             m_CurrentRow = static_cast<int>(i);
+        sortedIds.push_back(m_SemanticRowIds[order[i]]);
+        m_SemanticRowIndices[sortedIds.back()] = i;
         sorted.push_back(std::move(m_Rows[order[i]]));
     }
     m_Rows = std::move(sorted);
+    m_SemanticRowIds = std::move(sortedIds);
+    ++m_SemanticStructureRevision;
     m_SortColumn = column;
     m_Ascending = ascending;
     RequestRepaint();
@@ -908,6 +943,10 @@ int TableWidget::HeaderAt(Point point) const
 
 void TableWidget::OnLayout()
 {
+    const auto widths = GetColumnWidths();
+    m_SemanticColumnOffsets.assign(1, 0);
+    for (const auto width : widths)
+        m_SemanticColumnOffsets.push_back(m_SemanticColumnOffsets.back() + width);
     if (m_EditRow >= 0)
         m_Editor->SetFloatingBounds(
             GetCellBounds(m_EditRow, m_EditColumn).Intersect(GetViewport()).Intersect(GetClip()));
@@ -1204,4 +1243,265 @@ bool TableWidget::OnScroll(Point delta, Modifiers modifiers)
         return true;
     return ScrollWidget::OnScroll(delta, modifiers);
 }
+
+SemanticKey TableWidget::SemanticRowKey(std::size_t row, std::uint64_t part) const
+{
+    if (m_View)
+        return {m_View->GetModel()->GetSnapshot().GetItem(row), part,
+                m_View->GetModel()->GetRootModel()->GetIdentity()};
+    return {m_SemanticRowIds.at(row), part, m_SemanticGeneration};
+}
+
+std::optional<std::size_t> TableWidget::SemanticRowIndex(SemanticKey key) const
+{
+    if (!key.m_Item || key.m_Part > m_Columns.size())
+        return {};
+    if (m_View)
+    {
+        const auto model = m_View->GetModel();
+        const auto data = model->GetSnapshot();
+        if (key.m_Generation != model->GetRootModel()->GetIdentity() || !data.Contains(key.m_Item) ||
+            data.GetParent(key.m_Item))
+            return {};
+        return data.GetPosition(key.m_Item);
+    }
+    const auto found = m_SemanticRowIndices.find(key.m_Item);
+    return key.m_Generation == m_SemanticGeneration && found != m_SemanticRowIndices.end()
+               ? std::optional<std::size_t>(found->second)
+               : std::nullopt;
+}
+
+SemanticInfo TableWidget::DescribeSemantics() const
+{
+    auto info = Widget::DescribeSemantics();
+    info.m_RowCount = static_cast<std::size_t>(GetRowCount());
+    info.m_ColumnCount = m_Columns.size();
+    info.m_StructureRevision = m_SemanticStructureRevision;
+    info.m_MultiSelectable = m_View && m_View->GetSelectionModel()->GetMode() == SelectionMode::Multiple;
+    return info;
+}
+
+std::size_t TableWidget::GetSemanticChildCount(SemanticKey parent) const
+{
+    if (!parent.m_Item)
+        return static_cast<std::size_t>(GetRowCount());
+    return !parent.m_Part && DescribeSemanticChild(parent) ? m_Columns.size() : 0;
+}
+
+std::optional<SemanticKey> TableWidget::GetSemanticChildAt(SemanticKey parent, std::size_t index) const
+{
+    if (index >= GetSemanticChildCount(parent))
+        return {};
+    if (!parent.m_Item)
+        return SemanticRowKey(index);
+    parent.m_Part = index + 1;
+    return parent;
+}
+
+std::optional<SemanticVirtualNode> TableWidget::DescribeSemanticChild(SemanticKey key) const
+{
+    const auto row = SemanticRowIndex(key);
+    const auto canonical = m_View ? m_View->GetModel()->GetRootModel()->GetSnapshot() : ModelSnapshot{};
+    if (!row && (!m_View || key.m_Generation != m_View->GetModel()->GetRootModel()->GetIdentity() ||
+                 !canonical.Contains(key.m_Item)))
+        return {};
+    if (key.m_Part > m_Columns.size())
+        return {};
+    SemanticVirtualNode node;
+    auto& info = node.m_Info;
+    info.m_Role = key.m_Part ? SemanticRole::Cell : SemanticRole::Row;
+    info.m_StructureRevision = m_SemanticStructureRevision;
+    node.m_Focusable = key.m_Part != 0;
+    if (key.m_Part)
+    {
+        const auto column = static_cast<std::size_t>(key.m_Part - 1);
+        node.m_Parent = {key.m_Item, 0, key.m_Generation};
+        info.m_Column = column;
+        if (row)
+            info.m_Row = *row;
+        info.m_Value = row ? GetCell(static_cast<int>(*row), static_cast<int>(column))
+                           : TextBuffer::Sanitize(GetItemDelegate(column)->GetText(canonical, key.m_Item, column));
+        info.m_Name = m_Columns[column].m_Title + ": " + info.m_Value;
+        const auto selection = m_View ? m_View->GetSelectionModel() : nullptr;
+        const auto selectedColumn =
+            selection ? selection->GetColumn() : static_cast<std::size_t>(std::max(0, m_CurrentColumn));
+        info.m_Selected = column == selectedColumn && (selection ? selection->IsSelected(key.m_Item)
+                                                                 : row && static_cast<int>(*row) == m_CurrentRow);
+        node.m_Focused =
+            column == selectedColumn && (selection ? selection->GetCurrent() == key.m_Item : info.m_Selected);
+        info.m_Actions = SemanticAction::Select | SemanticAction::AddToSelection | SemanticAction::RemoveFromSelection |
+                         SemanticAction::ScrollIntoView;
+        info.m_ReadOnly = !m_Editable || (m_View && !canonical.GetColumns().at(column).m_Editable);
+        if (!info.m_ReadOnly)
+            info.m_Actions = info.m_Actions | SemanticAction::SetText;
+        if (m_View)
+        {
+            const auto enabled = canonical.GetValue(key.m_Item, column, ModelRole::Enabled);
+            node.m_Enabled = !std::holds_alternative<bool>(enabled) || std::get<bool>(enabled);
+        }
+    }
+    else
+        info.m_Name = row ? "Row " + std::to_string(*row + 1) : "Filtered row";
+    if (row)
+    {
+        const auto viewport = GetViewport();
+        const auto offset = GetStoredScrollOffset();
+        float left = viewport.m_X;
+        float width = viewport.m_Width;
+        if (key.m_Part && m_SemanticColumnOffsets.size() == m_Columns.size() + 1)
+        {
+            const auto column = static_cast<std::size_t>(key.m_Part - 1);
+            left = viewport.m_X + m_SemanticColumnOffsets[column] - offset.m_X;
+            width = m_SemanticColumnOffsets[column + 1] - m_SemanticColumnOffsets[column];
+        }
+        else if (key.m_Part)
+            width = 0;
+        node.m_Bounds = Rect{left, viewport.m_Y + static_cast<float>(*row) * GetStyle().m_RowHeight - offset.m_Y, width,
+                             GetStyle().m_RowHeight}
+                            .Intersect(viewport);
+    }
+    return node;
+}
+
+std::optional<std::size_t> TableWidget::GetSemanticChildIndex(SemanticKey key) const
+{
+    if (!DescribeSemanticChild(key))
+        return {};
+    return key.m_Part ? std::optional<std::size_t>(static_cast<std::size_t>(key.m_Part - 1)) : SemanticRowIndex(key);
+}
+
+SemanticStatus TableWidget::OnSemanticChildAction(SemanticKey key, const SemanticCommand& command)
+{
+    const auto row = SemanticRowIndex(key);
+    if (!key.m_Part || key.m_Part > m_Columns.size())
+        return SemanticStatus::Unsupported;
+    const auto column = static_cast<std::size_t>(key.m_Part - 1);
+    if (command.m_Action == SemanticAction::ScrollIntoView)
+    {
+        if (!row || m_SemanticColumnOffsets.size() != m_Columns.size() + 1)
+            return SemanticStatus::Unavailable;
+        EnsureVisible({m_SemanticColumnOffsets[column], static_cast<float>(*row) * GetStyle().m_RowHeight,
+                       m_SemanticColumnOffsets[column + 1] - m_SemanticColumnOffsets[column], GetStyle().m_RowHeight});
+        return SemanticStatus::Succeeded;
+    }
+    if (command.m_Action == SemanticAction::SetText)
+    {
+        if (TextBuffer::Sanitize(command.m_Text) != command.m_Text)
+            return SemanticStatus::InvalidValue;
+        try
+        {
+            if (m_View)
+            {
+                const auto model = m_View->GetModel()->GetRootModel();
+                const auto value =
+                    GetItemDelegate(column)->ParseEdit(model->GetSnapshot(), key.m_Item, column, command.m_Text);
+                model->SetValue(key.m_Item, column, value);
+            }
+            else if (row)
+                SetCell(static_cast<int>(*row), static_cast<int>(column), command.m_Text);
+            else
+                return SemanticStatus::Unavailable;
+        }
+        catch (const std::exception&)
+        {
+            return SemanticStatus::InvalidValue;
+        }
+        return SemanticStatus::Succeeded;
+    }
+    if (command.m_Action == SemanticAction::Select || command.m_Action == SemanticAction::Focus ||
+        command.m_Action == SemanticAction::AddToSelection)
+    {
+        if (m_View)
+        {
+            const auto selection = m_View->GetSelectionModel();
+            if (command.m_Action == SemanticAction::AddToSelection && selection->GetMode() == SelectionMode::Single &&
+                !selection->GetSnapshot()->m_Items.empty() && !selection->IsSelected(key.m_Item))
+                return SemanticStatus::InvalidValue;
+            selection->Select(key.m_Item, column,
+                              command.m_Action == SemanticAction::AddToSelection ? SelectionAction::Add
+                                                                                 : SelectionAction::Replace);
+        }
+        else if (row)
+        {
+            if (command.m_Action == SemanticAction::AddToSelection && m_CurrentRow >= 0 &&
+                (static_cast<int>(*row) != m_CurrentRow || static_cast<int>(column) != m_CurrentColumn))
+                return SemanticStatus::InvalidValue;
+            SetCurrentCell(static_cast<int>(*row), static_cast<int>(column));
+        }
+        else
+            return SemanticStatus::Unavailable;
+        return SemanticStatus::Succeeded;
+    }
+    if (command.m_Action == SemanticAction::RemoveFromSelection)
+    {
+        if (m_View)
+        {
+            const auto selection = m_View->GetSelectionModel();
+            if (selection->IsSelected(key.m_Item))
+                selection->Select(key.m_Item, column, SelectionAction::Toggle);
+        }
+        else if (row && static_cast<int>(*row) == m_CurrentRow && static_cast<int>(column) == m_CurrentColumn)
+            SetCurrentCell(-1, -1);
+        return SemanticStatus::Succeeded;
+    }
+    return SemanticStatus::Unsupported;
+}
+
+std::optional<SemanticKey> TableWidget::SemanticHitTest(Point point) const
+{
+    const auto viewport = GetViewport();
+    if (!viewport.Contains(point) || m_SemanticColumnOffsets.size() != m_Columns.size() + 1)
+        return {};
+    const auto offset = GetStoredScrollOffset();
+    const auto row =
+        static_cast<std::size_t>(std::max(0.0f, point.m_Y - viewport.m_Y + offset.m_Y) / GetStyle().m_RowHeight);
+    if (row >= static_cast<std::size_t>(GetRowCount()))
+        return {};
+    const auto x = point.m_X - viewport.m_X + offset.m_X;
+    const auto end = std::upper_bound(m_SemanticColumnOffsets.begin(), m_SemanticColumnOffsets.end(), x);
+    if (end == m_SemanticColumnOffsets.begin() || end == m_SemanticColumnOffsets.end())
+        return {};
+    return SemanticRowKey(row, static_cast<std::uint64_t>(end - m_SemanticColumnOffsets.begin()));
+}
+
+std::size_t TableWidget::GetSemanticSelectionCount() const
+{
+    return m_View ? m_View->GetSelectionModel()->GetSnapshot()->m_Items.size() : m_CurrentRow >= 0 ? 1 : 0;
+}
+
+std::vector<SemanticKey> TableWidget::GetSemanticSelection(std::size_t offset, std::size_t limit) const
+{
+    std::vector<SemanticKey> result;
+    if (!m_View)
+    {
+        if (!offset && limit && m_CurrentRow >= 0 && m_CurrentColumn >= 0)
+            result.push_back(SemanticRowKey(static_cast<std::size_t>(m_CurrentRow),
+                                            static_cast<std::uint64_t>(m_CurrentColumn + 1)));
+        return result;
+    }
+    const auto selection = m_View->GetSelectionModel()->GetSnapshot();
+    if (selection->m_Column >= m_Columns.size())
+        return result;
+    auto item = selection->m_Items.begin();
+    std::advance(item, std::min(offset, selection->m_Items.size()));
+    for (; item != selection->m_Items.end() && result.size() < limit; ++item)
+        result.push_back({*item, selection->m_Column + 1, m_View->GetModel()->GetRootModel()->GetIdentity()});
+    return result;
+}
+
+std::optional<SemanticKey> TableWidget::GetSemanticGridItem(std::size_t row, std::size_t column) const
+{
+    return row < static_cast<std::size_t>(GetRowCount()) && column < m_Columns.size()
+               ? std::optional<SemanticKey>(SemanticRowKey(row, column + 1))
+               : std::nullopt;
+}
+
+std::optional<SemanticKey> TableWidget::GetSemanticFocus() const
+{
+    const auto cell = GetCurrentCell();
+    if (cell.first < 0 || cell.second < 0)
+        return {};
+    return SemanticRowKey(static_cast<std::size_t>(cell.first), static_cast<std::uint64_t>(cell.second + 1));
+}
+
 } // namespace EStudioUI

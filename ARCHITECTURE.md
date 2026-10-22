@@ -17,7 +17,8 @@ without exposing third-party types in its public widget headers.
 | `Action`, `ActionState`, `Shortcut` | Transactional command presentation, lifetime-bound worker handles, scoped gesture precedence and ambiguity handling |
 | `InputEvent`, `PopupSession` | Owning native-independent payloads, thread-local input boundaries, bounded asynchronous popup/modal results |
 | `PlatformServices`, `ClipboardData`, `FileDialogSession`, `WindowMetrics` | Injectable native capabilities, owned transfers, asynchronous results, logical/physical coordinate mapping |
-| `SemanticTree`, `SemanticInfo` | Lazy lifetime-unique actual-widget index, logical popup hierarchy, pure on-demand queries, canonical actions and initial Windows UI Automation |
+| `SemanticTree`, `SemanticInfo` | Lazy widget index, stable virtual item coordinates, logical popup hierarchy, bounded on-demand queries, canonical actions and Windows UI Automation |
+| `TextInputClient`, `TextCompositionEvent` | Owned preedit/commit/cancel protocol, surrounding text, focus-session identity and prepared caret geometry |
 | `UiContext` | Widget tree, CSS resolution, constrained measurement, strategy allocation, clipping, focus, capture |
 | `Widget`, `Label`, `Button`, `TextBox` | Owned model, cached shaping, behavior, emitted signals |
 | `SizeRule`, `Layout` | Fixed/content/fill contracts and shared bounded weighted distribution |
@@ -43,14 +44,24 @@ Window/adaptor retirement retains HWND/GLFW resources while native work remains,
 without joining an active picker on an ordinary owner turn. Manual hosts retain
 their native owner/context until HasPendingPlatformWork becomes false.
 
-Semantics index actual widgets lazily, use lifetime-unique IDs and weak references,
-and query current metadata/last-prepared transformed bounds without preparing a
-frame. Custom metadata hooks run in the inspection phase. Canonical actions use
-the existing input/focus/validator path; native COM-thread requests cross typed
-owner handles with bounded waits. Initial UI Automation change reporting keeps a
+Semantics index actual widgets lazily and hold weak references. A virtual identity
+combines that widget's lifetime identity with stable record/sub-item/dataset
+coordinates; queries do not allocate a permanent node for every row or scene
+item. Metadata and last-prepared transformed bounds are inspected without
+preparing a frame. Custom hooks run in the inspection phase. Canonical actions
+use the existing input/focus/validator path; native COM-thread requests cross
+typed owner handles with bounded waits. UI Automation change reporting keeps a
 bounded observation set and skips semantic scans without native listeners.
-Composition, virtual collection children and full native readiness remain open;
-see [PLATFORM.md](PLATFORM.md).
+
+Text input uses the same owner boundary. Native composition owns its payload and
+targets a widget lifetime plus focus-session generation. TextBox keeps preedit
+separate from TextBuffer, paints its temporary run and underline through the GPU,
+and commits one validated undoable edit. Focus/owner loss expires pending input.
+The Windows adapter updates candidate geometry from the prepared caret and current
+window metrics rather than asking widgets to handle native messages. Custom
+editors implement TextInputClient; F10a still supplies the later font-resolution
+and complete script/direction work. Native input-method, assistive-technology and
+mixed-monitor observations remain separate acceptance evidence; see [PLATFORM.md](PLATFORM.md).
 
 ## Frame and cache behavior
 

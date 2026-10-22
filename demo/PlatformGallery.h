@@ -21,6 +21,8 @@ class PlatformGallery
     void OpenOwnedWindow();
     //! Reads current capabilities and physical/logical coordinate metrics on demand.
     void Inspect();
+    //! Compares virtual item reveal/selection geometry with the actual GPU presentation.
+    void VerifyVirtualItems();
     //! Observes the containing window.
     Window& m_Window;
     //! Locates the font used by secondary windows and the isolated probe.

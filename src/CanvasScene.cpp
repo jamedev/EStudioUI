@@ -1,6 +1,7 @@
 #include <EStudioUI/CanvasScene.h>
 
 #include <algorithm>
+#include <set>
 #include <array>
 #include <cmath>
 #include <limits>
@@ -82,6 +83,8 @@ struct CanvasScene::Impl
     };
 
     std::vector<CanvasItem> m_Items;
+    std::set<std::uint64_t> m_Selected;
+    std::uint64_t m_StructureRevision = 0;
     std::vector<Slot> m_Slots;
     std::vector<Node> m_Nodes;
     std::uint32_t m_FreeSlot = s_None;
@@ -324,6 +327,7 @@ CanvasItemId CanvasScene::Add(const CanvasGeometry& geometry, std::uint32_t styl
     state.m_Nodes[slot.m_Node].m_Slot = slotIndex;
     state.InsertLeaf(slot.m_Node);
     ++state.m_Revision;
+    ++state.m_StructureRevision;
     return id;
 }
 
@@ -333,6 +337,7 @@ bool CanvasScene::Remove(CanvasItemId id)
     auto* slot = state.Find(id);
     if (!slot)
         return false;
+    state.m_Selected.erase((static_cast<std::uint64_t>(id.m_Generation) << 32) | id.m_Index);
     state.DetachLeaf(slot->m_Node);
     state.ReleaseNode(slot->m_Node);
     const auto dense = slot->m_Dense;
@@ -344,6 +349,7 @@ bool CanvasScene::Remove(CanvasItemId id)
     state.m_Items.pop_back();
     state.ReleaseSlot(id.m_Index);
     ++state.m_Revision;
+    ++state.m_StructureRevision;
     return true;
 }
 
@@ -391,6 +397,11 @@ bool CanvasScene::SetSelected(CanvasItemId id, bool selected)
     auto& item = m_Impl->m_Items[slot->m_Dense];
     if (item.m_Selected != selected)
     {
+        const auto key = (static_cast<std::uint64_t>(id.m_Generation) << 32) | id.m_Index;
+        if (selected)
+            m_Impl->m_Selected.insert(key);
+        else
+            m_Impl->m_Selected.erase(key);
         item.m_Selected = selected;
         ++m_Impl->m_Revision;
     }
@@ -420,6 +431,83 @@ const CanvasItem* CanvasScene::Get(CanvasItemId id) const
     return slot ? &m_Impl->m_Items[slot->m_Dense] : nullptr;
 }
 
+std::optional<std::size_t> CanvasScene::GetIndex(CanvasItemId id) const
+{
+    const auto* slot = m_Impl->Find(id);
+    return slot ? std::optional<std::size_t>(slot->m_Dense) : std::nullopt;
+}
+
+std::size_t CanvasScene::GetSelectedCount() const
+{
+    return m_Impl->m_Selected.size();
+}
+
+std::vector<CanvasItemId> CanvasScene::GetSelected(std::size_t offset, std::size_t limit) const
+{
+    if (limit > 256)
+        throw std::length_error("Canvas selection pages are limited to 256 items.");
+    std::vector<CanvasItemId> result;
+    auto item = m_Impl->m_Selected.begin();
+    std::advance(item, std::min(offset, m_Impl->m_Selected.size()));
+    for (; item != m_Impl->m_Selected.end() && result.size() < limit; ++item)
+        result.push_back({static_cast<std::uint32_t>(*item), static_cast<std::uint32_t>(*item >> 32)});
+    return result;
+}
+
+void CanvasScene::ClearSelection()
+{
+    if (m_Impl->m_Selected.empty())
+        return;
+    for (const auto key : m_Impl->m_Selected)
+        if (auto* slot = m_Impl->Find({static_cast<std::uint32_t>(key), static_cast<std::uint32_t>(key >> 32)}))
+            m_Impl->m_Items[slot->m_Dense].m_Selected = false;
+    m_Impl->m_Selected.clear();
+    ++m_Impl->m_Revision;
+}
+
+std::uint64_t CanvasScene::GetStructureRevision() const
+{
+    return m_Impl->m_StructureRevision;
+}
+
+CanvasItemId CanvasScene::HitTest(CanvasPoint point, double tolerance) const
+{
+    if (!std::isfinite(point.m_X) || !std::isfinite(point.m_Y) || !std::isfinite(tolerance) || tolerance < 0)
+        throw std::invalid_argument("Canvas hit testing requires finite coordinates and nonnegative tolerance.");
+    if (m_Impl->m_Root == s_None)
+        return {};
+    // A balanced binary tree over uint32 leaves cannot have 128 live ancestor siblings.
+    std::array<std::uint32_t, 128> pending{};
+    std::size_t count = 1;
+    pending[0] = m_Impl->m_Root;
+    CanvasItemId result;
+    std::uint64_t order = 0;
+    while (count)
+    {
+        const auto& node = m_Impl->m_Nodes[pending[--count]];
+        const auto& bounds = node.m_Bounds;
+        if (point.m_X < bounds.m_X - tolerance || point.m_X > bounds.m_X + bounds.m_Width + tolerance ||
+            point.m_Y < bounds.m_Y - tolerance || point.m_Y > bounds.m_Y + bounds.m_Height + tolerance)
+            continue;
+        if (!node.IsLeaf())
+        {
+            if (count + 2 > pending.size())
+                throw std::length_error("Canvas BVH depth exceeded the hit-test stack budget.");
+            pending[count++] = node.m_Left;
+            pending[count++] = node.m_Right;
+            continue;
+        }
+        const auto& item = m_Impl->m_Items[m_Impl->m_Slots[node.m_Slot].m_Dense];
+        if ((!result || item.m_Order >= order) &&
+            DistanceToItem(item.m_Geometry, point, std::max(1e-6, tolerance * 0.25)) <= tolerance)
+        {
+            result = item.m_Id;
+            order = item.m_Order;
+        }
+    }
+    return result;
+}
+
 std::size_t CanvasScene::Size() const
 {
     return m_Impl->m_Items.size();
@@ -432,6 +520,8 @@ void CanvasScene::Clear()
         return;
     for (const auto& item : state.m_Items)
         state.ReleaseSlot(item.m_Id.m_Index);
+    state.m_Selected.clear();
+    ++state.m_StructureRevision;
     state.m_Items.clear();
     state.m_Nodes.clear();
     state.m_FreeNode = s_None;
@@ -452,6 +542,11 @@ void CanvasScene::ReplaceWith(CanvasScene& source)
         throw std::overflow_error("Canvas scene replacement identity capacity exceeded");
     ++generation;
 
+    std::set<std::uint64_t> replacementSelection;
+    for (const auto& item : source.m_Impl->m_Items)
+        if (item.m_Selected)
+            replacementSelection.insert((static_cast<std::uint64_t>(generation) << 32) | item.m_Id.m_Index);
+
     // All throwing checks precede mutation. The floor also protects old handles whose slots
     // are beyond the replacement's size and may be allocated again after a later insertion.
     auto& replacement = *source.m_Impl;
@@ -460,6 +555,8 @@ void CanvasScene::ReplaceWith(CanvasScene& source)
         slot.m_Generation = generation;
     for (auto& item : replacement.m_Items)
         item.m_Id.m_Generation = generation;
+    replacement.m_Selected = std::move(replacementSelection);
+    replacement.m_StructureRevision = m_Impl->m_StructureRevision + 1;
     replacement.m_Revision = m_Impl->m_Revision + 1;
     replacement.m_QueryVisits = 0;
     m_Impl.swap(source.m_Impl);
@@ -508,8 +605,11 @@ std::size_t CanvasScene::GetLastQueryVisits() const
 
 std::size_t CanvasScene::GetStorageBytes() const
 {
+    // Include conservative ordered-set node overhead; geometry payloads remain separately accounted.
+    constexpr auto selectedNodeBytes = sizeof(std::uint64_t) + 5 * sizeof(void*);
     return sizeof(CanvasScene) + sizeof(Impl) + m_Impl->m_Items.capacity() * sizeof(CanvasItem) +
-           m_Impl->m_Slots.capacity() * sizeof(Impl::Slot) + m_Impl->m_Nodes.capacity() * sizeof(Impl::Node);
+           m_Impl->m_Slots.capacity() * sizeof(Impl::Slot) + m_Impl->m_Nodes.capacity() * sizeof(Impl::Node) +
+           m_Impl->m_Selected.size() * selectedNodeBytes;
 }
 
 CanvasBounds CanvasScene::GetBounds() const

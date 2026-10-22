@@ -17,6 +17,7 @@ ToolButton& ContextMenu::AddAction(std::string text, bool enabled)
     VerifyStructuralMutation();
     auto& action = Add<ToolButton>(std::move(text));
     action.AddClass("menu-action");
+    action.SetAccessibleRole(SemanticRole::MenuItem);
     action.SetEnabled(enabled);
     const WidgetRef menu(this);
     action.Clicked().Connect(
@@ -45,6 +46,7 @@ ContextMenu& ContextMenu::AddMenu(std::string text)
     auto& result = *menu;
     auto& button = Add<ToolButton>(std::move(text));
     button.AddClass("menu-action");
+    button.SetAccessibleRole(SemanticRole::MenuItem);
     button.AddClass("submenu-action");
     const auto index = m_Submenus.size();
     m_Submenus.push_back({WidgetRef(&button), std::move(menu), {}});

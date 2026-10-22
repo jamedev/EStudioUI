@@ -125,6 +125,36 @@ class CanvasWidget : public Widget
     bool IsFocusable() const override;
 
   protected:
+    //! Describes selection and logical structure without materializing row widgets.
+    SemanticInfo DescribeSemantics() const override;
+
+    //! Returns a direct logical child count.
+    std::size_t GetSemanticChildCount(SemanticKey parent) const override;
+
+    //! Resolves a logical child by position without scanning earlier records.
+    std::optional<SemanticKey> GetSemanticChildAt(SemanticKey parent, std::size_t index) const override;
+
+    //! Describes a stable live item using prepared geometry.
+    std::optional<SemanticVirtualNode> DescribeSemanticChild(SemanticKey key) const override;
+
+    //! Resolves a stable item's current sibling position.
+    std::optional<std::size_t> GetSemanticChildIndex(SemanticKey key) const override;
+
+    //! Applies selection, expansion, realization, or editing through canonical paths.
+    SemanticStatus OnSemanticChildAction(SemanticKey key, const SemanticCommand& command) override;
+
+    //! Resolves the logical item under one layout-coordinate point.
+    std::optional<SemanticKey> SemanticHitTest(Point layoutPoint) const override;
+
+    //! Returns the canonical selected set size without copying it.
+    std::size_t GetSemanticSelectionCount() const override;
+
+    //! Returns a bounded canonical selection page, including temporarily filtered items.
+    std::vector<SemanticKey> GetSemanticSelection(std::size_t offset, std::size_t limit) const override;
+
+    //! Returns the current stable item for logical keyboard focus.
+    std::optional<SemanticKey> GetSemanticFocus() const override;
+
     //! Draws the grid, visible model items, and temporary overlays.
     void Paint(Renderer& renderer, FontFace& font, double time, float opacity) const override;
 
@@ -153,6 +183,18 @@ class CanvasWidget : public Widget
     bool OnScroll(Point delta, Modifiers modifiers) override;
 
   private:
+    //! Namespace for the currently attached scene, independent of recycled scene-local slots.
+    std::uint64_t m_SemanticGeneration = 1;
+
+    //! Monotonic virtual structure revision across unrelated scene replacements.
+    std::uint64_t m_SemanticStructureRevision = 1;
+
+    //! Scene structural revision already reflected by explicit SceneChanged publication.
+    std::uint64_t m_SemanticSceneStructureRevision = 0;
+
+    //! Tracks the logical focused item independently of simultaneous selection.
+    CanvasItemId m_SemanticFocusedItem{};
+
     //! One CSS identity with precomputed normal and selected paint values.
     struct PaletteEntry
     {

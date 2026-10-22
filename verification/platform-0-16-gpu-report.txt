@@ -1,0 +1,6 @@
+F11 platform/semantic/composition GPU integration: PASS
+Injected clipboard/picker; owning production GLFW file drop; stable semantic queries; owned windows.
+50 semantic queries: zero style/layout recalculations. Real framebuffer capture: platform-services.ppm.
+Preedit changes actual GPU pixels without a canonical edit; cancellation restores pixels; commit undoes once.
+100,000 list rows and table cells reveal/select by virtual identity and agree with actual GPU geometry.
+This deterministic probe does not claim native clipboard, picker or assistive-technology readiness.

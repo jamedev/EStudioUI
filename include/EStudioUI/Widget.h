@@ -31,6 +31,7 @@ class FontFace;
 class Renderer;
 class Action;
 class SemanticTree;
+class WidgetRef;
 
 namespace Detail
 {
@@ -255,6 +256,39 @@ class Widget
 
     //! Performs one advertised canonical interaction; observers may safely delete this control.
     virtual SemanticStatus OnSemanticAction(const SemanticCommand& command);
+
+    //! Returns the virtual child count for one logical parent without expanding unrelated records.
+    virtual std::size_t GetSemanticChildCount(SemanticKey parent) const;
+
+    //! Resolves one virtual child by sibling position without scanning preceding rows.
+    virtual std::optional<SemanticKey> GetSemanticChildAt(SemanticKey parent, std::size_t index) const;
+
+    //! Describes one live virtual record; stale dataset or deleted identities return empty.
+    virtual std::optional<SemanticVirtualNode> DescribeSemanticChild(SemanticKey key) const;
+
+    //! Resolves a virtual child's current sibling index without scanning the collection.
+    virtual std::optional<std::size_t> GetSemanticChildIndex(SemanticKey key) const;
+
+    //! Applies an advertised item action through the control's canonical model or selection.
+    virtual SemanticStatus OnSemanticChildAction(SemanticKey key, const SemanticCommand& command);
+
+    //! Resolves an item under a point in this owner's layout coordinates.
+    virtual std::optional<SemanticKey> SemanticHitTest(Point layoutPoint) const;
+
+    //! Returns a cheap selected-item count without copying the selected set.
+    virtual std::size_t GetSemanticSelectionCount() const;
+
+    //! Returns an owned bounded selection page; implementations document any selected-set filtering cost.
+    virtual std::vector<SemanticKey> GetSemanticSelection(std::size_t offset, std::size_t limit) const;
+
+    //! Returns selected actual children for composed controls such as tab strips.
+    virtual std::vector<WidgetRef> GetSemanticSelectedWidgets(std::size_t offset, std::size_t limit) const;
+
+    //! Resolves one grid cell in constant or logarithmic model work.
+    virtual std::optional<SemanticKey> GetSemanticGridItem(std::size_t row, std::size_t column) const;
+
+    //! Returns the logical focused item while the containing actual widget owns keyboard focus.
+    virtual std::optional<SemanticKey> GetSemanticFocus() const;
 
     //! Returns intrinsic content size before padding, border, and explicit CSS.
     virtual Point Measure(FontFace& font) const;

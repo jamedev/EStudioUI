@@ -66,8 +66,8 @@ and its remaining platform limits.
 | F06 | Core implemented: typed external snapshot models, stable IDs, batched edits/structural changes, shared selection, prevalidated sort/filter chains, delegates, worker publication, bounded content sizing, and expanded-branch row maps; integration evidence recorded with 0.11 |
 | F08 | Implemented in 0.12: width-first constrained measurement, baselines and composition sources, shared box/grid/form/flow strategies, bounded caches, percentage-cycle fallback, owned child/track diagnostics; verification recorded below |
 | F09 | Implemented in 0.14: owning input payloads, rich native metadata, transactional shared actions and worker handles, scoped/ambiguity-safe shortcuts, local focus scopes, nested popup/modal sessions, menu nesting and phase/lifetime guards |
-| F11 | Initial 0.15 increment: injectable native services/capabilities, rich Windows clipboard, asynchronous native pickers, file drops, logical/DPI metrics, owned windows, lazy widget semantics and an initial UI Automation bridge; composition, virtualized providers and broader real accessibility/DPI evidence remain open |
-| F10a | Remaining Gate B work: essential control text/input, fallback and native composition integrated with F11 |
+| F11 | 0.16 implementation extends 0.15 native services with shared composition, Windows IMM, GPU preedit, stable virtual list/tree/table/canvas semantics and native collection/text/event patterns; final Windows verification and interactive IME/AT/mixed-DPI acceptance remain open |
+| F10a | Remaining Gate B work: font resolution/fallback, complete script/direction/caret behavior and text-resource budgets; reuse the 0.16 F11 composition protocol |
 | F10b, F12, F16 | Planned: later document editing, feature-driven resource hardening, and reusable history/workspace services |
 | F14 | Deferred until broad widget/workspace use informs reusable module extraction and SDK packaging; not a Gate B prerequisite |
 
@@ -116,9 +116,19 @@ lifetime/overload behavior, lazy semantic tree and initial Windows UI Automation
 patterns. [examples/PlatformServices.cpp](examples/PlatformServices.cpp) is compiled
 with the ordinary demo. No new third-party runtime dependency was added.
 [verification/PLATFORM_0_15.md](verification/PLATFORM_0_15.md) records the evidence.
-F11 remains **in progress**: native composition with F10a, virtualized semantic
-children, remaining UIA events/patterns and real assistive-technology/mixed-DPI
-checks must be completed before broader readiness claims. Gate B remains open.
+**The 0.16 implementation adds the remaining composition and virtual semantic
+pipeline.** TextBox and custom TextInputClient editors share owned preedit/commit/
+cancel events, surrounding text, selection and transformed caret geometry. Windows
+IMM consumes native composition, while TextBox paints cached preedit separately
+from canonical text and undo. Virtual list/tree/table/canvas nodes reuse stable
+model/scene identities, direct paging and canonical selection/reveal/edit actions.
+Windows UI Automation adds collection and single-line Text/Text2 patterns with
+bounded change observation. No new third-party runtime dependency was added.
+[0.16 verification](verification/PLATFORM_0_16.md) records tested results and
+[interactive acceptance](verification/PLATFORM_ACCEPTANCE.md) records the remaining
+input-method/assistive-technology/mixed-monitor checks. Final native acceptance is
+still open; do not infer application readiness from protocol tests. Gate B remains
+open for F10a and the relevant integration evidence.
 
 ## Original assessment of the 0.8 implementation
 
@@ -364,8 +374,9 @@ platforms and broader hardware coverage remain explicit F15 work.
 ## F10a: essential text and input before common controls
 
 The current TextBuffer intentionally sanitizes line breaks/tabs to spaces and
-keeps full-string history snapshots. FontFace shapes one LTR run from one face.
-The following work is planned, not a description of shipped text capabilities.
+keeps full-string history snapshots. FontFace shapes one LTR run from one face. The 0.16 composition protocol is
+implemented; font resolution and complete script/direction work below remain
+planned, not descriptions of shipped shaping capabilities.
 
 F10a supplies the common services required by labels, buttons, menus, text and
 numeric fields, editable combos, and collection editors:
@@ -495,8 +506,8 @@ and keep a second window interactive. This validates developer ergonomics and
 the actual failure paths before they spread into new widgets.
 
 Gate A, the F05/F07 first slice, F06 core, F08, the optional constraint-layout
-increment, and F09 are now delivered as recorded above. Next finish F11's initial
-platform services and semantic pipeline and F10a, with relevant F12/F13/F15 work.
+increment, and F09 are now delivered as recorded above. Next verify the completed F11
+composition/virtual semantic implementation and finish F10a, with relevant F12/F13/F15 work.
 Review Gate B integration, then expand the widget catalog and application
 workspaces. Keep the document-editor track F10b later and develop F16 with the
 workspaces that need it. Schedule F14 module extraction/package integration once

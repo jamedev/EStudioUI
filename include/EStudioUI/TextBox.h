@@ -3,12 +3,13 @@
 #include "FontFace.h"
 #include "TextBuffer.h"
 #include "InputValidator.h"
+#include "TextInputClient.h"
 #include "Widget.h"
 
 namespace EStudioUI
 {
 //! A single-line UTF-8 editor with grapheme selection and cached GPU text.
-class TextBox : public Widget
+class TextBox : public Widget, public TextInputClient
 {
   public:
     //! Creates an editable text box.
@@ -49,6 +50,30 @@ class TextBox : public Widget
 
     //! Returns selected UTF-8 text.
     std::string GetSelectedText() const;
+
+    //! Returns the committed selection anchor as a UTF-8 byte offset.
+    std::size_t GetSelectionAnchor() const;
+
+    //! Returns the committed selection caret as a UTF-8 byte offset.
+    std::size_t GetSelectionCaret() const;
+
+    //! Sets selection at grapheme boundaries and cancels any temporary composition.
+    void SetSelection(std::size_t anchor, std::size_t caret);
+
+    //! Returns last-prepared canonical text-range geometry in untransformed layout coordinates.
+    Rect GetTextRangeBounds(std::size_t start, std::size_t end) const;
+
+    //! Scrolls a canonical range into view while preserving the current selection.
+    void RevealTextRange(std::size_t start, std::size_t end);
+
+    //! Finds the nearest committed grapheme at an untransformed layout position.
+    std::size_t TextOffsetAt(Point position) const;
+
+    //! Supplies canonical surrounding text and the displayed caret without committing preedit.
+    TextInputState GetTextInputState() const override;
+
+    //! Presents preedit, commits one validated edit, or cancels without changing history.
+    bool OnTextComposition(const TextCompositionEvent& event) override;
 
     //! Returns the signal for programmatic or user text changes.
     Signal<const std::string&>& TextChanged();
@@ -121,8 +146,38 @@ class TextBox : public Widget
     //! Converts a pointer position into a grapheme boundary.
     std::size_t PointerOffset(Point position) const;
 
+    //! Clears local temporary text without sending canonical change notifications.
+    void ClearComposition();
+
+    //! Cancels temporary text and expires queued native updates when attached and focused.
+    void EndComposition();
+
+    //! Returns the canonical or composed visual run used for scrolling and painting.
+    const TextLayout& DisplayLayout() const;
+
+    //! Returns the displayed caret offset including temporary preedit.
+    std::size_t DisplayCaret() const;
+
     //! Stores editing state independently of rendering.
     TextBuffer m_Buffer;
+
+    //! Owns temporary preedit while canonical text and undo history remain unchanged.
+    std::string m_CompositionText;
+
+    //! Keeps the native preedit caret on a displayed UTF-8 grapheme boundary.
+    std::size_t m_CompositionCaret = 0;
+
+    //! Reuses grapheme boundaries when native updates move only the temporary caret.
+    std::vector<std::size_t> m_CompositionBoundaries{0};
+
+    //! Preserves the original selection that one committed composition will replace.
+    std::size_t m_CompositionAnchor = 0;
+
+    //! Preserves the original caret without moving the canonical selection during preedit.
+    std::size_t m_CompositionOriginalCaret = 0;
+
+    //! Distinguishes an active empty preedit from ordinary editing.
+    bool m_Composing = false;
 
     //! Validates complete candidate edits before their text or undo history becomes observable.
     std::shared_ptr<const InputValidator> m_Validator;
@@ -148,6 +203,12 @@ class TextBox : public Widget
     //! Caches the shaped text run.
     mutable TextLayout m_Layout;
 
+    //! Caches the visual replacement run while an IME composition is active.
+    mutable TextLayout m_CompositionLayout;
+
+    //! Records the font size used by the temporary shaping cache.
+    mutable float m_CompositionLayoutSize = -1;
+
     //! Caches the shaped placeholder.
     mutable TextLayout m_PlaceholderLayout;
 
@@ -162,6 +223,9 @@ class TextBox : public Widget
 
     //! Stores horizontal content scrolling in logical pixels.
     mutable float m_ScrollX = 0;
+
+    //! Keeps explicit accessibility range reveal until the next edit or caret movement.
+    bool m_RevealOverride = false;
 
     //! Delivers committed text changes.
     Signal<const std::string&> m_TextChanged;

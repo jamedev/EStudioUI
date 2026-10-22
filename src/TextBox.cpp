@@ -37,6 +37,14 @@ TextBox::TextBox(std::string text) : Widget("textbox")
                           style.m_TextAlign = owner.m_TextAlign;
                           return style;
                       });
+    RegisterStylePart("preedit", 0,
+                      [](const Style& owner, unsigned)
+                      {
+                          Style style;
+                          style.m_Background = owner.m_Color;
+                          style.m_Height = {Length::Unit::Pixels, 1};
+                          return style;
+                      });
     m_Buffer.SetText(text);
     UpdatePresentationState(ValidationState::Acceptable);
 }
@@ -60,6 +68,7 @@ void TextBox::SetValidator(std::shared_ptr<const InputValidator> validator)
         return;
     const auto ownerLease = RetainOwner();
     const auto state = validator ? validator->Validate(m_Buffer.GetText()) : ValidationState::Acceptable;
+    EndComposition();
     m_Validator = std::move(validator);
     ++m_EditRevision;
     const bool changed = UpdatePresentationState(state);
@@ -84,6 +93,170 @@ std::string TextBox::GetSelectedText() const
 {
     VerifyAccess();
     return m_Buffer.GetSelectedText();
+}
+
+std::size_t TextBox::GetSelectionAnchor() const
+{
+    VerifyAccess();
+    return m_Buffer.GetAnchor();
+}
+
+std::size_t TextBox::GetSelectionCaret() const
+{
+    VerifyAccess();
+    return m_Buffer.GetCaret();
+}
+
+void TextBox::SetSelection(std::size_t anchor, std::size_t caret)
+{
+    VerifyAccess();
+    if (anchor > m_Buffer.GetText().size() || caret > m_Buffer.GetText().size())
+        throw std::out_of_range("Text selection exceeds the committed text.");
+    EndComposition();
+    m_Buffer.SetSelection(anchor, caret);
+    ResetCaret();
+}
+
+Rect TextBox::GetTextRangeBounds(std::size_t start, std::size_t end) const
+{
+    VerifyAccess();
+    if (start > end || end > m_Buffer.GetText().size())
+        throw std::out_of_range("Text range exceeds the committed text.");
+    if (auto* context = GetContext())
+        EnsureLayout(context->GetFont());
+    EnsureCaretVisible();
+    const auto content = GetContentBounds();
+    const float height = m_Layout.m_Ascender + m_Layout.m_Descender;
+    const float left = m_Layout.CaretPosition(start);
+    const float right = m_Layout.CaretPosition(end);
+    return {TextOriginX() + std::min(left, right), content.m_Y + (content.m_Height - height) * 0.5f,
+            std::max(start == end ? CaretWidth() : 0.0f, std::abs(right - left)), height};
+}
+
+void TextBox::RevealTextRange(std::size_t start, std::size_t end)
+{
+    VerifyAccess();
+    if (start > end || end > m_Buffer.GetText().size())
+        throw std::out_of_range("Text range exceeds the committed text.");
+    if (auto* context = GetContext())
+        EnsureLayout(context->GetFont());
+    const float width = std::max(1.0f, GetContentBounds().m_Width - std::max(2.0f, CaretWidth()));
+    const float left = m_Layout.CaretPosition(start);
+    const float right = m_Layout.CaretPosition(end);
+    if (right - m_ScrollX > width)
+        m_ScrollX = right - width;
+    if (left < m_ScrollX)
+        m_ScrollX = left;
+    m_ScrollX = std::clamp(m_ScrollX, 0.0f, std::max(0.0f, m_Layout.m_Width - width));
+    m_RevealOverride = true;
+    RequestRepaint();
+}
+
+std::size_t TextBox::TextOffsetAt(Point position) const
+{
+    VerifyAccess();
+    return PointerOffset(position);
+}
+
+TextInputState TextBox::GetTextInputState() const
+{
+    VerifyAccess();
+    if (auto* context = GetContext())
+        EnsureLayout(context->GetFont());
+    EnsureCaretVisible();
+    TextInputState state;
+    state.m_Text = m_Buffer.GetText();
+    state.m_Anchor = m_Buffer.GetAnchor();
+    state.m_Caret = m_Buffer.GetCaret();
+    const auto content = GetContentBounds();
+    const auto& line = DisplayLayout();
+    const float height = line.m_Ascender + line.m_Descender;
+    state.m_CaretBounds = {TextOriginX() + line.CaretPosition(DisplayCaret()),
+                           content.m_Y + (content.m_Height - height) * 0.5f, CaretWidth(), height};
+    state.m_Composing = m_Composing;
+    state.m_ReadOnly = m_ReadOnly;
+    state.m_Active = !m_ReadOnly;
+    return state;
+}
+
+void TextBox::ClearComposition()
+{
+    if (!m_Composing)
+        return;
+    m_Composing = false;
+    m_CompositionText.clear();
+    m_CompositionBoundaries = {0};
+    m_CompositionLayoutSize = -1;
+    ResetCaret();
+}
+
+void TextBox::EndComposition()
+{
+    if (auto* context = GetContext(); context && context->GetFocus() == this)
+        context->CancelTextComposition();
+    else
+        ClearComposition();
+}
+
+bool TextBox::OnTextComposition(const TextCompositionEvent& event)
+{
+    VerifyAccess();
+    ValidateTextComposition(event);
+    if (event.m_Kind == TextCompositionKind::Cancel)
+    {
+        ClearComposition();
+        return true;
+    }
+    if (m_ReadOnly)
+        return false;
+    if (event.m_Kind == TextCompositionKind::Preedit)
+    {
+        if (TextBuffer::Sanitize(event.m_Text) != event.m_Text)
+            return false;
+        const bool changed = !m_Composing || m_CompositionText != event.m_Text;
+        if (changed)
+        {
+            auto boundaries = TextBuffer::Graphemes(event.m_Text);
+            m_CompositionText = event.m_Text;
+            m_CompositionBoundaries = std::move(boundaries);
+            m_CompositionLayoutSize = -1;
+        }
+        if (!m_Composing)
+        {
+            m_CompositionAnchor = m_Buffer.GetAnchor();
+            m_CompositionOriginalCaret = m_Buffer.GetCaret();
+        }
+        m_Composing = true;
+        const auto next =
+            std::upper_bound(m_CompositionBoundaries.begin(), m_CompositionBoundaries.end(), event.m_Caret);
+        m_CompositionCaret = next == m_CompositionBoundaries.begin() ? 0 : *std::prev(next);
+        ResetCaret();
+        return true;
+    }
+    auto candidate = m_Buffer;
+    if (m_Composing)
+        candidate.SetSelection(m_CompositionAnchor, m_CompositionOriginalCaret);
+    const bool changed = candidate.ReplaceSelection(event.m_Text);
+    if (m_Validator && m_Validator->Validate(candidate.GetText()) == ValidationState::Invalid)
+    {
+        ClearComposition();
+        return false;
+    }
+    ClearComposition();
+    m_Buffer = std::move(candidate);
+    AfterEdit(changed);
+    return true;
+}
+
+const TextLayout& TextBox::DisplayLayout() const
+{
+    return m_Composing ? m_CompositionLayout : m_Layout;
+}
+
+std::size_t TextBox::DisplayCaret() const
+{
+    return m_Composing ? std::min(m_CompositionAnchor, m_CompositionOriginalCaret) + m_CompositionCaret
+                       : m_Buffer.GetCaret();
 }
 
 Signal<const std::string&>& TextBox::TextChanged()
@@ -115,6 +288,7 @@ void TextBox::SetText(std::string_view text)
     VerifyAccess();
     const auto ownerLease = RetainOwner();
     const auto previous = m_Buffer.GetText();
+    EndComposition();
     if (m_Validator)
     {
         auto candidate = m_Buffer;
@@ -157,6 +331,7 @@ void TextBox::SetReadOnly(bool readOnly)
     VerifyAccess();
     if (m_ReadOnly == readOnly)
         return;
+    EndComposition();
     m_ReadOnly = readOnly;
     SetState(ReadOnly, readOnly);
 }
@@ -166,6 +341,7 @@ void TextBox::SetMaxBytes(std::size_t count)
     VerifyAccess();
     const auto ownerLease = RetainOwner();
     const auto previous = m_Buffer.GetText();
+    EndComposition();
     if (m_Validator)
     {
         auto candidate = m_Buffer;
@@ -182,6 +358,7 @@ void TextBox::SetMaxBytes(std::size_t count)
 void TextBox::SelectAll()
 {
     VerifyAccess();
+    EndComposition();
     m_Buffer.SelectAll();
     ResetCaret();
 }
@@ -193,6 +370,18 @@ void TextBox::EnsureLayout(FontFace& font) const
         m_Layout = font.Shape(m_Buffer.GetText(), GetStyle().m_FontSize, true);
         m_LayoutText = m_Buffer.GetText();
         m_LayoutSize = GetStyle().m_FontSize;
+    }
+    if (m_Composing && m_CompositionLayoutSize != GetStyle().m_FontSize)
+    {
+        const auto start = std::min(m_CompositionAnchor, m_CompositionOriginalCaret);
+        const auto end = std::max(m_CompositionAnchor, m_CompositionOriginalCaret);
+        std::string visual;
+        visual.reserve(m_Buffer.GetText().size() - (end - start) + m_CompositionText.size());
+        visual.append(m_Buffer.GetText(), 0, start);
+        visual += m_CompositionText;
+        visual.append(m_Buffer.GetText(), end);
+        m_CompositionLayout = font.Shape(visual, GetStyle().m_FontSize, true);
+        m_CompositionLayoutSize = GetStyle().m_FontSize;
     }
     const float placeholderSize = GetPartStyle("placeholder").m_FontSize;
     if (m_PlaceholderLayoutSize != placeholderSize)
@@ -233,26 +422,30 @@ float TextBox::CaretWidth() const
 float TextBox::TextOriginX() const
 {
     const auto content = GetContentBounds();
-    const float extra = std::max(0.0f, content.m_Width - CaretWidth() - m_Layout.m_Width);
+    const float extra = std::max(0.0f, content.m_Width - CaretWidth() - DisplayLayout().m_Width);
     const auto& align = GetStyle().m_TextAlign;
     return content.m_X - m_ScrollX + (align == "right" ? extra : align == "center" ? extra * 0.5f : 0);
 }
 
 void TextBox::EnsureCaretVisible() const
 {
+    if (m_RevealOverride)
+        return;
     const float width = std::max(1.0f, GetContentBounds().m_Width - std::max(2.0f, CaretWidth()));
-    const float caret = m_Layout.CaretPosition(m_Buffer.GetCaret());
+    const float caret = DisplayLayout().CaretPosition(DisplayCaret());
     if (caret - m_ScrollX > width)
         m_ScrollX = caret - width;
     else if (caret < m_ScrollX)
         m_ScrollX = caret;
-    m_ScrollX = std::clamp(m_ScrollX, 0.0f, std::max(0.0f, m_Layout.m_Width - width));
+    m_ScrollX = std::clamp(m_ScrollX, 0.0f, std::max(0.0f, DisplayLayout().m_Width - width));
 }
 
 void TextBox::ResetCaret()
 {
+    m_RevealOverride = false;
     if (auto* context = GetContext())
     {
+        context->NotifyTextInputChanged();
         m_CaretEpoch = context->GetTime();
         EnsureLayout(context->GetFont());
         EnsureCaretVisible();
@@ -304,6 +497,7 @@ std::size_t TextBox::PointerOffset(Point position) const
 
 void TextBox::OnPointerDown(const PointerEvent& event)
 {
+    EndComposition();
     const auto offset = PointerOffset(event.m_Position);
     if (event.m_Clicks >= 3)
         m_Buffer.SelectAll();
@@ -340,6 +534,7 @@ void TextBox::OnFocus(bool focused)
         ResetCaret();
     else
     {
+        ClearComposition();
         m_Dragging = false;
         m_FocusLost.Emit();
     }
@@ -347,7 +542,7 @@ void TextBox::OnFocus(bool focused)
 
 void TextBox::OnText(std::string_view text)
 {
-    if (m_ReadOnly)
+    if (m_ReadOnly || m_Composing)
         return;
     if (m_Validator)
     {
@@ -366,6 +561,12 @@ void TextBox::OnKey(Key key, bool down, bool, Modifiers modifiers)
 {
     if (!down)
         return;
+    if (m_Composing)
+    {
+        if (key == Key::Escape)
+            EndComposition();
+        return;
+    }
     const auto previous = m_Validator ? std::optional<TextBuffer>(m_Buffer) : std::nullopt;
     bool changed = false;
     if (modifiers.m_Control)
@@ -438,8 +639,9 @@ void TextBox::Paint(Renderer& renderer, FontFace& font, double time, float opaci
     EnsureCaretVisible();
     const auto content = GetContentBounds();
     const auto clip = GetClip().Intersect(content);
-    const float height = m_Layout.m_Ascender + m_Layout.m_Descender;
-    const Point baseline{TextOriginX(), content.m_Y + (content.m_Height - height) * 0.5f + m_Layout.m_Ascender};
+    const auto& line = DisplayLayout();
+    const float height = line.m_Ascender + line.m_Descender;
+    const Point baseline{TextOriginX(), content.m_Y + (content.m_Height - height) * 0.5f + line.m_Ascender};
     auto color = GetStyle().m_Color;
     color.m_A *= opacity;
     const auto start = std::min(m_Buffer.GetCaret(), m_Buffer.GetAnchor());
@@ -447,7 +649,7 @@ void TextBox::Paint(Renderer& renderer, FontFace& font, double time, float opaci
     const float selectionStart = m_Layout.CaretPosition(start);
     const float selectionEnd = m_Layout.CaretPosition(end);
     const Rect selection{baseline.m_X + selectionStart, content.m_Y, selectionEnd - selectionStart, content.m_Height};
-    if (m_Buffer.HasSelection())
+    if (!m_Composing && m_Buffer.HasSelection())
     {
         const auto& style = GetPartStyle("selection");
         if (style.m_Displayed && style.m_Opacity > 0)
@@ -457,7 +659,7 @@ void TextBox::Paint(Renderer& renderer, FontFace& font, double time, float opaci
             renderer.PopState();
         }
     }
-    if (m_Buffer.GetText().empty())
+    if (m_Buffer.GetText().empty() && !m_Composing)
     {
         const auto& style = GetPartStyle("placeholder");
         if (style.m_Displayed && style.m_Opacity > 0 && !m_Placeholder.empty())
@@ -478,8 +680,8 @@ void TextBox::Paint(Renderer& renderer, FontFace& font, double time, float opaci
         }
     }
     else
-        renderer.DrawText(m_Layout, baseline, color, clip);
-    if (m_Buffer.HasSelection())
+        renderer.DrawText(line, baseline, color, clip);
+    if (!m_Composing && m_Buffer.HasSelection())
     {
         const auto& style = GetPartStyle("selection");
         if (style.m_Displayed && style.m_Opacity > 0)
@@ -488,6 +690,22 @@ void TextBox::Paint(Renderer& renderer, FontFace& font, double time, float opaci
             selected.m_A *= opacity * style.m_Opacity;
             renderer.PushState(style.m_Transform.Resolve(selection));
             renderer.DrawText(m_Layout, baseline, selected, clip.Intersect(selection));
+            renderer.PopState();
+        }
+    }
+    if (m_Composing && !m_CompositionText.empty())
+    {
+        const auto& style = GetPartStyle("preedit");
+        const auto compositionStart = std::min(m_CompositionAnchor, m_CompositionOriginalCaret);
+        const float left = line.CaretPosition(compositionStart);
+        const float right = line.CaretPosition(compositionStart + m_CompositionText.size());
+        const float thickness = std::max(0.0f, style.m_Height.Resolve(content.m_Height, 1));
+        const Rect underline{baseline.m_X + std::min(left, right), baseline.m_Y + line.m_Descender - thickness,
+                             std::abs(right - left), thickness};
+        if (style.m_Displayed && style.m_Opacity > 0)
+        {
+            renderer.PushState(style.m_Transform.Resolve(underline));
+            renderer.DrawBox(underline, style, clip, opacity * style.m_Opacity);
             renderer.PopState();
         }
     }
@@ -500,7 +718,7 @@ void TextBox::Paint(Renderer& renderer, FontFace& font, double time, float opaci
                 std::clamp(style.m_Height.Resolve(content.m_Height, content.m_Height),
                            std::min(style.m_MinHeight, content.m_Height),
                            std::min(std::max(style.m_MinHeight, style.m_MaxHeight), content.m_Height));
-            const Rect caret{baseline.m_X + m_Layout.CaretPosition(m_Buffer.GetCaret()),
+            const Rect caret{baseline.m_X + line.CaretPosition(DisplayCaret()),
                              content.m_Y + (content.m_Height - caretHeight) * 0.5f, CaretWidth(), caretHeight};
             renderer.PushState(style.m_Transform.Resolve(caret));
             renderer.DrawBox(caret, style, clip, opacity * style.m_Opacity);

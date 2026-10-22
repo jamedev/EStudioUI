@@ -133,4 +133,60 @@ SemanticStatus Widget::OnSemanticAction(const SemanticCommand& command)
     }
     return SemanticStatus::Unsupported;
 }
+
+std::size_t Widget::GetSemanticChildCount(SemanticKey) const
+{
+    return 0;
+}
+
+std::optional<SemanticKey> Widget::GetSemanticChildAt(SemanticKey, std::size_t) const
+{
+    return {};
+}
+
+std::optional<SemanticVirtualNode> Widget::DescribeSemanticChild(SemanticKey) const
+{
+    return {};
+}
+
+std::optional<std::size_t> Widget::GetSemanticChildIndex(SemanticKey) const
+{
+    return {};
+}
+
+SemanticStatus Widget::OnSemanticChildAction(SemanticKey, const SemanticCommand&)
+{
+    return SemanticStatus::Unsupported;
+}
+
+std::optional<SemanticKey> Widget::SemanticHitTest(Point) const
+{
+    return {};
+}
+
+std::size_t Widget::GetSemanticSelectionCount() const
+{
+    return 0;
+}
+
+std::vector<SemanticKey> Widget::GetSemanticSelection(std::size_t, std::size_t) const
+{
+    return {};
+}
+
+std::vector<WidgetRef> Widget::GetSemanticSelectedWidgets(std::size_t, std::size_t) const
+{
+    return {};
+}
+
+std::optional<SemanticKey> Widget::GetSemanticGridItem(std::size_t, std::size_t) const
+{
+    return {};
+}
+
+std::optional<SemanticKey> Widget::GetSemanticFocus() const
+{
+    return {};
+}
+
 } // namespace EStudioUI

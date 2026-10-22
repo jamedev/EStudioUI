@@ -3,6 +3,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <memory>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -236,10 +237,28 @@ class CanvasScene
     //! Looks up an item; its pointer is invalidated by structural scene mutations.
     const CanvasItem* Get(CanvasItemId id) const;
 
+    //! Resolves a live identity's dense sibling position without scanning items.
+    std::optional<std::size_t> GetIndex(CanvasItemId id) const;
+
+    //! Returns the selected-item count without scanning the scene.
+    std::size_t GetSelectedCount() const;
+
+    //! Returns a bounded selection page; advancing to offset visits only selected identities.
+    std::vector<CanvasItemId> GetSelected(std::size_t offset = 0, std::size_t limit = 256) const;
+
+    //! Clears current selection in work proportional to the selected set.
+    void ClearSelection();
+
+    //! Finds the topmost geometry at a point through the BVH without materializing candidates.
+    CanvasItemId HitTest(CanvasPoint point, double tolerance) const;
+
+    //! Returns a revision changing only on item insertion, removal or replacement.
+    std::uint64_t GetStructureRevision() const;
+
     //! Returns the number of live items.
     std::size_t Size() const;
 
-    //! Reports retained scene storage bytes, excluding geometry payloads shared with clients.
+    //! Estimates retained scene and selection-index bytes, excluding geometry payloads shared with clients.
     std::size_t GetStorageBytes() const;
 
     //! Removes all items and invalidates every previously issued identity.
