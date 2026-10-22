@@ -15,6 +15,7 @@
 #include <atomic>
 #include <algorithm>
 #include <chrono>
+#include <cstdio>
 #include <deque>
 #include <limits>
 #include <mutex>
@@ -167,10 +168,14 @@ struct ProviderState : std::enable_shared_from_this<ProviderState>
     RECT m_LastWindowBounds{};
     bool m_LastHostEnabled = true;
     bool m_LastHostOffscreen = true;
+    bool m_TraceSelections = false;
 
     ProviderState(UiContext& ui, HWND window, std::weak_ptr<void> owner)
         : m_Window(window), m_Ui(&ui), m_Target(ui.GetHandle(ui.Root())), m_Owner(std::move(owner))
     {
+        wchar_t enabled[2]{};
+        m_TraceSelections =
+            GetEnvironmentVariableW(L"ESTUDIOUI_NATIVE_PLATFORM_TESTS", enabled, 2) == 1 && enabled[0] == L'1';
     }
 
     template <typename Result, typename Function> HRESULT Call(Result& result, Function function)
@@ -312,6 +317,30 @@ struct ProviderState : std::enable_shared_from_this<ProviderState>
                                                                 : ui.Semantics().Perform(id, command);
                     });
         return FAILED(code) ? code : StatusCode(result);
+    }
+
+    HRESULT TraceSelection(const char* operation, SemanticId id, HRESULT result)
+    {
+        if (!m_TraceSelections)
+            return result;
+        std::pair<bool, std::size_t> snapshot{};
+        const auto queried =
+            Call(snapshot,
+                 [id](UiContext& ui)
+                 {
+                     auto& tree = ui.Semantics();
+                     const auto node = tree.GetNode(id);
+                     return std::pair{node && node->m_Info.m_Selected,
+                                      node ? tree.GetSelectionCount(node->m_SelectionContainer) : std::size_t{0}};
+                 });
+        std::fprintf(stderr,
+                     "Native selection: %s id=%llu/%llu/%llu/%llu selected=%d count=%zu query=%08lx result=%08lx\n",
+                     operation, static_cast<unsigned long long>(id.m_Widget),
+                     static_cast<unsigned long long>(id.m_Key.m_Item), static_cast<unsigned long long>(id.m_Key.m_Part),
+                     static_cast<unsigned long long>(id.m_Key.m_Generation), snapshot.first ? 1 : 0, snapshot.second,
+                     static_cast<unsigned long>(queried), static_cast<unsigned long>(result));
+        std::fflush(stderr);
+        return result;
     }
 };
 
@@ -833,55 +862,58 @@ class Provider final : public IRawElementProviderSimple,
 
     HRESULT STDMETHODCALLTYPE Select() override
     {
-        return m_State->Action(m_Id, {SemanticAction::Select});
+        return m_State->TraceSelection("Select", m_Id, m_State->Action(m_Id, {SemanticAction::Select}));
     }
 
     HRESULT STDMETHODCALLTYPE AddToSelection() override
     {
+        const auto finish = [this](HRESULT result) -> HRESULT { return m_State->TraceSelection("Add", m_Id, result); };
         SemanticNode item;
         auto code = m_State->Node(m_Id, item);
         if (FAILED(code))
-            return code;
+            return finish(code);
         if (item.m_Info.m_Selected)
-            return S_OK;
+            return finish(S_OK);
         SemanticNode container;
         code = m_State->Node(item.m_SelectionContainer, container);
         if (FAILED(code))
-            return code;
+            return finish(code);
         if (!container.m_Info.m_MultiSelectable)
         {
             std::size_t selected = 0;
             code = m_State->Call(selected, [id = item.m_SelectionContainer](UiContext& ui)
                                  { return ui.Semantics().GetSelectionCount(id); });
             if (FAILED(code))
-                return code;
+                return finish(code);
             if (selected)
-                return UIA_E_INVALIDOPERATION;
+                return finish(UIA_E_INVALIDOPERATION);
         }
-        return m_State->Action(m_Id, {SemanticAction::AddToSelection});
+        return finish(m_State->Action(m_Id, {SemanticAction::AddToSelection}));
     }
 
     HRESULT STDMETHODCALLTYPE RemoveFromSelection() override
     {
+        const auto finish = [this](HRESULT result) -> HRESULT
+        { return m_State->TraceSelection("Remove", m_Id, result); };
         SemanticNode item;
         auto code = m_State->Node(m_Id, item);
         if (FAILED(code))
-            return code;
+            return finish(code);
         SemanticNode container;
         code = m_State->Node(item.m_SelectionContainer, container);
         if (FAILED(code))
-            return code;
+            return finish(code);
         if (item.m_Info.m_Selected && container.m_Info.m_SelectionRequired)
         {
             std::size_t selected = 0;
             code = m_State->Call(selected, [id = item.m_SelectionContainer](UiContext& ui)
                                  { return ui.Semantics().GetSelectionCount(id); });
             if (FAILED(code))
-                return code;
+                return finish(code);
             if (selected <= 1)
-                return UIA_E_INVALIDOPERATION;
+                return finish(UIA_E_INVALIDOPERATION);
         }
-        return m_State->Action(m_Id, {SemanticAction::RemoveFromSelection});
+        return finish(m_State->Action(m_Id, {SemanticAction::RemoveFromSelection}));
     }
 
     HRESULT STDMETHODCALLTYPE get_IsSelected(BOOL* result) override

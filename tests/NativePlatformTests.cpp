@@ -301,7 +301,61 @@ void AwaitEvent(const std::atomic<int>& counter, int before, const char* message
     Check(counter.load() > before, message);
 }
 
-void NativeCollections(IUIAutomation& automation, IUIAutomationElement& root, EventSubscriptions& subscriptions)
+void TraceElement(IUIAutomationElement& element, const char* label)
+{
+    BSTR name = nullptr;
+    Require(element.get_CurrentName(&name), "Read native diagnostic element name");
+    std::cout << "Native element " << label << " name=";
+    if (name)
+        std::cout << Detail::FromWindowsText({name, SysStringLen(name)});
+    SysFreeString(name);
+    SAFEARRAY* runtime = nullptr;
+    Require(element.GetRuntimeId(&runtime), "Read native diagnostic runtime identity");
+    LONG first = 0, last = -1;
+    if (runtime)
+    {
+        Require(SafeArrayGetLBound(runtime, 1, &first), "Read native runtime identity lower bound");
+        Require(SafeArrayGetUBound(runtime, 1, &last), "Read native runtime identity upper bound");
+        std::cout << " runtime=";
+        for (LONG index = first; index <= last && index - first < 32; ++index)
+        {
+            LONG value = 0;
+            const auto code = SafeArrayGetElement(runtime, &index, &value);
+            if (SUCCEEDED(code))
+                std::cout << value << ',';
+        }
+        SafeArrayDestroy(runtime);
+    }
+    std::cout << std::endl;
+}
+
+void TraceSelection(IUIAutomation& automation, IUIAutomationSelectionPattern& selection, IUIAutomationElement& first,
+                    IUIAutomationElement& second, IUIAutomationSelectionItemPattern& firstPattern,
+                    IUIAutomationSelectionItemPattern& secondPattern, const std::atomic<int>& canonicalCurrent,
+                    const char* label)
+{
+    BOOL firstSelected = FALSE, secondSelected = FALSE;
+    Require(firstPattern.get_CurrentIsSelected(&firstSelected), "Read first diagnostic selected state");
+    Require(secondPattern.get_CurrentIsSelected(&secondSelected), "Read second diagnostic selected state");
+    ComPtr<IUIAutomationElementArray> selected;
+    Require(selection.GetCurrentSelection(&selected), "Read diagnostic selected identities");
+    int count = 0;
+    Require(selected->get_Length(&count), "Count diagnostic selected identities");
+    BOOL matchesFirst = FALSE, matchesSecond = FALSE;
+    if (count == 1)
+    {
+        ComPtr<IUIAutomationElement> current;
+        Require(selected->GetElement(0, &current), "Read diagnostic current selection identity");
+        Require(automation.CompareElements(current.Get(), &first, &matchesFirst), "Compare first selected identity");
+        Require(automation.CompareElements(current.Get(), &second, &matchesSecond), "Compare second selected identity");
+    }
+    std::cout << "Native selection " << label << ": first=" << firstSelected << " second=" << secondSelected
+              << " count=" << count << " matchesFirst=" << matchesFirst << " matchesSecond=" << matchesSecond
+              << " canonicalCurrent=" << canonicalCurrent.load() << std::endl;
+}
+
+void NativeCollections(IUIAutomation& automation, IUIAutomationElement& root, EventSubscriptions& subscriptions,
+                       const std::atomic<int>& canonicalCurrent)
 {
     Trace("UI Automation virtual list");
     ComPtr<IUIAutomationTreeWalker> walker;
@@ -318,6 +372,11 @@ void NativeCollections(IUIAutomation& automation, IUIAutomationElement& root, Ev
     Require(walker->GetNextSiblingElement(first.Get(), &second), "Read next virtual list row");
     Require(walker->GetLastChildElement(list.Get(), &last), "Read last virtual list row without enumerating all rows");
     Check(first && second && last, "Virtual list rows are native semantic children");
+    TraceElement(*first.Get(), "first list row");
+    TraceElement(*second.Get(), "second list row");
+    BOOL sameRows = TRUE;
+    Require(automation.CompareElements(first.Get(), second.Get(), &sameRows), "Compare adjacent native row identities");
+    Check(!sameRows, "Adjacent native rows have distinct identities");
     ComPtr<IUIAutomationSelectionItemPattern> firstSelection, secondSelection;
     Require(first->GetCurrentPatternAs(UIA_SelectionItemPatternId, IID_PPV_ARGS(&firstSelection)),
             "Obtain first virtual row selection pattern");
@@ -332,9 +391,19 @@ void NativeCollections(IUIAutomation& automation, IUIAutomationElement& root, Ev
     int count = 0;
     Require(selectedItems->get_Length(&count), "Count selected virtual list rows");
     Check(selected && count == 1, "Native selection reads the canonical selected row only");
+    TraceSelection(automation, *selection.Get(), *first.Get(), *second.Get(), *firstSelection.Get(),
+                   *secondSelection.Get(), canonicalCurrent, "after Select(second)");
     Require(secondSelection->RemoveFromSelection(), "Clear virtual row selection");
+    TraceSelection(automation, *selection.Get(), *first.Get(), *second.Get(), *firstSelection.Get(),
+                   *secondSelection.Get(), canonicalCurrent, "after Remove(second)");
     Require(firstSelection->AddToSelection(), "Add a virtual row to an empty selection");
-    Check(FAILED(secondSelection->AddToSelection()), "Single-selection list rejects a second additive selection");
+    TraceSelection(automation, *selection.Get(), *first.Get(), *second.Get(), *firstSelection.Get(),
+                   *secondSelection.Get(), canonicalCurrent, "after Add(first)");
+    const auto addition = secondSelection->AddToSelection();
+    std::cout << "Native Add(second) HRESULT=" << addition << std::endl;
+    TraceSelection(automation, *selection.Get(), *first.Get(), *second.Get(), *firstSelection.Get(),
+                   *secondSelection.Get(), canonicalCurrent, "after Add(second)");
+    const bool additionRejected = FAILED(addition);
     ComPtr<IUIAutomationVirtualizedItemPattern> realization;
     Require(last->GetCurrentPatternAs(UIA_VirtualizedItemPatternId, IID_PPV_ARGS(&realization)),
             "Obtain offscreen virtual row realization pattern");
@@ -457,6 +526,7 @@ void NativeCollections(IUIAutomation& automation, IUIAutomationElement& root, Ev
     const auto denied = cellValue->SetValue(replacement);
     SysFreeString(replacement);
     Check(readOnly && FAILED(denied), "Native cell pattern rejects edits after its canonical table becomes read-only");
+    Check(additionRejected, "Single-selection list rejects a second additive selection");
 }
 
 void NativeText(IUIAutomationElement& editor, IUIAutomationValuePattern& value, ProbeEvents& events,
@@ -570,12 +640,14 @@ void Accessibility(UiContext& ui, HWND window)
         items.push_back("List row " + std::to_string(row));
     list.SetItems(std::move(items));
     Point lastSelectionScroll;
+    std::atomic<int> canonicalListCurrent = -1;
     bool sawLastSelection = false;
     bool sawNeighborSelection = false;
     bool selectionScrollStable = false;
     const ScopedConnection selectionConnection(list.CurrentChanged().Connect(
         [&](int row)
         {
+            canonicalListCurrent = row;
             if (row == 999)
             {
                 lastSelectionScroll = list.GetScrollOffset();
@@ -683,9 +755,26 @@ void Accessibility(UiContext& ui, HWND window)
                 Require(toggler->get_CurrentToggleState(&checked), "Read native toggle state");
                 if (checked != ToggleState_On)
                     throw std::runtime_error("Native toggle did not commit");
-                NativeCollections(*automation.Get(), *root.Get(), subscriptions);
+                std::string failures;
+                const auto probe = [&](const char* label, auto function)
+                {
+                    try
+                    {
+                        function();
+                    }
+                    catch (const std::exception& failure)
+                    {
+                        std::cerr << "Native " << label << " scenario failed: " << failure.what() << std::endl;
+                        if (!failures.empty())
+                            failures += "; ";
+                        failures += std::string(label) + ": " + failure.what();
+                    }
+                };
+                probe("collections",
+                      [&] { NativeCollections(*automation.Get(), *root.Get(), subscriptions, canonicalListCurrent); });
                 ComPtr<IUIAutomationTextRange> retainedRange;
-                NativeText(*valueElement.Get(), *value.Get(), subscriptions.Events(), retainedRange);
+                probe("text",
+                      [&] { NativeText(*valueElement.Get(), *value.Get(), subscriptions.Events(), retainedRange); });
                 subscriptions.Stop();
                 Trace("UI Automation patterns committed");
                 readyToClose = true;
@@ -698,12 +787,17 @@ void Accessibility(UiContext& ui, HWND window)
                 SysFreeString(denied);
                 if (SUCCEEDED(expired))
                     throw std::runtime_error("Retained native provider accepted an edit after bridge closure");
-                BSTR staleText = nullptr;
-                const auto expiredRange = retainedRange->GetText(-1, &staleText);
-                SysFreeString(staleText);
-                if (SUCCEEDED(expiredRange))
-                    throw std::runtime_error("Retained native text range queried the UI after bridge closure");
+                if (retainedRange)
+                {
+                    BSTR staleText = nullptr;
+                    const auto expiredRange = retainedRange->GetText(-1, &staleText);
+                    SysFreeString(staleText);
+                    if (SUCCEEDED(expiredRange))
+                        throw std::runtime_error("Retained native text range queried the UI after bridge closure");
+                }
                 Trace("UI Automation retained edit rejected");
+                if (!failures.empty())
+                    throw std::runtime_error(failures);
             }
             catch (...)
             {
@@ -932,7 +1026,16 @@ int main()
               "Windows adapter reports actual rich clipboard capability");
         try
         {
-            Accessibility(ui, native.m_Window);
+            bool accessibilityPassed = true;
+            try
+            {
+                Accessibility(ui, native.m_Window);
+            }
+            catch (const std::exception& error)
+            {
+                std::cerr << "Native accessibility scenario failed: " << error.what() << std::endl;
+                accessibilityPassed = false;
+            }
             wchar_t nativeFlag[2]{};
             if (GetEnvironmentVariableW(L"ESTUDIOUI_NATIVE_PLATFORM_TESTS", nativeFlag, 2) == 1 &&
                 nativeFlag[0] == L'1')
@@ -943,6 +1046,7 @@ int main()
             else
                 std::cout
                     << "Clipboard mutation and visible picker probes require ESTUDIOUI_NATIVE_PLATFORM_TESTS=1.\n";
+            Check(accessibilityPassed, "Native accessibility scenario failed; see its original diagnostic");
         }
         catch (const std::exception& error)
         {
