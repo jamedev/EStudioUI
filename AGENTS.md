@@ -2,6 +2,9 @@
 
 - This repository is the source of truth. Use EStudioUI for project names,
   CMake targets, include directories, and the public C++ namespace.
+- Consult FOUNDATIONS_ROADMAP.md before expanding the widget catalog in
+  WIDGET_ROADMAP.md. Preserve their gate dependencies and distinguish proposed
+  APIs from implemented behavior; update completion status with verification evidence.
 - Use C++20. Keep each public class in a .h/.cpp pair; templates may be defined
   in headers. Headers use brief Doxygen //! comments for every method/member.
   Put detailed explanations in .cpp files only when the behavior needs them.

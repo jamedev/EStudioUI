@@ -1,5 +1,10 @@
 # Architecture
 
+The current implementation is described here. The source-audited
+[foundation roadmap](FOUNDATIONS_ROADMAP.md) defines proposed hardening work and
+acceptance gates; the [widget roadmap](WIDGET_ROADMAP.md) depends on those gates.
+Proposed classes and APIs in either roadmap are not current capabilities.
+
 The prototype separates the persistent UI model, event dispatch, and drawing
 without exposing third-party types in its public widget headers.
 

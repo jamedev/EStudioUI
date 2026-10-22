@@ -5,6 +5,11 @@ typed signals, and CSS styling. Controls include buttons, single-line UTF-8 text
 editable tables, toolbars/tool buttons, popup menus, and embedded 3D surfaces. Dependencies are managed with a pinned vcpkg
 manifest; no Qt or commercial SDK is required.
 
+Development follows the [framework foundation roadmap](FOUNDATIONS_ROADMAP.md)
+before broad widget expansion. The [widget roadmap](WIDGET_ROADMAP.md) records
+the planned controls, document editor, and application workspace. Both distinguish
+current capabilities from proposed work and define delivery prerequisites.
+
 ![EStudioUI widget gallery](verification/widgets-dark.png)
 
 ## Rich styling across the toolkit (0.8)
