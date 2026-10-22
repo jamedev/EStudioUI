@@ -45,7 +45,7 @@ TreeWidget::NodeId TreeWidget::AddItem(NodeId parent, std::string text)
     m_Nodes.emplace(id, Node{parent, TextBuffer::Sanitize(text), {}, false});
     (parent ? m_Nodes.at(parent).m_Children : m_Roots).push_back(id);
     m_RowsDirty = true;
-    Invalidate();
+    Invalidate(Invalidation::Content);
     return id;
 }
 
@@ -71,7 +71,7 @@ void TreeWidget::RemoveItem(NodeId item)
     m_Pressed = 0;
     m_PressedBranch = false;
     SetState(Pressed, false);
-    Invalidate();
+    Invalidate(Invalidation::Content);
     if (selectionRemoved)
     {
         m_Current = 0;
@@ -93,7 +93,7 @@ void TreeWidget::Clear()
     const bool changed = m_Current != 0;
     m_Current = 0;
     SetScrollOffset({});
-    Invalidate();
+    Invalidate(Invalidation::Content);
     if (changed)
         m_CurrentChanged.Emit(0);
 }
@@ -101,7 +101,11 @@ void TreeWidget::Clear()
 void TreeWidget::SetItemText(NodeId item, std::string text)
 {
     VerifyStructuralMutation();
-    m_Nodes.at(item).m_Text = TextBuffer::Sanitize(text);
+    auto& caption = m_Nodes.at(item).m_Text;
+    text = TextBuffer::Sanitize(text);
+    if (caption == text)
+        return;
+    caption = std::move(text);
     RequestRepaint();
 }
 
@@ -121,7 +125,7 @@ void TreeWidget::SetExpanded(NodeId item, bool expanded)
     node.m_Expanded = expanded;
     m_RowsDirty = true;
     m_Hover = -1;
-    Invalidate();
+    Invalidate(Invalidation::Content);
     m_ExpandedChanged.Emit(item, expanded);
 }
 
@@ -175,7 +179,7 @@ void TreeWidget::SetCurrentItem(NodeId item)
             {0, static_cast<float>(found - m_Rows.begin()) * GetStyle().m_RowHeight, 0, GetStyle().m_RowHeight});
     }
     if (revealed)
-        Invalidate();
+        Invalidate(Invalidation::Content);
     if (m_Current == item)
         return;
     m_Current = item;

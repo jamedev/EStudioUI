@@ -7,6 +7,7 @@
 #include "CustomWidgetGallery.h"
 #include "WidgetStylesGallery.h"
 #include "FoundationGallery.h"
+#include "StateGallery.h"
 
 #include <EStudioUI/ContextMenu.h>
 #include <EStudioUI/ListWidget.h>
@@ -124,5 +125,8 @@ class WidgetGallery
 
     //! Owns the background task and safe UI publication examples.
     std::unique_ptr<FoundationGallery> m_Foundation;
+
+    //! Owns typed state, bindings, transactions, and incremental update examples.
+    std::unique_ptr<StateGallery> m_State;
 };
 } // namespace EStudioUI

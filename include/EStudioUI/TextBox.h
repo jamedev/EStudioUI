@@ -20,6 +20,9 @@ class TextBox : public Widget
     //! Replaces text and history; an attached validator rejects invalid candidates with invalid_argument.
     void SetText(std::string_view text);
 
+    //! Reports whether replacement preserves the exact bytes and satisfies the current immutable policy.
+    bool CanSetText(std::string_view text) const;
+
     //! Returns valid UTF-8 text.
     const std::string& GetText() const;
 

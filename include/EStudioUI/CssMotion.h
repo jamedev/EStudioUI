@@ -35,6 +35,11 @@ class CssMotion
     bool HasRunning() const;
 
   private:
+    friend class Widget;
+
+    //! Returns cached main-layer presentation without advancing or rebuilding its tracks.
+    const Style* Presentation(const Widget& widget) const;
+
     //! Enforces the owning GUI thread before cached timeline access.
     ThreadAffinity m_Affinity;
 

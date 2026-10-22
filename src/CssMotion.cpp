@@ -392,6 +392,16 @@ void CssMotion::Update(double time)
     }
 }
 
+const Style* CssMotion::Presentation(const Widget& widget) const
+{
+    m_Affinity.VerifyAccess("CssMotion::Presentation");
+    const auto found = m_Impl->m_Entries.find(&widget);
+    if (found == m_Impl->m_Entries.end() || found->second.m_Widget.Get() != &widget ||
+        found->second.m_Layers.empty() || !found->second.m_Layers.front().m_Initialized)
+        return nullptr;
+    return &found->second.m_Layers.front().m_Presentation;
+}
+
 const Style* CssMotion::Decoration(const Widget& widget, int layerIndex) const
 {
     m_Affinity.VerifyAccess("CssMotion::Decoration");

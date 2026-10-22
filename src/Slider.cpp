@@ -67,6 +67,8 @@ void Slider::SetRange(double minimum, double maximum)
     VerifyAccess();
     if (!std::isfinite(minimum) || !std::isfinite(maximum) || minimum > maximum)
         throw std::invalid_argument("Slider bounds must be finite and ordered.");
+    if (m_Minimum == minimum && m_Maximum == maximum)
+        return;
     m_Minimum = minimum;
     m_Maximum = maximum;
     RequestRepaint();
@@ -90,6 +92,8 @@ void Slider::SetStep(double step)
     VerifyAccess();
     if (!std::isfinite(step) || step <= 0)
         throw std::invalid_argument("Slider step must be finite and positive.");
+    if (m_Step == step)
+        return;
     m_Step = step;
 }
 
@@ -126,7 +130,7 @@ void Slider::SetOrientation(Axis orientation)
         return;
     m_Orientation = orientation;
     UpdateOrientationState();
-    Invalidate();
+    Invalidate(Invalidation::Content);
 }
 
 void Slider::UpdateOrientationState()

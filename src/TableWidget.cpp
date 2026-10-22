@@ -66,7 +66,10 @@ void TableWidget::SetColumns(std::vector<TableColumn> columns)
         column.m_Size.Validate();
         column.m_Title = TextBuffer::Sanitize(column.m_Title);
     }
+    const WidgetRef lifetime(this);
     EndEdit(false, false);
+    if (!lifetime.Get())
+        return;
     m_Columns = std::move(columns);
     m_Widths.assign(m_Columns.size(), std::nullopt);
     m_Rows.clear();
@@ -79,7 +82,7 @@ void TableWidget::SetColumns(std::vector<TableColumn> columns)
     const bool changed = m_CurrentRow != -1;
     m_CurrentRow = m_CurrentColumn = -1;
     SetScrollOffset({});
-    Invalidate();
+    Invalidate(Invalidation::Content);
     if (changed)
         m_CurrentCellChanged.Emit(-1, -1);
 }
@@ -95,7 +98,10 @@ void TableWidget::SetRows(std::vector<std::vector<std::string>> rows)
         for (auto& cell : row)
             cell = TextBuffer::Sanitize(cell);
     }
+    const WidgetRef lifetime(this);
     EndEdit(false, false);
+    if (!lifetime.Get())
+        return;
     m_Rows = std::move(rows);
     m_ContentFontSize = -1;
     m_SortColumn = -1;
@@ -106,7 +112,7 @@ void TableWidget::SetRows(std::vector<std::vector<std::string>> rows)
     const bool changed = m_CurrentRow != -1;
     m_CurrentRow = m_CurrentColumn = -1;
     SetScrollOffset({});
-    Invalidate();
+    Invalidate(Invalidation::Content);
     if (changed)
         m_CurrentCellChanged.Emit(-1, -1);
 }
@@ -121,7 +127,7 @@ int TableWidget::AddRow(std::vector<std::string> cells)
     m_Rows.push_back(std::move(cells));
     m_ContentFontSize = -1;
     m_SortColumn = -1;
-    Invalidate();
+    Invalidate(Invalidation::Content);
     return GetRowCount() - 1;
 }
 
@@ -157,7 +163,7 @@ void TableWidget::SetCell(int row, int column, std::string text)
     cell = std::move(text);
     m_ContentFontSize = -1;
     m_SortColumn = -1;
-    Invalidate();
+    Invalidate(Invalidation::Content);
     m_CellChanged.Emit(row, column);
 }
 
@@ -195,7 +201,10 @@ void TableWidget::SortByColumn(int column, bool ascending)
     const auto ownerLease = RetainOwner();
     if (column < 0 || column >= GetColumnCount())
         throw std::out_of_range("Invalid table sort column.");
+    const WidgetRef lifetime(this);
     EndEdit(false, false);
+    if (!lifetime.Get())
+        return;
     std::vector<std::size_t> order(m_Rows.size());
     std::iota(order.begin(), order.end(), 0);
     std::stable_sort(order.begin(), order.end(),
@@ -217,7 +226,7 @@ void TableWidget::SortByColumn(int column, bool ascending)
     m_Rows = std::move(sorted);
     m_SortColumn = column;
     m_Ascending = ascending;
-    Invalidate();
+    RequestRepaint();
     if (previous != m_CurrentRow)
         m_CurrentCellChanged.Emit(m_CurrentRow, m_CurrentColumn);
 }
@@ -225,6 +234,8 @@ void TableWidget::SortByColumn(int column, bool ascending)
 void TableWidget::SetEditable(bool editable)
 {
     VerifyAccess();
+    if (m_Editable == editable && (editable || m_EditRow < 0))
+        return;
     m_Editable = editable;
     SetState(ReadOnly, !editable);
     if (!editable)
@@ -234,6 +245,8 @@ void TableWidget::SetEditable(bool editable)
 void TableWidget::SetSortingEnabled(bool enabled)
 {
     VerifyAccess();
+    if (m_SortingEnabled == enabled)
+        return;
     m_SortingEnabled = enabled;
 }
 
@@ -243,8 +256,12 @@ void TableWidget::SetColumnWidth(int column, float pixels)
     if (column < 0 || column >= GetColumnCount())
         throw std::out_of_range("Invalid table column.");
     (void)SizeRule::Fixed(pixels);
-    m_Widths[static_cast<std::size_t>(column)] = std::max(24.0f, pixels);
-    Invalidate();
+    pixels = std::max(24.0f, pixels);
+    auto& width = m_Widths[static_cast<std::size_t>(column)];
+    if (width == pixels)
+        return;
+    width = pixels;
+    Invalidate(Invalidation::Content);
 }
 
 std::vector<float> TableWidget::GetColumnWidths() const
@@ -336,13 +353,15 @@ void TableWidget::EndEdit(bool commit, bool restoreFocus)
     const int column = m_EditColumn;
     const std::string text = m_Editor->GetText();
     m_EditRow = m_EditColumn = -1;
-    m_Editor->SetVisible(false);
     const WidgetRef self(this);
+    m_Editor->SetVisible(false);
+    if (!self.Get())
+        return;
     if (restoreFocus && GetContext())
         GetContext()->SetFocus(this);
     if (!self.Get())
         return;
-    Invalidate();
+    Invalidate(Invalidation::Content);
     if (commit && row < GetRowCount() && column < GetColumnCount())
         SetCell(row, column, text);
 }

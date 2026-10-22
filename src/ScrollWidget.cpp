@@ -102,13 +102,20 @@ void ScrollWidget::SetScrollOffset(Point offset)
     VerifyAccess();
     if (!std::isfinite(offset.m_X) || !std::isfinite(offset.m_Y))
         throw std::invalid_argument("Scroll coordinates must be finite.");
-    const auto previous = GetScrollOffset();
+    const auto size = GetVirtualSize();
+    const auto viewport = GetViewport();
+    offset.m_X = std::clamp(offset.m_X, 0.0f, std::max(0.0f, size.m_X - viewport.m_Width));
+    offset.m_Y = std::clamp(offset.m_Y, 0.0f, std::max(0.0f, size.m_Y - viewport.m_Height));
+    if (m_Offset.m_X == offset.m_X && m_Offset.m_Y == offset.m_Y)
+        return;
+    const Point previous{
+        std::clamp(m_Offset.m_X, 0.0f, std::max(0.0f, size.m_X - viewport.m_Width)),
+        std::clamp(m_Offset.m_Y, 0.0f, std::max(0.0f, size.m_Y - viewport.m_Height))};
     m_Offset = offset;
-    m_Offset = GetScrollOffset();
     if (m_Offset.m_X != previous.m_X || m_Offset.m_Y != previous.m_Y)
     {
         RefreshScrollHover();
-        Invalidate();
+        Invalidate(Invalidation::Arrange | Invalidation::HitTest | Invalidation::Paint);
     }
 }
 

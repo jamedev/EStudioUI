@@ -1,6 +1,7 @@
 #include <EStudioUI/Widget.h>
 #include <EStudioUI/Renderer.h>
 #include <EStudioUI/UiContext.h>
+#include <EStudioUI/CssMotion.h>
 
 #include <algorithm>
 #include <bit>
@@ -60,6 +61,8 @@ void Widget::Attach(UiContext* context, Widget* parent)
         parent->VerifyAccess();
     m_Context = context;
     m_Parent = parent;
+    m_StyleDirty = m_SubtreeStyleDirty = m_DescendantStyleDirty = m_ArrangeDirty = true;
+    m_IntrinsicValid = m_MeasureValid = false;
     m_Node.m_Parent = parent ? &parent->m_Node : nullptr;
     for (auto& child : m_Children)
         child->Attach(context, this);
@@ -76,7 +79,7 @@ Widget& Widget::AddChild(std::unique_ptr<Widget> child)
     child->Attach(m_Context, this);
     auto* result = child.get();
     m_Children.push_back(std::move(child));
-    Invalidate();
+    Invalidate(Invalidation::Structure);
     return *result;
 }
 
@@ -90,7 +93,7 @@ bool Widget::RemoveChild(Widget& child)
         return false;
     auto removed = std::move(*found);
     m_Children.erase(found);
-    Invalidate();
+    Invalidate(Invalidation::Structure);
     removed.reset();
     return true;
 }
@@ -100,7 +103,7 @@ void Widget::ClearChildren()
     VerifyStructuralMutation();
     const auto ownerLease = RetainOwner();
     auto removed = std::move(m_Children);
-    Invalidate();
+    Invalidate(Invalidation::Structure);
     removed.clear();
 }
 
@@ -113,8 +116,10 @@ const std::vector<std::unique_ptr<Widget>>& Widget::GetChildren() const
 void Widget::SetId(std::string id)
 {
     VerifyAccess();
+    if (m_Node.m_Id == id)
+        return;
     m_Node.m_Id = std::move(id);
-    Invalidate();
+    Invalidate(Invalidation::Selector);
 }
 
 const std::string& Widget::GetId() const
@@ -129,22 +134,24 @@ void Widget::AddClass(std::string name)
     if (std::find(m_Node.m_Classes.begin(), m_Node.m_Classes.end(), name) == m_Node.m_Classes.end())
     {
         m_Node.m_Classes.push_back(std::move(name));
-        Invalidate();
+        Invalidate(Invalidation::Selector);
     }
 }
 
 void Widget::RemoveClass(const std::string& name)
 {
     VerifyAccess();
-    std::erase(m_Node.m_Classes, name);
-    Invalidate();
+    if (std::erase(m_Node.m_Classes, name))
+        Invalidate(Invalidation::Selector);
 }
 
 void Widget::SetEnabled(bool enabled)
 {
     VerifyAccess();
+    if (m_Enabled == enabled)
+        return;
     m_Enabled = enabled;
-    Invalidate();
+    Invalidate(Invalidation::Selector);
 }
 
 bool Widget::IsEnabled() const
@@ -159,7 +166,7 @@ void Widget::SetVisible(bool visible)
     if (m_Visible != visible)
     {
         m_Visible = visible;
-        Invalidate();
+        Invalidate(Invalidation::Style | Invalidation::InheritedStyle | Invalidation::Content);
     }
 }
 
@@ -174,7 +181,7 @@ void Widget::SetWidth(SizeRule rule)
     VerifyAccess();
     rule.Validate();
     m_WidthRule = rule;
-    Invalidate();
+    Invalidate(Invalidation::Style | Invalidation::Content);
 }
 
 void Widget::SetHeight(SizeRule rule)
@@ -182,14 +189,14 @@ void Widget::SetHeight(SizeRule rule)
     VerifyAccess();
     rule.Validate();
     m_HeightRule = rule;
-    Invalidate();
+    Invalidate(Invalidation::Style | Invalidation::Content);
 }
 
 void Widget::SetLayoutDirection(Axis axis)
 {
     VerifyAccess();
     m_Direction = axis;
-    Invalidate();
+    Invalidate(Invalidation::Style | Invalidation::Content);
 }
 
 void Widget::SetGap(float pixels)
@@ -198,7 +205,7 @@ void Widget::SetGap(float pixels)
     if (!std::isfinite(pixels) || pixels < 0 || pixels > 1000000)
         throw std::invalid_argument("A layout gap must be finite and nonnegative.");
     m_Gap = pixels;
-    Invalidate();
+    Invalidate(Invalidation::Style | Invalidation::Content);
 }
 
 void Widget::SetFloatingBounds(Rect bounds)
@@ -210,8 +217,10 @@ void Widget::SetFloatingBounds(Rect bounds)
     if (m_FloatingBounds && m_FloatingBounds->m_X == bounds.m_X && m_FloatingBounds->m_Y == bounds.m_Y &&
         m_FloatingBounds->m_Width == bounds.m_Width && m_FloatingBounds->m_Height == bounds.m_Height)
         return;
+    const bool wasFloating = m_FloatingBounds.has_value();
     m_FloatingBounds = bounds;
-    Invalidate();
+    Invalidate(wasFloating ? Invalidation::Arrange | Invalidation::HitTest | Invalidation::Paint
+                           : Invalidation::Content);
 }
 
 Widget* Widget::GetParent() const
@@ -223,8 +232,10 @@ Widget* Widget::GetParent() const
 void Widget::ClearFloatingBounds()
 {
     VerifyAccess();
+    if (!m_FloatingBounds)
+        return;
     m_FloatingBounds.reset();
-    Invalidate();
+    Invalidate(Invalidation::Content);
 }
 
 void Widget::SetStyleProperty(StyleProperty property, const StyleValue& value)
@@ -240,33 +251,47 @@ void Widget::SetStyleProperty(StyleProperty property, const StyleValue& value)
     if (IsPaintOnlyProperty(property))
     {
         EStudioUI::SetStyleValue(m_Style, property, validated);
-        if (m_Context)
-            m_Context->RefreshStyleParts(*this);
-        else
-            for (auto& part : m_StyleParts)
-            {
-                for (std::size_t i = 0; i < part.m_States.size(); ++i)
-                {
-                    part.m_Palette[i] = part.m_Defaults(m_Style, part.m_States[i]);
-                    if (!part.m_Animated)
-                    {
-                        part.m_Palette[i].m_Transitions.clear();
-                        part.m_Palette[i].m_Animations.clear();
-                    }
-                }
-                part.m_Presentation = part.m_Palette[PartIndex(part.m_StateMask, part.m_ActiveState)];
-            }
-        RequestRepaint();
+        RefreshStyleParts();
+        Invalidate(GetStylePropertyInvalidation(property));
     }
     else
-        Invalidate();
+        Invalidate(Invalidation::Style | GetStylePropertyInvalidation(property));
+}
+
+void Widget::RefreshStyleParts()
+{
+    if (m_Context)
+        m_Context->RefreshStyleParts(*this);
+    else
+        for (auto& part : m_StyleParts)
+        {
+            for (std::size_t i = 0; i < part.m_States.size(); ++i)
+            {
+                part.m_Palette[i] = part.m_Defaults(m_Style, part.m_States[i]);
+                if (!part.m_Animated)
+                {
+                    part.m_Palette[i].m_Transitions.clear();
+                    part.m_Palette[i].m_Animations.clear();
+                }
+            }
+            part.m_Presentation = part.m_Palette[PartIndex(part.m_StateMask, part.m_ActiveState)];
+        }
 }
 
 void Widget::ClearStyleProperty(StyleProperty property)
 {
     VerifyAccess();
-    if (m_StyleOverrides.erase(property))
-        Invalidate();
+    if (!m_StyleOverrides.erase(property))
+        return;
+    if (IsPaintOnlyProperty(property))
+    {
+        const auto* presentation = m_Context ? m_Context->m_CssMotion->Presentation(*this) : nullptr;
+        SetStyleValue(m_Style, property, GetStyleValue(presentation ? *presentation : m_CascadedStyle, property));
+        RefreshStyleParts();
+        Invalidate(GetStylePropertyInvalidation(property));
+    }
+    else
+        Invalidate(Invalidation::Style | GetStylePropertyInvalidation(property));
 }
 
 void Widget::ClearStyleProperties()
@@ -307,6 +332,12 @@ Rect Widget::GetBounds() const
 {
     VerifyAccess();
     return m_Bounds;
+}
+
+Point Widget::GetIntrinsicSize() const
+{
+    VerifyAccess();
+    return m_IntrinsicSize;
 }
 
 Rect Widget::GetClip() const
@@ -441,6 +472,22 @@ void Widget::Invalidate()
         m_Context->Invalidate();
 }
 
+void Widget::Invalidate(Invalidation flags)
+{
+    VerifyAccess();
+    if (m_Context)
+        m_Context->Invalidate(*this, flags);
+    else
+    {
+        m_StyleDirty |= HasInvalidation(flags, Invalidation::Style | Invalidation::Selector | Invalidation::Structure);
+        m_SubtreeStyleDirty |= m_StyleDirty;
+        m_DescendantStyleDirty |= HasInvalidation(flags, Invalidation::InheritedStyle | Invalidation::Structure);
+        if (HasInvalidation(flags, Invalidation::Measure | Invalidation::Structure))
+            m_IntrinsicValid = m_MeasureValid = false;
+        m_ArrangeDirty |= HasInvalidation(flags, Invalidation::Measure | Invalidation::Arrange | Invalidation::Structure);
+    }
+}
+
 void Widget::RequestRepaint()
 {
     VerifyAccess();
@@ -497,7 +544,7 @@ void Widget::RegisterStylePart(std::string name, unsigned stateMask,
     } while (state);
     part.m_Presentation = part.m_Palette.front();
     m_StyleParts.push_back(std::move(part));
-    Invalidate();
+    Invalidate(Invalidation::Style | Invalidation::Content);
 }
 
 const Style& Widget::GetPartStyle(std::string_view name) const
@@ -539,7 +586,7 @@ void Widget::SetPartState(std::string_view name, unsigned state)
         found->m_ActiveState = state;
         found->m_Presentation = found->m_Palette[PartIndex(found->m_StateMask, state)];
     }
-    Invalidate();
+    Invalidate(Invalidation::Style | Invalidation::Content);
 }
 
 void Widget::SetState(unsigned flag, bool enabled)
@@ -549,7 +596,7 @@ void Widget::SetState(unsigned flag, bool enabled)
     if (state != m_Node.m_State)
     {
         m_Node.m_State = state;
-        Invalidate();
+        Invalidate(Invalidation::Selector);
     }
 }
 

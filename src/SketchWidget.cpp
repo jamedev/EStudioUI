@@ -64,6 +64,8 @@ SketchTool SketchWidget::GetTool() const
 void SketchWidget::SetSnapping(bool enabled)
 {
     VerifyAccess();
+    if (m_Snapping == enabled)
+        return;
     m_Snapping = enabled;
     NotifyChanged();
 }

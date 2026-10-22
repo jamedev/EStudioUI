@@ -1,0 +1,12 @@
+Observable state, bindings and actual GPU integration: PASS
+Shared slider/numeric value, actual text input, checked/enabled/visible bindings passed.
+Atomic batch: one coherent revision, two notifications and one derived recomputation.
+Invalid final candidate: full rollback, unchanged revision and no notifications.
+Immutable snapshots retain their owned values; equal writes produce no revision.
+Worker publications: 2000; superseded pending updates: 1999.
+Bound edit CSS resolutions: 0; measurements: 4; arrangements: 15.
+Independent sibling: zero new measurements and zero arrangements; geometry reused.
+Removed receiver and expired state delivery are safe.
+Actual native window deletion from a binding setter and a coherent batch retains active receivers.
+Native resize inside a batch stays open and renders after commit; nested Window::Run is rejected.
+Settled frame submits zero draw calls. Software GL establishes correctness, not hardware throughput.

@@ -13,6 +13,7 @@ without exposing third-party types in its public widget headers.
 | `Application`, `Window`, `FramePacer` | Shared native event loop, GLFW lifetime/context, Unicode callbacks, clipboard, stable presentation deadlines |
 | `UiDispatcher`, `UiHandle`, `DispatchReceipt` | Bounded producer queues, owner delivery, target lifetime, coalescing, inspectable outcomes |
 | `BackgroundTasks`, `Task`, `RequestScope` | Cooperative workers, UI continuations, progress, cancellation and stale-request retirement |
+| `State`, `StateStore`, `Binding` | Typed snapshots, validated coherent revisions, savepoints, control synchronization and reconciliation |
 | `UiContext` | Widget tree, CSS resolution, row/column layout, clipping, focus, capture |
 | `Widget`, `Label`, `Button`, `TextBox` | Owned model, cached shaping, behavior, emitted signals |
 | `SizeRule`, `Layout` | Fixed/content/fill contracts, bounded weighted distribution, overflow |
@@ -28,11 +29,20 @@ without exposing third-party types in its public widget headers.
 
 ## Frame and cache behavior
 
-Input and model changes mark repaint. Changes affecting identity, state, text,
-structure, CSS, or dimensions also invalidate style/layout. Caret and selection
-changes keep style/layout caches where possible. Preparation resolves inherited
-styles, measures intrinsic contents, assigns logical-pixel bounds, and computes
-ancestor clips. Painting traverses parents before children in insertion order.
+Input and model changes declare their `Invalidation` impacts. Paint-only changes
+retain styles and geometry; content changes discard the source intrinsic result
+and its ancestor aggregate/allocation dependency path. Per-widget aggregate
+measurements cache their actual parent-width/height arguments separately from
+intrinsic hooks. Arrangement skips unchanged bounds/clips and clean subtrees.
+Selector and structural changes conservatively match the tree, compare final
+computed properties, and retain unrelated intrinsic measurements. The legacy
+no-argument invalidation remains a full fallback for custom widgets.
+
+Preparation resolves inherited styles, measures contents, assigns logical-pixel
+bounds, and computes ancestor clips. Painting still records the visible tree in
+order; incremental layout does not imply cached paint subtrees. `UiStats`
+distinguishes actual intrinsic hooks, aggregate calculations/cache hits, and
+arrangements from stylesheet resolutions and layout passes. See [STATE.md](STATE.md).
 
 The event loop waits for GLFW events when nothing changes. A focused editable
 text box wakes at its next half-second caret deadline. Visible continuous scene
@@ -144,10 +154,13 @@ implemented or benchmarked.
 
 ## Layout, collections, and popups
 
-Measurements are cached per prepare pass. Code-level size rules are applied
-following CSS resolution, so a theme cannot override an explicit fixed/limited
-contract. Nested rows/columns and table columns share the bounded weighted
-allocator. Capped children return unused shares; over-constrained containers are
+Intrinsic measurements persist across prepare calls until their content or style
+dependencies change. Aggregate measurements also retain their actual constraint
+keys and are recalculated after dependency invalidation or a constraint change.
+Code-level size rules are applied following CSS resolution, so a theme cannot
+override an explicit fixed/limited contract. Nested rows/columns and table
+columns share the bounded weighted allocator. Capped children return unused
+shares; over-constrained containers are
 reported through weak widget observers instead of silently violating minima.
 See [LAYOUTS.md](LAYOUTS.md) for exact semantics and remaining layout features.
 
@@ -229,6 +242,31 @@ stale delivery. `Application::Tasks()` lazily supplies a common pool. Shutdown
 cancels delivery without waiting; destruction joins owned cooperative workers.
 See [THREADING.md](THREADING.md) for ordering, backpressure, and error semantics,
 and [DEVELOPER_EXPERIENCE.md](DEVELOPER_EXPERIENCE.md) for API acceptance criteria.
+
+## Typed application state and bindings
+
+`UiContext::States()` lazily supplies an owner-side `StateStore`. A `State<T>`
+owns its value behind const snapshots; workers capture a snapshot or post through
+its typed handle. Direct reads are valid during painting and measurement, while
+mutation observes the containing context's phase rules. No widget pointer is
+resolved on a producer thread.
+
+`Batch` stages a final candidate set. Equality, validation, and allocation finish
+before no-throw publication of one revision. Nested batches act as savepoints.
+Every changed value is published before the first observer runs; reentrant writes
+wait until the current notification round finishes. A finite round limit diagnoses
+feedback loops. Observer errors after publication cannot undo a committed value.
+
+Built-in bindings connect labels, text/numeric editors, sliders, checked state,
+visibility, and enabled state; generic `Bind` accepts a custom setter. Owner-side
+propagation avoids an extra queued hop. Weak receiver identities and stop tokens
+retire both directions. Bound-control representability participates in precommit
+validation. Cancelled control edits restore the canonical value and expose an
+inspectable error; discarded transaction candidates reconcile bound views without
+false change notifications. Window resources remain leased through active calls.
+Nested UI frame/event-loop processing and context-owned dispatcher drains are
+rejected during state updates. See [STATE.md](STATE.md) for the exact read,
+reentrancy, error, and teardown contracts.
 
 ## Validation and future work
 

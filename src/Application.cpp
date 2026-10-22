@@ -1,5 +1,6 @@
 #include <EStudioUI/Application.h>
 #include <EStudioUI/BackgroundTasks.h>
+#include <EStudioUI/StateStore.h>
 
 #include "ApplicationRuntime.h"
 
@@ -94,7 +95,7 @@ struct Runtime
     }
 };
 
-Runtime& State()
+Runtime& GetRuntime()
 {
     static Runtime runtime;
     return runtime;
@@ -105,25 +106,25 @@ namespace Detail
 {
 void VerifyApplicationAccess()
 {
-    State().m_Affinity.VerifyAccess("Native application access");
+    GetRuntime().m_Affinity.VerifyAccess("Native application access");
 }
 
 void RegisterApplicationWindow(const std::shared_ptr<ApplicationWindow>& window)
 {
     VerifyApplicationAccess();
-    State().m_Windows.push_back(window);
+    GetRuntime().m_Windows.push_back(window);
 }
 
 void RetireApplicationWindow(std::shared_ptr<void> window)
 {
     VerifyApplicationAccess();
-    State().m_Retired.push_back(std::move(window));
+    GetRuntime().m_Retired.push_back(std::move(window));
     FlushRetiredWindows();
 }
 
 void FlushRetiredWindows()
 {
-    auto& state = State();
+    auto& state = GetRuntime();
     if (state.m_DispatchDepth || state.m_Processing || state.m_Retired.empty())
         return;
     auto retired = std::move(state.m_Retired);
@@ -134,19 +135,19 @@ void FlushRetiredWindows()
 ApplicationDispatchScope::ApplicationDispatchScope()
 {
     VerifyApplicationAccess();
-    ++State().m_DispatchDepth;
+    ++GetRuntime().m_DispatchDepth;
 }
 
 ApplicationDispatchScope::~ApplicationDispatchScope()
 {
-    --State().m_DispatchDepth;
+    --GetRuntime().m_DispatchDepth;
 }
 } // namespace Detail
 
 Application::Application()
 {
     Detail::VerifyApplicationAccess();
-    auto& state = State();
+    auto& state = GetRuntime();
     if (state.m_ExplicitApplication)
         throw std::logic_error("Only one explicit Application may own the native runtime.");
     state.m_ExplicitApplication = true;
@@ -156,9 +157,9 @@ Application::~Application()
 {
     if (!m_Affinity.IsOwnerThread())
         std::terminate();
-    State().CloseWindows();
+    GetRuntime().CloseWindows();
     m_Tasks.reset();
-    State().m_ExplicitApplication = false;
+    GetRuntime().m_ExplicitApplication = false;
     Detail::FlushRetiredWindows();
 }
 
@@ -177,7 +178,10 @@ int Application::Run()
 int Application::RunWindows()
 {
     Detail::VerifyApplicationAccess();
-    auto& state = State();
+    if (StateStore::IsUpdatingOnThisThread())
+        throw std::logic_error(
+            "Application event processing cannot run inside a state update; defer it until the update finishes.");
+    auto& state = GetRuntime();
     if (state.m_Running || state.m_Processing || state.m_DispatchDepth)
         throw std::logic_error("Application::Run cannot start a nested event loop.");
 
@@ -215,26 +219,29 @@ int Application::RunWindows()
 bool Application::ProcessEvents()
 {
     VerifyAccess();
-    State().Process();
-    return State().OpenCount() != 0;
+    if (StateStore::IsUpdatingOnThisThread())
+        throw std::logic_error(
+            "Application event processing cannot run inside a state update; defer it until the update finishes.");
+    GetRuntime().Process();
+    return GetRuntime().OpenCount() != 0;
 }
 
 void Application::Quit()
 {
     VerifyAccess();
-    State().CloseWindows();
+    GetRuntime().CloseWindows();
 }
 
 std::size_t Application::GetWindowCount() const
 {
     VerifyAccess();
-    return State().OpenCount();
+    return GetRuntime().OpenCount();
 }
 
 bool Application::IsRunning() const
 {
     VerifyAccess();
-    return State().m_Running;
+    return GetRuntime().m_Running;
 }
 
 BackgroundTasks& Application::Tasks()

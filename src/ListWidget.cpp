@@ -40,7 +40,7 @@ void ListWidget::SetItems(std::vector<std::string> items)
     m_Pressed = -1;
     SetState(Pressed, false);
     SetScrollOffset({});
-    Invalidate();
+    Invalidate(Invalidation::Content);
     if (changed)
         m_CurrentChanged.Emit(-1);
 }
@@ -49,7 +49,7 @@ int ListWidget::AddItem(std::string text)
 {
     VerifyStructuralMutation();
     m_Items.push_back(TextBuffer::Sanitize(text));
-    Invalidate();
+    Invalidate(Invalidation::Content);
     return GetItemCount() - 1;
 }
 
@@ -63,7 +63,7 @@ void ListWidget::RemoveItem(int index)
     m_Hover = -1;
     m_Pressed = -1;
     SetState(Pressed, false);
-    Invalidate();
+    Invalidate(Invalidation::Content);
     if (m_Current != next)
     {
         m_Current = next;

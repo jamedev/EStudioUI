@@ -162,7 +162,10 @@ struct Window::Impl : std::enable_shared_from_this<Window::Impl>
             if (!self->m_Owner || self->m_Closed)
                 return;
             glfwMakeContextCurrent(self->m_Window);
-            self->m_Ui->SetTime(self->GuiTime());
+            // Synchronous resize/focus callbacks may occur inside a state batch.
+            // Route their invalidation now; advance animation time at the next safe boundary.
+            if (!StateStore::IsUpdatingOnThisThread())
+                self->m_Ui->SetTime(self->GuiTime());
             if (!self->m_Owner || self->m_Closed)
                 return;
             glfwMakeContextCurrent(self->m_Window);
@@ -393,9 +396,15 @@ Window::Window(const WindowOptions& options, const std::filesystem::path& fontPa
     glfwSetWindowSizeCallback(self.m_Window,
                               [](GLFWwindow* window, int width, int height)
                               {
-                                  Impl::Dispatch(
-                                      window, [&](Impl& state)
-                                      { state.m_Ui->Prepare(static_cast<float>(width), static_cast<float>(height)); });
+                                  Impl::Dispatch(window,
+                                                 [&](Impl& state)
+                                                 {
+                                                     if (StateStore::IsUpdatingOnThisThread())
+                                                         state.m_Ui->Invalidate();
+                                                     else
+                                                         state.m_Ui->Prepare(static_cast<float>(width),
+                                                                             static_cast<float>(height));
+                                                 });
                               });
     glfwSetFramebufferSizeCallback(self.m_Window, [](GLFWwindow* window, int, int)
                                    { Impl::Dispatch(window, [](Impl& state) { state.m_Ui->Invalidate(); }); });

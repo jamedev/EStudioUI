@@ -72,6 +72,7 @@ WidgetGallery::WidgetGallery(Window& window, TabWidget& tabs, const std::filesys
     m_CustomWidgets = std::make_unique<CustomWidgetGallery>(window, tabs.AddTab("Custom widgets"));
     m_WidgetStyles = std::make_unique<WidgetStylesGallery>(window, tabs.AddTab("Widget styles"), assets);
     m_Foundation = std::make_unique<FoundationGallery>(window, tabs.AddTab("Async"), assets);
+    m_State = std::make_unique<StateGallery>(window, tabs.AddTab("State"), assets);
 }
 
 void WidgetGallery::BuildCollections(Widget& page)
@@ -423,6 +424,8 @@ void WidgetGallery::Verify(const std::filesystem::path& assets, const std::files
     m_WidgetStyles->Verify(assets, output);
     m_Tabs.SetCurrentIndex(9);
     m_Foundation->Verify(output);
+    m_Tabs.SetCurrentIndex(10);
+    m_State->Verify(output);
     m_Window.RenderFrame(ui.GetTime());
     std::ofstream report(output / "widgets-report.txt");
     report << "EStudioUI 0.3 widget integration: PASS\n"

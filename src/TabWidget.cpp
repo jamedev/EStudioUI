@@ -77,7 +77,7 @@ void TabWidget::RemoveTab(int index)
     const int previous = m_Current;
     if (index > previous)
     {
-        Invalidate();
+        Invalidate(Invalidation::Content);
         return;
     }
     const int next = m_Tabs.empty() ? -1 : std::min(index < previous ? previous - 1 : previous, GetTabCount() - 1);
@@ -126,7 +126,7 @@ void TabWidget::SetCurrentIndex(int index)
                 button->RemoveClass("selected");
         }
     }
-    Invalidate();
+    Invalidate(Invalidation::Content);
     m_CurrentChanged.Emit(index);
 }
 

@@ -176,6 +176,8 @@ void OpenGLWidget::SetCallbacks(std::function<void()> initialize, std::function<
 void OpenGLWidget::SetContinuousRendering(bool enabled)
 {
     VerifyAccess();
+    if (m_Impl->m_Continuous == enabled)
+        return;
     m_Impl->m_Continuous = enabled;
     RequestFrame();
 }

@@ -55,6 +55,8 @@ const std::string& TextBox::GetText() const
 void TextBox::SetValidator(std::shared_ptr<const InputValidator> validator)
 {
     VerifyAccess();
+    if (m_Validator == validator)
+        return;
     const auto ownerLease = RetainOwner();
     const auto state = validator ? validator->Validate(m_Buffer.GetText()) : ValidationState::Acceptable;
     m_Validator = std::move(validator);
@@ -125,18 +127,35 @@ void TextBox::SetText(std::string_view text)
     AfterEdit(previous != m_Buffer.GetText());
 }
 
+bool TextBox::CanSetText(std::string_view text) const
+{
+    VerifyAccess();
+    const auto ownerLease = RetainOwner();
+    const auto validator = m_Validator;
+    auto candidate = m_Buffer;
+    candidate.SetText(text);
+    if (candidate.GetText() != text)
+        return false;
+    return !validator || validator->Validate(candidate.GetText()) != ValidationState::Invalid;
+}
+
 void TextBox::SetPlaceholder(std::string text)
 {
     VerifyAccess();
-    m_Placeholder = TextBuffer::Sanitize(text);
+    text = TextBuffer::Sanitize(text);
+    if (m_Placeholder == text)
+        return;
+    m_Placeholder = std::move(text);
     m_PlaceholderLayoutSize = -1;
     UpdatePresentationState(m_ValidationState);
-    Invalidate();
+    Invalidate(Invalidation::Content);
 }
 
 void TextBox::SetReadOnly(bool readOnly)
 {
     VerifyAccess();
+    if (m_ReadOnly == readOnly)
+        return;
     m_ReadOnly = readOnly;
     SetState(ReadOnly, readOnly);
 }
@@ -238,7 +257,7 @@ void TextBox::AfterEdit(bool changed)
     if (changed)
     {
         m_LayoutSize = -1;
-        Invalidate();
+        Invalidate(Invalidation::Content);
     }
     ResetCaret();
     const auto text = changed ? m_Buffer.GetText() : std::string{};

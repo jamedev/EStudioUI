@@ -30,7 +30,7 @@ UiContext::UiContext(FontFace& font)
 {
     m_Font.VerifyAccess();
     m_Root.Attach(this, nullptr);
-    m_Dispatcher.SetDrainGuard([this] { VerifyDispatchPhase(); });
+    m_Dispatcher.SetDrainGuard([this] { VerifyTraversalEntry(); });
 }
 
 UiContext::~UiContext()
@@ -38,6 +38,7 @@ UiContext::~UiContext()
     if (!IsOwnerThread() || m_Phase != UiPhase::Idle)
         std::terminate();
     m_Dispatcher.Close();
+    m_States.reset();
     m_Root.Attach(nullptr, nullptr);
 }
 
@@ -70,6 +71,18 @@ UiDispatcher UiContext::GetDispatcher() const
     return m_Dispatcher;
 }
 
+StateStore& UiContext::States()
+{
+    VerifyAccess();
+    if (!m_States)
+    {
+        m_States = std::make_unique<StateStore>(m_Dispatcher);
+        m_States->SetAccessGuard([this] { VerifyDispatchPhase(); });
+        m_States->SetOwnerLease([this] { return RetainOwner(); });
+    }
+    return *m_States;
+}
+
 DispatchReceipt UiContext::Defer(std::function<void(UiContext&)> callback)
 {
     VerifyAccess();
@@ -97,6 +110,13 @@ void UiContext::VerifyDispatchPhase() const
             "UI traversal is active; defer structural changes with UiContext::Defer or UiHandle::Post.");
 }
 
+void UiContext::VerifyTraversalEntry() const
+{
+    VerifyDispatchPhase();
+    if (StateStore::IsUpdatingOnThisThread())
+        throw std::logic_error("State update is active; defer frame traversal until the update completes.");
+}
+
 Widget& UiContext::Root()
 {
     VerifyAccess();
@@ -107,7 +127,46 @@ void UiContext::Invalidate()
 {
     VerifyAccess();
     m_Dirty = true;
+    m_FullStyleDirty = true;
+    m_ResetMeasurements = true;
+    m_HitTestDirty = true;
+    m_Root.m_SubtreeStyleDirty = true;
+    m_Root.m_ArrangeDirty = true;
     m_Repaint = true;
+}
+
+void UiContext::Invalidate(Widget& widget, Invalidation flags)
+{
+    VerifyAccess();
+    if (flags == Invalidation::None)
+        return;
+    m_Repaint = true;
+    if (HasInvalidation(flags, Invalidation::Selector | Invalidation::Structure))
+    {
+        m_FullStyleDirty = true;
+        m_Root.m_SubtreeStyleDirty = true;
+    }
+    if (HasInvalidation(flags, Invalidation::Style | Invalidation::InheritedStyle))
+    {
+        widget.m_StyleDirty = true;
+        widget.m_DescendantStyleDirty |= HasInvalidation(flags, Invalidation::InheritedStyle);
+        if (HasInvalidation(flags, Invalidation::InheritedStyle) && !m_OwnedPopups.empty())
+            m_FullStyleDirty = true;
+        for (auto* node = &widget; node; node = node->m_Parent)
+            node->m_SubtreeStyleDirty = true;
+    }
+    if (HasInvalidation(flags, Invalidation::Measure | Invalidation::Structure))
+    {
+        widget.m_IntrinsicValid = false;
+        for (auto* node = &widget; node; node = node->m_Parent)
+            node->m_MeasureValid = false;
+    }
+    if (HasInvalidation(flags, Invalidation::Measure | Invalidation::Arrange | Invalidation::Structure))
+        for (auto* node = &widget; node; node = node->m_Parent)
+            node->m_ArrangeDirty = true;
+    m_HitTestDirty |= HasInvalidation(flags, Invalidation::HitTest | Invalidation::Measure | Invalidation::Arrange |
+                                              Invalidation::Selector | Invalidation::Structure);
+    m_Dirty |= flags != Invalidation::Paint;
 }
 
 void UiContext::RequestRepaint()
@@ -132,7 +191,7 @@ void UiContext::SetTime(double time)
 {
     const auto ownerLifetime = RetainOwner();
     VerifyAccess();
-    VerifyDispatchPhase();
+    VerifyTraversalEntry();
     m_Animations.Update(time);
     m_CssMotion->Update(time);
     if (!m_Dirty)
@@ -260,7 +319,7 @@ AnimationId UiContext::BeginStyleTransition(std::optional<StyleSheet> initial, S
     m_StyleSheet = std::move(final);
     m_CssMotion->Reset();
     Invalidate();
-    Restyle(m_Root, nullptr);
+    Restyle(m_Root, nullptr, m_FullStyleDirty);
     Arrange();
     Animation animation(options);
     // A sentinel also gives no-change transitions a valid timeline identity.
@@ -382,95 +441,152 @@ AnimationId UiContext::BeginStyleTransition(std::optional<StyleSheet> initial, S
     return id;
 }
 
-void UiContext::Restyle(Widget& widget, const Style* parent)
+void UiContext::Restyle(Widget& widget, const Style* parent, bool force)
 {
-    const PhaseScope phase(*this, UiPhase::Style);
-    widget.m_Node.m_Parent = widget.m_Parent ? &widget.m_Parent->m_Node : nullptr;
-    for (const auto& popup : m_OwnedPopups)
-        if (popup.m_Popup.Get() == &widget)
-            if (auto* owner = popup.m_Owner.Get(); owner && owner->GetContext() == this)
-            {
-                widget.m_Node.m_Parent = &owner->m_Node;
-                parent = &owner->m_Style;
-            }
-    widget.m_Node.m_State &= ~FocusWithin;
-    for (auto* focused = m_Focus.Get(); focused;)
-    {
-        if (focused == &widget)
-        {
-            widget.m_Node.m_State |= FocusWithin;
-            break;
-        }
-        auto* next = focused->m_Parent;
-        for (const auto& popup : m_OwnedPopups)
-            if (popup.m_Popup.Get() == focused)
-                if (auto* owner = popup.m_Owner.Get())
-                    next = owner;
-        focused = next;
-    }
-    if (!widget.m_Visible)
-    {
-        widget.m_Style.m_Displayed = false;
+    if (!force && !widget.m_SubtreeStyleDirty)
         return;
+    const PhaseScope phase(*this, UiPhase::Style);
+    const bool resolve = force || widget.m_StyleDirty;
+    bool forceChildren = force || widget.m_DescendantStyleDirty;
+    if (m_ResetMeasurements)
+    {
+        widget.m_IntrinsicValid = widget.m_MeasureValid = false;
+        widget.m_ArrangeDirty = true;
     }
-    if (widget.IsEnabled())
-        widget.m_Node.m_State &= ~Disabled;
-    else
-        widget.m_Node.m_State |= Disabled;
-    widget.m_Style = m_CssMotion->Resolve(widget, 0, m_StyleSheet.Compute(widget.m_Node, parent), m_StyleSheet);
-    for (int layer = 1; layer <= 2; ++layer)
-        m_CssMotion->Resolve(widget, layer, m_StyleSheet.Compute(widget.m_Node, &widget.m_Style, layer), m_StyleSheet);
-    m_Stats.m_StyleResolutions += 3;
-    for (const auto& [property, value] : widget.m_StyleOverrides)
-        SetStyleValue(widget.m_Style, property, value);
-    widget.m_Style.m_Displayed = widget.m_Style.m_Displayed && widget.m_Visible;
-    widget.m_Style.m_MaxWidth = std::max(widget.m_Style.m_MaxWidth, widget.m_Style.m_MinWidth);
-    widget.m_Style.m_MaxHeight = std::max(widget.m_Style.m_MaxHeight, widget.m_Style.m_MinHeight);
-    const auto applySize = [](const std::optional<SizeRule>& rule, Length& length, float& minimum, float& maximum)
+    if (resolve)
     {
-        if (!rule)
-            return;
-        minimum = rule->m_Minimum;
-        maximum = rule->m_Maximum;
-        length = rule->m_Mode == SizeRule::Mode::Fixed  ? Length{Length::Unit::Pixels, rule->m_Value}
-                 : rule->m_Mode == SizeRule::Mode::Fill ? Length{Length::Unit::Fraction, rule->m_Value}
-                                                        : Length{};
-    };
-    applySize(widget.m_WidthRule, widget.m_Style.m_Width, widget.m_Style.m_MinWidth, widget.m_Style.m_MaxWidth);
-    applySize(widget.m_HeightRule, widget.m_Style.m_Height, widget.m_Style.m_MinHeight, widget.m_Style.m_MaxHeight);
-    if (widget.m_Direction)
-        widget.m_Style.m_Row = *widget.m_Direction == Axis::Horizontal;
-    if (widget.m_Gap)
-        widget.m_Style.m_Gap = *widget.m_Gap;
-    constexpr unsigned inherited =
-        Disabled | Focus | FocusWithin | ReadOnly | Valid | Invalid | Intermediate | PlaceholderShown | Empty;
-    for (std::size_t partIndex = 0; partIndex < widget.m_StyleParts.size(); ++partIndex)
-    {
-        auto& part = widget.m_StyleParts[partIndex];
-        const unsigned common = widget.m_Node.m_State & (inherited | (part.m_Animated ? Hover | Pressed : 0u));
-        part.m_ActiveState = part.m_State | common;
-        for (std::size_t variant = 0; variant < part.m_States.size(); ++variant)
+        const auto previous = widget.m_Style;
+        Invalidation changed = Invalidation::None;
+        widget.m_StyleDirty = true;
+        try
         {
-            const unsigned state = part.m_States[variant] | common;
-            part.m_Assignments[variant] = m_StyleSheet.CompilePart(widget.m_Node, part.m_Name, state);
-            auto style = part.m_Defaults(widget.m_Style, state);
-            part.m_Assignments[variant](style);
-            if (!part.m_Animated)
+            widget.m_Node.m_Parent = widget.m_Parent ? &widget.m_Parent->m_Node : nullptr;
+            for (const auto& popup : m_OwnedPopups)
+                if (popup.m_Popup.Get() == &widget)
+                    if (auto* owner = popup.m_Owner.Get(); owner && owner->GetContext() == this)
+                    {
+                        widget.m_Node.m_Parent = &owner->m_Node;
+                        parent = &owner->m_Style;
+                    }
+            widget.m_Node.m_State &= ~FocusWithin;
+            for (auto* focused = m_Focus.Get(); focused;)
             {
-                style.m_Transitions.clear();
-                style.m_Animations.clear();
+                if (focused == &widget)
+                {
+                    widget.m_Node.m_State |= FocusWithin;
+                    break;
+                }
+                auto* next = focused->m_Parent;
+                for (const auto& popup : m_OwnedPopups)
+                    if (popup.m_Popup.Get() == focused)
+                        if (auto* owner = popup.m_Owner.Get())
+                            next = owner;
+                focused = next;
             }
-            part.m_Palette[variant] = std::move(style);
-            ++m_Stats.m_StyleResolutions;
+            if (!widget.m_Visible)
+            {
+                widget.m_Style.m_Displayed = false;
+                widget.m_SubtreeStyleDirty = false;
+                widget.m_DescendantStyleDirty = true;
+                if (m_ResetMeasurements)
+                {
+                    const auto reset = [&](auto&& self, Widget& node) -> void
+                    {
+                        node.m_IntrinsicValid = node.m_MeasureValid = false;
+                        node.m_ArrangeDirty = true;
+                        for (auto& child : node.m_Children)
+                            self(self, *child);
+                    };
+                    for (auto& child : widget.m_Children)
+                        reset(reset, *child);
+                }
+                if (previous.m_Displayed)
+                    Invalidate(widget, Invalidation::Content);
+                return;
+            }
+            if (widget.IsEnabled())
+                widget.m_Node.m_State &= ~Disabled;
+            else
+                widget.m_Node.m_State |= Disabled;
+            widget.m_Style = m_CssMotion->Resolve(widget, 0, m_StyleSheet.Compute(widget.m_Node, parent), m_StyleSheet);
+            widget.m_CascadedStyle = widget.m_Style;
+            for (int layer = 1; layer <= 2; ++layer)
+                m_CssMotion->Resolve(widget, layer, m_StyleSheet.Compute(widget.m_Node, &widget.m_Style, layer), m_StyleSheet);
+            m_Stats.m_StyleResolutions += 3;
+            for (const auto& [property, value] : widget.m_StyleOverrides)
+                SetStyleValue(widget.m_Style, property, value);
+            widget.m_Style.m_Displayed = widget.m_Style.m_Displayed && widget.m_Visible;
+            widget.m_Style.m_MaxWidth = std::max(widget.m_Style.m_MaxWidth, widget.m_Style.m_MinWidth);
+            widget.m_Style.m_MaxHeight = std::max(widget.m_Style.m_MaxHeight, widget.m_Style.m_MinHeight);
+            const auto applySize = [](const std::optional<SizeRule>& rule, Length& length, float& minimum, float& maximum)
+            {
+                if (!rule)
+                    return;
+                minimum = rule->m_Minimum;
+                maximum = rule->m_Maximum;
+                length = rule->m_Mode == SizeRule::Mode::Fixed  ? Length{Length::Unit::Pixels, rule->m_Value}
+                         : rule->m_Mode == SizeRule::Mode::Fill ? Length{Length::Unit::Fraction, rule->m_Value}
+                                                                : Length{};
+            };
+            applySize(widget.m_WidthRule, widget.m_Style.m_Width, widget.m_Style.m_MinWidth, widget.m_Style.m_MaxWidth);
+            applySize(widget.m_HeightRule, widget.m_Style.m_Height, widget.m_Style.m_MinHeight, widget.m_Style.m_MaxHeight);
+            if (widget.m_Direction)
+                widget.m_Style.m_Row = *widget.m_Direction == Axis::Horizontal;
+            if (widget.m_Gap)
+                widget.m_Style.m_Gap = *widget.m_Gap;
+            constexpr unsigned inherited =
+                Disabled | Focus | FocusWithin | ReadOnly | Valid | Invalid | Intermediate | PlaceholderShown | Empty;
+            for (std::size_t partIndex = 0; partIndex < widget.m_StyleParts.size(); ++partIndex)
+            {
+                auto& part = widget.m_StyleParts[partIndex];
+                const unsigned common = widget.m_Node.m_State & (inherited | (part.m_Animated ? Hover | Pressed : 0u));
+                part.m_ActiveState = part.m_State | common;
+                for (std::size_t variant = 0; variant < part.m_States.size(); ++variant)
+                {
+                    const unsigned state = part.m_States[variant] | common;
+                    part.m_Assignments[variant] = m_StyleSheet.CompilePart(widget.m_Node, part.m_Name, state);
+                    auto style = part.m_Defaults(widget.m_Style, state);
+                    part.m_Assignments[variant](style);
+                    if (!part.m_Animated)
+                    {
+                        style.m_Transitions.clear();
+                        style.m_Animations.clear();
+                    }
+                    for (int index = 0; index < static_cast<int>(StyleProperty::Count); ++index)
+                    {
+                        const auto property = static_cast<StyleProperty>(index);
+                        if (GetStyleValue(part.m_Palette[variant], property) != GetStyleValue(style, property))
+                            changed |= GetStylePropertyInvalidation(property) & Invalidation::Content;
+                    }
+                    part.m_Palette[variant] = std::move(style);
+                    ++m_Stats.m_StyleResolutions;
+                }
+                if (part.m_Animated)
+                    part.m_Presentation = m_CssMotion->Resolve(
+                        widget, static_cast<int>(partIndex + 3),
+                        part.m_Palette[Widget::PartIndex(part.m_StateMask, part.m_ActiveState)], m_StyleSheet);
+            }
+            ApplyPartOverrides(widget);
+            for (int index = 0; index < static_cast<int>(StyleProperty::Count); ++index)
+            {
+                const auto property = static_cast<StyleProperty>(index);
+                if (GetStyleValue(previous, property) != GetStyleValue(widget.m_Style, property))
+                    changed |= GetStylePropertyInvalidation(property);
+            }
+            forceChildren |= HasInvalidation(changed, Invalidation::InheritedStyle);
+            Invalidate(widget, changed & (Invalidation::Content | Invalidation::HitTest | Invalidation::Paint));
+            widget.m_StyleDirty = false;
         }
-        if (part.m_Animated)
-            part.m_Presentation = m_CssMotion->Resolve(
-                widget, static_cast<int>(partIndex + 3),
-                part.m_Palette[Widget::PartIndex(part.m_StateMask, part.m_ActiveState)], m_StyleSheet);
+        catch (...)
+        {
+            Invalidate(widget, Invalidation::Style | Invalidation::InheritedStyle | Invalidation::Content);
+            throw;
+        }
     }
-    ApplyPartOverrides(widget);
     for (auto& child : widget.m_Children)
-        Restyle(*child, &widget.m_Style);
+        Restyle(*child, &widget.m_Style, forceChildren);
+    widget.m_SubtreeStyleDirty = false;
+    widget.m_DescendantStyleDirty = false;
 }
 
 void UiContext::RefreshStyleParts(Widget& widget)
@@ -519,8 +635,27 @@ Point UiContext::Measure(Widget& widget, float parentWidth, float parentHeight)
 {
     const auto& style = widget.m_Style;
     if (!style.m_Displayed)
+    {
+        widget.m_MeasuredSize = {};
+        widget.m_MeasureConstraints = {parentWidth, parentHeight};
+        widget.m_MeasureValid = true;
         return {};
-    Point size = widget.Measure(m_Font);
+    }
+    if (widget.m_MeasureValid && widget.m_MeasureConstraints.m_X == parentWidth &&
+        widget.m_MeasureConstraints.m_Y == parentHeight)
+    {
+        ++m_Stats.m_MeasureCacheHits;
+        return widget.m_MeasuredSize;
+    }
+    ++m_Stats.m_MeasureCalculations;
+    widget.m_ArrangeDirty = true;
+    if (!widget.m_IntrinsicValid)
+    {
+        ++m_Stats.m_Measurements;
+        widget.m_IntrinsicSize = widget.Measure(m_Font);
+        widget.m_IntrinsicValid = true;
+    }
+    Point size = widget.m_IntrinsicSize;
     const float width = style.m_Width.Resolve(parentWidth, parentWidth);
     const float height = style.m_Height.Resolve(parentHeight, parentHeight);
     const float innerWidth =
@@ -556,7 +691,9 @@ Point UiContext::Measure(Widget& widget, float parentWidth, float parentHeight)
     size.m_Y = std::clamp(
         style.m_Height.m_Unit == Length::Unit::Fraction ? 0.0f : style.m_Height.Resolve(parentHeight, size.m_Y),
         style.m_MinHeight, style.m_MaxHeight);
-    m_Measurements[&widget] = size;
+    widget.m_MeasuredSize = size;
+    widget.m_MeasureConstraints = {parentWidth, parentHeight};
+    widget.m_MeasureValid = true;
     return size;
 }
 
@@ -564,6 +701,15 @@ void UiContext::Layout(Widget& widget, Rect bounds, Rect clip)
 {
     bounds.m_X += widget.m_Style.m_TranslateX;
     bounds.m_Y += widget.m_Style.m_TranslateY;
+    const auto equal = [](Rect left, Rect right)
+    {
+        return left.m_X == right.m_X && left.m_Y == right.m_Y && left.m_Width == right.m_Width &&
+               left.m_Height == right.m_Height;
+    };
+    if (!widget.m_ArrangeDirty && equal(widget.m_Bounds, bounds) && equal(widget.m_Clip, clip))
+        return;
+    ++m_Stats.m_Arrangements;
+    widget.m_ArrangeDirty = true;
     widget.m_Bounds = bounds;
     widget.m_Clip = clip;
     widget.OnLayout();
@@ -572,20 +718,21 @@ void UiContext::Layout(Widget& widget, Rect bounds, Rect clip)
     const auto& style = widget.m_Style;
     std::vector<Widget*> children;
     std::vector<LayoutItem> items;
+    std::vector<Point> measuredSizes;
     float margins = 0;
     for (auto& child : widget.m_Children)
     {
         const auto& childStyle = child->m_Style;
         if (!childStyle.m_Displayed || child->m_Overlay || child->m_FloatingBounds)
             continue;
-        auto size = m_Measurements[child.get()];
+        auto size = child->m_MeasuredSize;
         if (childStyle.m_Width.m_Unit == Length::Unit::Percent)
             size.m_X = std::clamp(childStyle.m_Width.Resolve(content.m_Width, size.m_X), childStyle.m_MinWidth,
                                   childStyle.m_MaxWidth);
         if (childStyle.m_Height.m_Unit == Length::Unit::Percent)
             size.m_Y = std::clamp(childStyle.m_Height.Resolve(content.m_Height, size.m_Y), childStyle.m_MinHeight,
                                   childStyle.m_MaxHeight);
-        m_Measurements[child.get()] = size;
+        measuredSizes.push_back(size);
         const auto& dimension = style.m_Row ? childStyle.m_Width : childStyle.m_Height;
         const auto& margin = childStyle.m_Margin;
         margins += style.m_Row ? margin.m_Left + margin.m_Right : margin.m_Top + margin.m_Bottom;
@@ -599,7 +746,10 @@ void UiContext::Layout(Widget& widget, Rect bounds, Rect clip)
     const float gaps = children.empty() ? 0 : gap * static_cast<float>(children.size() - 1);
     const float available = style.m_Row ? content.m_Width : content.m_Height;
     const auto allocation = EStudioUI::Layout::Distribute(available - margins - gaps, items);
-    if (allocation.m_Overflow > 0.01f || margins + gaps > available + 0.01f)
+    std::erase_if(m_OverflowingContainers, [&widget](const WidgetRef& reference)
+                  { return !reference.Get() || reference.Get() == &widget; });
+    widget.m_Overflowing = allocation.m_Overflow > 0.01f || margins + gaps > available + 0.01f;
+    if (widget.m_Overflowing)
         m_OverflowingContainers.emplace_back(&widget);
     float position = style.m_Row ? content.m_X : content.m_Y;
     if (style.m_Justify == "center")
@@ -613,7 +763,7 @@ void UiContext::Layout(Widget& widget, Rect bounds, Rect clip)
         auto& child = *children[i];
         const auto& childStyle = child.m_Style;
         const auto& margin = childStyle.m_Margin;
-        const auto size = m_Measurements[&child];
+        const auto size = measuredSizes[i];
         const float before = style.m_Row ? margin.m_Left : margin.m_Top;
         const float after = style.m_Row ? margin.m_Right : margin.m_Bottom;
         const float crossBefore = style.m_Row ? margin.m_Top : margin.m_Left;
@@ -640,18 +790,19 @@ void UiContext::Layout(Widget& widget, Rect bounds, Rect clip)
     for (auto& child : widget.m_Children)
         if (child->m_Style.m_Displayed && child->m_FloatingBounds && !child->m_Overlay)
             Layout(*child, *child->m_FloatingBounds, childClip);
+    widget.m_ArrangeDirty = !widget.m_MeasureValid;
 }
 
 void UiContext::Prepare(float width, float height)
 {
     const auto ownerLifetime = RetainOwner();
     VerifyAccess();
-    VerifyDispatchPhase();
+    VerifyTraversalEntry();
     PruneOwnedPopups();
     width = std::max(1.0f, width);
     height = std::max(1.0f, height);
     if (width != m_Width || height != m_Height)
-        Invalidate();
+        Invalidate(m_Root, Invalidation::Arrange | Invalidation::HitTest | Invalidation::Paint);
     m_Width = width;
     m_Height = height;
     if (auto* focused = m_Focus.Get(); focused && !focused->IsEnabled())
@@ -663,7 +814,10 @@ void UiContext::Prepare(float width, float height)
     }
     if (!m_Dirty)
         return;
-    Restyle(m_Root, nullptr);
+    const bool fullStyle = m_FullStyleDirty;
+    Restyle(m_Root, nullptr, fullStyle);
+    m_FullStyleDirty = false;
+    m_ResetMeasurements = false;
     const auto ownedPopup = std::find_if(m_OwnedPopups.begin(), m_OwnedPopups.end(), [this](const OwnedPopup& entry)
                                          { return entry.m_Popup.Get() == m_Popup.Get(); });
     if (m_Popup.Get() && ownedPopup != m_OwnedPopups.end())
@@ -672,13 +826,13 @@ void UiContext::Prepare(float width, float height)
         if (!owner || !owner->IsVisible() || !owner->IsEnabled())
         {
             ClosePopup();
-            Restyle(m_Root, nullptr);
+            Restyle(m_Root, nullptr, m_FullStyleDirty);
         }
     }
     if (auto* popup = m_Popup.Get(); popup && (!popup->IsVisible() || !popup->IsEnabled()))
     {
         ClosePopup();
-        Restyle(m_Root, nullptr);
+        Restyle(m_Root, nullptr, m_FullStyleDirty);
     }
     const auto visible = [](Widget* widget)
     {
@@ -700,22 +854,27 @@ void UiContext::Prepare(float width, float height)
         statesChanged = true;
     }
     if (statesChanged)
-        Restyle(m_Root, nullptr);
-    Arrange();
-    m_Dirty = false;
+        Restyle(m_Root, nullptr, m_FullStyleDirty);
+    if (m_Root.m_ArrangeDirty || !m_Root.m_MeasureValid)
+        Arrange();
+    m_HitTestDirty = false;
     if (RefreshHover())
     {
-        Restyle(m_Root, nullptr);
-        Arrange();
-        m_Dirty = false;
+        const bool hoverStyle = m_FullStyleDirty;
+        Restyle(m_Root, nullptr, hoverStyle);
+        m_FullStyleDirty = false;
+        if (m_Root.m_ArrangeDirty || !m_Root.m_MeasureValid)
+            Arrange();
     }
+    m_Dirty = m_FullStyleDirty || m_Root.m_SubtreeStyleDirty || m_Root.m_ArrangeDirty ||
+              !m_Root.m_MeasureValid || m_HitTestDirty;
 }
 
 void UiContext::Arrange()
 {
     ++m_Stats.m_LayoutPasses;
-    m_Measurements.clear();
-    m_OverflowingContainers.clear();
+    std::erase_if(m_OverflowingContainers, [](const WidgetRef& reference)
+                  { const auto* widget = reference.Get(); return !widget || !widget->IsVisible(); });
     {
         const PhaseScope phase(*this, UiPhase::Measure);
         Measure(m_Root, m_Width, m_Height);
@@ -724,7 +883,7 @@ void UiContext::Arrange()
     Layout(m_Root, {0, 0, m_Width, m_Height}, {0, 0, m_Width, m_Height});
     if (auto* popup = m_Popup.Get(); popup && popup->IsVisible())
     {
-        const auto measured = m_Measurements[popup];
+        const auto measured = popup->m_MeasuredSize;
         const float popupWidth = std::min(m_Width, measured.m_X);
         const float popupHeight = std::min(m_Height, measured.m_Y);
         Layout(*popup,
@@ -769,7 +928,7 @@ void UiContext::Paint(Renderer& renderer, double time)
 {
     const auto ownerLifetime = RetainOwner();
     VerifyAccess();
-    VerifyDispatchPhase();
+    VerifyTraversalEntry();
     const PhaseScope phase(*this, UiPhase::Paint);
     m_Repaint = false;
     try
@@ -935,7 +1094,7 @@ void UiContext::SetFocus(Widget* widget)
     const WidgetRef next(widget);
     const auto previousFocus = m_Focus;
     m_Focus = next;
-    Invalidate();
+    Invalidate(m_Root, Invalidation::Selector);
     if (auto* previous = previousFocus.Get())
     {
         previous->SetState(Focus, false);
@@ -1207,7 +1366,7 @@ void UiContext::PrepareSurfaces(double time, float scaleX, float scaleY)
 {
     const auto ownerLifetime = RetainOwner();
     VerifyAccess();
-    VerifyDispatchPhase();
+    VerifyTraversalEntry();
     if (!std::isfinite(scaleX) || !std::isfinite(scaleY) || scaleX <= 0 || scaleY <= 0)
         throw std::invalid_argument("Surface pixel scales must be finite and positive.");
     const PhaseScope phase(*this, UiPhase::SurfacePreparation);
@@ -1247,7 +1406,7 @@ void UiContext::FrameSubmitted()
 {
     const auto ownerLifetime = RetainOwner();
     VerifyAccess();
-    VerifyDispatchPhase();
+    VerifyTraversalEntry();
     const PhaseScope phase(*this, UiPhase::Submission);
     const auto visit = [&](auto&& self, Widget& widget) -> void
     {

@@ -4,6 +4,7 @@
 #include "Widget.h"
 #include "AnimationSystem.h"
 #include "UiHandle.h"
+#include "StateStore.h"
 
 #include <functional>
 #include <stdexcept>
@@ -41,8 +42,20 @@ struct UiStats
     //! Number of computed widget or decorative styles.
     std::size_t m_StyleResolutions = 0;
 
-    //! Number of complete measurement and arrangement passes.
+    //! Number of layout updates begun after geometry invalidation.
     std::size_t m_LayoutPasses = 0;
+
+    //! Number of intrinsic measurement hooks invoked by the layout engine.
+    std::size_t m_Measurements = 0;
+
+    //! Number of aggregate widget measurements computed for actual constraints.
+    std::size_t m_MeasureCalculations = 0;
+
+    //! Number of aggregate measurements reused for unchanged constraints.
+    std::size_t m_MeasureCacheHits = 0;
+
+    //! Number of widgets whose arrangement and layout hook executed.
+    std::size_t m_Arrangements = 0;
 };
 
 //! Owns one window's widget tree, style resolution, layout, and input routing.
@@ -129,6 +142,9 @@ class UiContext
 
     //! Returns the window-local property animation scheduler.
     AnimationSystem& Animations();
+
+    //! Returns the lazily created observable state domain owned by this context.
+    StateStore& States();
 
     //! Animates existing widgets from current presentation to a parsed final stylesheet.
     AnimationId AnimateStyleSheet(std::string_view finalCss, const AnimationOptions& options, std::string& error);
@@ -260,11 +276,20 @@ class UiContext
     //! Rejects nested public traversals and dispatcher drains during a frame phase.
     void VerifyDispatchPhase() const;
 
+    //! Prevents frame traversal from observing staged values or incomplete binding updates.
+    void VerifyTraversalEntry() const;
+
+    //! Propagates a widget edit through its style and geometry dependencies.
+    void Invalidate(Widget& widget, Invalidation flags);
+
     //! Captures this context's owner independently of object lifetime.
     ThreadAffinity m_Affinity;
 
     //! Owns a synchronized queue that closes before widget/native teardown.
     UiDispatcher m_Dispatcher;
+
+    //! Owns observable state independently of widgets and expires it during context teardown.
+    std::unique_ptr<StateStore> m_States;
 
     //! Tracks guarded traversals without changing ordinary input callback semantics.
     mutable UiPhase m_Phase = UiPhase::Idle;
@@ -295,7 +320,7 @@ class UiContext
     std::vector<OwnedPopup> m_OwnedPopups;
 
     //! Recursively resolves inherited and state-dependent CSS.
-    void Restyle(Widget& widget, const Style* parent);
+    void Restyle(Widget& widget, const Style* parent, bool force = false);
 
     //! Computes intrinsic and explicit widget dimensions.
     Point Measure(Widget& widget, float parentWidth, float parentHeight);
@@ -367,8 +392,17 @@ class UiContext
     //! Caches the logical window height.
     float m_Height = 1;
 
-    //! Marks style and layout as invalid.
+    //! Marks pending style, geometry, or input dependency work.
     bool m_Dirty = true;
+
+    //! Requests conservative selector resolution without eagerly walking the tree.
+    bool m_FullStyleDirty = true;
+
+    //! Preserves the legacy whole-tree intrinsic invalidation escape hatch.
+    bool m_ResetMeasurements = true;
+
+    //! Requests input geometry refresh without invalidating CSS or layout.
+    bool m_HitTestDirty = true;
 
     //! Marks the framebuffer as needing repaint.
     bool m_Repaint = true;
@@ -387,9 +421,6 @@ class UiContext
 
     //! Stores the requested popup origin in logical window coordinates.
     Point m_PopupAnchor;
-
-    //! Caches one bottom-up measurement per visible node and prepare pass.
-    std::unordered_map<Widget*, Point> m_Measurements;
 
     //! Records explicit main-axis overflow for layout diagnostics.
     std::vector<WidgetRef> m_OverflowingContainers;

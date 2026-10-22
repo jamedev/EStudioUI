@@ -17,7 +17,7 @@ void Label::SetText(std::string text)
         return;
     m_Text = std::move(text);
     m_LayoutSize = -1;
-    Invalidate();
+    Invalidate(Invalidation::Content);
 }
 
 const std::string& Label::GetText() const
@@ -62,7 +62,7 @@ void Label::Paint(Renderer& renderer, FontFace& font, double time, float opacity
     EnsureLayout(font);
     const auto content = GetContentBounds();
     const auto clip = GetClip().Intersect(content);
-    const float height = Measure(font).m_Y;
+    const float height = GetIntrinsicSize().m_Y;
     float y = content.m_Y + std::max(0.0f, (content.m_Height - height) * 0.5f);
     auto color = GetStyle().m_Color;
     color.m_A *= opacity;

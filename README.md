@@ -12,6 +12,33 @@ current capabilities from proposed work and define delivery prerequisites.
 The [developer experience principles](DEVELOPER_EXPERIENCE.md) make simple,
 safe application code an acceptance requirement for every foundation change.
 
+## Typed state and incremental updates (0.10)
+
+Typed values now support validation, immutable snapshots, and coherent batched
+commits. Bind existing editors, sliders, labels, toggles, visibility, or enabled
+state without writing synchronization callbacks:
+
+```cpp
+EStudioUI::State<double> amount(window.Ui().States(), 25.0);
+EStudioUI::BindValue(slider, amount);
+EStudioUI::BindValue(number, amount);
+```
+
+Include `EStudioUI/Bindings.h` for the binding helpers. The **State** tab is a
+working example of shared controls, transactional presets and rollback, derived
+readouts, and coalesced worker publication. Bindings retire with their receiver
+or state. Control-origin validation failures restore the canonical value and
+remain inspectable; state-origin candidates are validated before publication.
+
+Content changes now invalidate their measurement dependency path while retaining
+unrelated style and intrinsic measurement caches. Paint-only changes keep layout
+cached; unchanged layout subtrees are skipped. Selector-dependent changes retain
+a conservative selector pass for correctness. Custom widgets can declare their
+change impacts through `Invalidate(Invalidation::Content)` or finer flags.
+See [STATE.md](STATE.md) and [0.10 verification](verification/STATE_0_10.md).
+
+![Typed state and bindings rendered by EStudioUI](verification/state-foundation.png)
+
 ## Execution and lifetime foundations (0.9)
 
 One application loop now services all windows. Typed UI handles queue updates
@@ -32,8 +59,8 @@ The **Async** tab builds a 200,000-item scene and BVH on a worker, publishes it
 to a live canvas, and demonstrates replacement, cancellation, receiver deletion,
 and another window. See [THREADING.md](THREADING.md) for the common workflow and
 the exact lifetime/error rules. See [foundation verification](verification/FOUNDATIONS_0_9.md)
-for concurrency and actual framebuffer evidence. State bindings and shared data
-models are the next foundation gate.
+for concurrency and actual framebuffer evidence. Shared collection models and
+selection remain part of the next foundation work.
 
 ![Worker-built canvas rendered by EStudioUI](verification/foundation-async.png)
 
@@ -280,7 +307,7 @@ UI owner and retire when it disappears. Both support connection mutation and
 sender deletion. Live widget access remains owner-only; use typed handles for
 cross-thread delivery. See [THREADING.md](THREADING.md).
 
-The demo opens on Async. Data & actions has 10,000 table rows and 2,006 list items.
+The demo opens on State. Data & actions has 10,000 table rows and 2,006 list items.
 Only viewport rows are painted. Inputs preserves the original editor/button
 examples; 3D surfaces has two independent orbit/zoom scenes; Layout lab exposes
 fixed and bounded Fill behavior at different native window sizes.

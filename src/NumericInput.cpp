@@ -68,6 +68,8 @@ void NumericInput::SetRange(double minimum, double maximum)
     const auto ownerLease = RetainOwner();
     if (!std::isfinite(minimum) || !std::isfinite(maximum) || minimum > maximum)
         throw std::invalid_argument("Numeric input bounds must be finite and ordered.");
+    if (m_Minimum == minimum && m_Maximum == maximum)
+        return;
     m_Minimum = minimum;
     m_Maximum = maximum;
     const auto revision = ++m_ValueRevision;
@@ -94,6 +96,8 @@ void NumericInput::SetStep(double step)
     VerifyAccess();
     if (!std::isfinite(step) || step <= 0)
         throw std::invalid_argument("Numeric input step must be finite and positive.");
+    if (m_Step == step)
+        return;
     m_Step = step;
 }
 
@@ -130,6 +134,8 @@ void NumericInput::SetValue(double value)
         throw std::invalid_argument("Numeric input value must be finite.");
     value = std::clamp(value, m_Minimum, m_Maximum);
     const bool changed = value != m_Value;
+    if (!changed && m_Editor->GetText() == FormatValue())
+        return;
     m_Value = value;
     const auto revision = ++m_ValueRevision;
     const WidgetRef lifetime(this);

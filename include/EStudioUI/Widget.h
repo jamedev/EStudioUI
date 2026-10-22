@@ -5,6 +5,7 @@
 #include "Layout.h"
 #include "SizeRule.h"
 #include "StyleProperty.h"
+#include "Invalidation.h"
 #include "ThreadAffinity.h"
 
 #include <memory>
@@ -21,6 +22,10 @@ class UiContext;
 class CssMotion;
 class FontFace;
 class Renderer;
+namespace Detail
+{
+class BindingAccess;
+}
 
 //! A persistent widget and flex container with explicit child ownership.
 class Widget
@@ -163,6 +168,7 @@ class Widget
   protected:
     friend class UiContext;
     friend class WidgetRef;
+    friend class Detail::BindingAccess;
 
     //! Rejects tree mutation during style, measurement, layout, surfaces, or painting.
     void VerifyStructuralMutation() const;
@@ -172,6 +178,9 @@ class Widget
 
     //! Returns intrinsic content size before padding, border, and explicit CSS.
     virtual Point Measure(FontFace& font) const;
+
+    //! Returns this widget's last prepared intrinsic size without invoking its measurement hook.
+    Point GetIntrinsicSize() const;
 
     //! Appends this widget's own drawing commands.
     virtual void Paint(Renderer& renderer, FontFace& font, double time, float opacity) const;
@@ -218,6 +227,9 @@ class Widget
     //! Requests style/layout reevaluation and a new frame.
     void Invalidate();
 
+    //! Requests only the derived work described by the supplied impacts.
+    void Invalidate(Invalidation flags);
+
     //! Requests painting without repeating style resolution or layout.
     void RequestRepaint();
 
@@ -248,6 +260,39 @@ class Widget
 
     //! Stores the last computed style.
     Style m_Style;
+
+    //! Retains the last CSS presentation beneath explicit property overrides.
+    Style m_CascadedStyle;
+
+    //! Marks this node's computed CSS and part palettes for resolution.
+    bool m_StyleDirty = true;
+
+    //! Marks a style dependency somewhere in this physical subtree.
+    bool m_SubtreeStyleDirty = true;
+
+    //! Forces descendant resolution after inherited presentation or visibility changes.
+    bool m_DescendantStyleDirty = true;
+
+    //! Marks this container's allocation path for arrangement.
+    bool m_ArrangeDirty = true;
+
+    //! Retains the last intrinsic result independently of available constraints.
+    Point m_IntrinsicSize;
+
+    //! Reports whether the intrinsic content result remains reusable.
+    bool m_IntrinsicValid = false;
+
+    //! Retains the aggregate measurement before arrangement adjustments.
+    Point m_MeasuredSize;
+
+    //! Stores the exact parent constraints used by the aggregate measurement.
+    Point m_MeasureConstraints;
+
+    //! Reports whether the aggregate measurement remains reusable.
+    bool m_MeasureValid = false;
+
+    //! Preserves overflow diagnostics when arrangement skips this container.
+    bool m_Overflowing = false;
 
     //! Stores typed presentation overrides without modifying the stylesheet.
     std::map<StyleProperty, StyleValue> m_StyleOverrides;
@@ -282,6 +327,9 @@ class Widget
 
     //! Converts varying state flags into a dense palette index.
     static std::size_t PartIndex(unsigned mask, unsigned state);
+
+    //! Refreshes compiled part defaults after direct owner presentation changes.
+    void RefreshStyleParts();
 
     //! Owns at most 32 parts; stable indices map to motion layers starting at three.
     std::vector<StylePart> m_StyleParts;

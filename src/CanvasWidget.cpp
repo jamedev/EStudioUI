@@ -361,7 +361,7 @@ void CanvasWidget::SetCamera(CanvasPoint center, double zoom)
     if (m_Hosts.empty())
         RequestRepaint();
     else
-        Invalidate();
+        Invalidate(Invalidation::Arrange | Invalidation::HitTest | Invalidation::Paint);
     m_ViewChanged.Emit();
 }
 
@@ -403,6 +403,8 @@ void CanvasWidget::SetGridVisible(bool visible)
 void CanvasWidget::SetPanMode(bool enabled)
 {
     VerifyAccess();
+    if (m_PanMode == enabled)
+        return;
     m_PanMode = enabled;
 }
 
@@ -481,6 +483,8 @@ void CanvasWidget::SetPreview(std::vector<CanvasGeometry> geometry, std::uint32_
         if (!Finite(item.m_A) || !Finite(item.m_B) || !std::isfinite(item.m_Radius) || item.m_Radius < 0 ||
             !Finite(item.Bounds()))
             throw std::invalid_argument("Canvas preview geometry must be finite.");
+    if (m_Preview == geometry && m_PreviewStyle == style)
+        return;
     m_Preview = std::move(geometry);
     m_PreviewStyle = style;
     RequestRepaint();
@@ -491,6 +495,8 @@ void CanvasWidget::SetSelectionRectangle(std::optional<CanvasBounds> bounds)
     VerifyAccess();
     if (bounds && !Finite(*bounds))
         throw std::invalid_argument("Canvas selection bounds must be finite and nonnegative.");
+    if (m_SelectionRectangle == bounds)
+        return;
     m_SelectionRectangle = bounds;
     RequestRepaint();
 }

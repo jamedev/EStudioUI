@@ -16,6 +16,8 @@ ToolButton::ToolButton(std::string text) : Button(std::move(text), "toolbutton")
 void ToolButton::SetCheckable(bool checkable)
 {
     VerifyAccess();
+    if (m_Checkable == checkable)
+        return;
     m_Checkable = checkable;
 }
 

@@ -8,6 +8,13 @@
 - Treat DEVELOPER_EXPERIENCE.md as a public API acceptance gate: keep the common
   path small, defaults safe, advanced behavior explicit, and diagnostics useful.
   Compile documented examples and review actual call sites before accepting new APIs.
+- Use State/StateStore and Bindings for shared application values. Preserve
+  final-candidate validation, coherent commit/rollback, owned snapshots, bounded
+  reentrant notifications, and receiver-bound teardown. State reads are valid
+  during painting; mutations during traversal and nested UI frame/event-loop/queue processing are diagnosed.
+- Declare built-in changes with the narrowest correct Invalidation impacts.
+  Keep selector/inheritance dependencies correct and preserve unrelated intrinsic
+  measurements. Verify work counters and actual pixels when changing cache behavior.
 - Use C++20. Keep each public class in a .h/.cpp pair; templates may be defined
   in headers. Headers use brief Doxygen //! comments for every method/member.
   Put detailed explanations in .cpp files only when the behavior needs them.

@@ -10,7 +10,7 @@ The goal is a dependable C++ GUI foundation for the applications described in
 input, layout, text, and resource contracts before many controls depend on
 different local solutions. Retain the working GPU renderer and existing tests.
 
-## Implementation status: 0.9
+## Implementation status: 0.10 and the first Gate B slice
 
 **Gate A is implemented.** F01-F04 now have public APIs, lifetime/phase/error
 contracts, concurrency tests, and actual multiwindow/framebuffer probes.
@@ -19,22 +19,35 @@ contracts, concurrency tests, and actual multiwindow/framebuffer probes.
 measured evidence and platform limits. The original illustrative `Task::ThenOnUi`
 proposal became receiver-bound `BackgroundTasks::Run` / `RunLatest`.
 
+**The first F05/F07 slice is implemented; Gate B remains open.** Typed state,
+coherent transactions, built-in/custom bindings, and targeted invalidation now
+have public APIs. [STATE.md](STATE.md) documents their delivered contracts and
+examples. [verification/STATE_0_10.md](verification/STATE_0_10.md) records the
+Release, sanitizer, work-counter, and actual framebuffer evidence for this slice
+and its remaining platform limits.
+
 | Topics | Current status |
 | --- | --- |
 | F01-F04 | Implemented: shared application loop, bounded dispatch, typed handles, receiver-bound signals, cooperative tasks, progress, stale-request suppression |
+| F05 | First slice implemented: typed owner-side state, final-candidate validation, coherent revisions, nested savepoints, bounded reentrant notification, lifetime-bound control/custom bindings; verified by CPU and actual framebuffer probes |
+| F07 | First slice implemented: explicit style/measure/arrange/hit-test/paint impacts, intrinsic/aggregate measurement caches, dependency-aware arrangement, and work counters; verified by the 10,000-widget work fixture and actual framebuffer checks |
 | F13 | Gate A baseline implemented: owner checks, traversal phase guards, deferred mutation, receipt/task failures, queue counters; visual inspector remains planned |
 | F15 | Gate A concurrency/lifetime/framebuffer coverage implemented; native hardware and broader platform coverage remain open |
-| F05-F12, F14, F16 | Planned, with the existing baseline capabilities described below |
+| F06, F08, F09, F11, F14 | Remaining Gate B work: external models/selection, constrained layout strategies, input/focus/commands, semantic/platform interfaces, and install/export consumer integration |
+| F10, F12, F16 | Planned, with the existing baseline capabilities described below |
 
 Ease of use is a standing acceptance criterion, not a separate polish phase.
 [DEVELOPER_EXPERIENCE.md](DEVELOPER_EXPERIENCE.md) defines the review rules:
 concise common paths, safe lifetime defaults, clear errors, and explicit advanced
-control. No runtime dependency was added for Gate A.
+control. No runtime dependency was added for Gate A or the first F05/F07 slice.
 
-**Next: Gate B, beginning with F05/F07.** Define typed observable state and batched
-transactions alongside precise invalidation impacts. Prove coherent updates and
-unrelated-cache reuse before external models, layout strategies, input/semantic
-contracts, and package integration. Broad widget expansion remains gated.
+**Next: continue Gate B with shared models and selection (F06).** Build on the
+coherent state and invalidation contracts with stable model identities, shared
+selection, and viewport-only access. F06/F08/F09/F11/F14 remain open; shared scalar
+state does not establish external collection models, constrained
+wrapping/baselines, nested popup/focus
+contracts, semantic interfaces, or installed SDK consumer support. Broad widget
+expansion remains gated.
 
 ## Original assessment of the 0.8 implementation
 
@@ -320,7 +333,8 @@ stable IDs, with migration and malformed-state handling.
 
 ## Delivery gates and evidence
 
-These are acceptance fixtures; the 0.9 status/evidence above records Gate A results.
+These are acceptance fixtures; the status/evidence above records Gate A results
+and the verified first F05/F07 implementation slice. Gate B remains open.
 Record observed work and named hardware; avoid arbitrary FPS claims.
 
 | Gate | Work to close | Acceptance evidence | Widget work unlocked |
