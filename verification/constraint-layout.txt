@@ -1,0 +1,29 @@
+Window 880: sidebar 220, document 592 x 385.176; 12 px spacing; badge 2:1.
+Window 1180: sidebar 220, document 892 x 404.244; 12 px spacing; badge 2:1.
+Window 1520: sidebar 220, document 1232 x 404.244; 12 px spacing; badge 2:1.
+Paint-only layout/arrange delta: 0/0. Retained/full framebuffer equality: PASS. Idle draw calls: 0.
+Constraints #constraint-body: content 1124 x 476.244, preferred 1124 x 476.244
+  Content hook: preferred 0 x 0
+  #constraint-sidebar [100600] Fill(1) / Fill(1): preferred 220 x 404.244, minimum 160 x 200, maximum 240 x 1e+06, allocated (0, 0) 220 x 404.244
+  #constraint-document [100619] Fill(1) / Fill(1): preferred 892 x 404.244, minimum 200 x 200, maximum 1e+06 x 1e+06, allocated (232, 0) 892 x 404.244
+  #constraint-footer [100624] Fill(1) / Fixed(60): preferred 1124 x 60, minimum 100 x 60, maximum 1e+06 x 60, allocated (0, 416.244) 1124 x 60
+  #constraint-ratio [100626] Fill(1) / Content: preferred 120 x 60, minimum 24 x 20, maximum 1e+06 x 1e+06, allocated (988, 328.244) 120 x 60
+  Rule 'rule 1' [Required, satisfied]: 1 * @100600.left + 0 == 0; error 0
+  Rule 'rule 2' [Required, satisfied]: 1 * @100600.top + 0 == 0; error 0
+  Rule 'rule 3' [Required, satisfied]: 1 * @100600.top + 1 * @100600.height + -1 * @100624.top + 12 == 0; error 0
+  Rule 'sidebar preference' [Strong, satisfied]: 1 * @100600.width + -220 == 0; error 0
+  Rule 'rule 5' [Required, satisfied]: 1 * @100619.left + -1 * @100600.left + -1 * @100600.width + -12 == 0; error 0
+  Rule 'rule 6' [Required, satisfied]: 1 * @100619.left + 1 * @100619.width + -1 * parent.left + -1 * parent.width + 0 == 0; error 0
+  Rule 'rule 7' [Required, satisfied]: 1 * @100619.top + 0 == 0; error 0
+  Rule 'rule 8' [Required, satisfied]: 1 * @100619.top + 1 * @100619.height + -1 * @100624.top + 12 == 0; error 0
+  Rule 'rule 9' [Required, satisfied]: 1 * @100624.left + 0 == 0; error 0
+  Rule 'rule 10' [Required, satisfied]: 1 * @100624.left + 1 * @100624.width + -1 * parent.left + -1 * parent.width + 0 == 0; error 0
+  Rule 'rule 11' [Required, satisfied]: 1 * @100624.top + 1 * @100624.height + -1 * parent.top + -1 * parent.height + 0 == 0; error 0
+  Rule 'rule 12' [Required, satisfied]: 1 * @100626.left + 1 * @100626.width + -1 * @100619.left + -1 * @100619.width + 16 == 0; error 0
+  Rule 'rule 13' [Required, satisfied]: 1 * @100626.top + 1 * @100626.height + -1 * @100619.top + -1 * @100619.height + 16 == 0; error 0
+  Rule 'rule 14' [Required, satisfied]: 1 * @100626.width + -120 == 0; error 0
+  Rule 'rule 15' [Required, satisfied]: 1 * @100626.height + -0.5 * @100626.width + 0 == 0; error 0
+Production GLFW callbacks: 6 actual paint traversals at six intermediate sizes, before returning to the application loop.
+Resize style/intrinsic recalculations: 0/0; newly exposed framebuffer pixels: PASS.
+Refresh burst rate cap and state-batch traversal guard: PASS.
+Queued UI delivery and resize-during-paint reentrancy guard: PASS.

@@ -132,6 +132,26 @@ void FlushRetiredWindows()
     retired.clear();
 }
 
+bool CanServiceNativeFrame()
+{
+    return GetRuntime().m_DispatchDepth == 1;
+}
+
+double ServiceNativeWindows()
+{
+    double deadline = -1;
+    for (const auto& window : GetRuntime().Snapshot())
+    {
+        if (!window->m_IsOpen())
+            continue;
+        const ApplicationDispatchScope scope;
+        const double wake = window->m_Service();
+        if (wake >= 0 && (deadline < 0 || wake < deadline))
+            deadline = wake;
+    }
+    return deadline;
+}
+
 ApplicationDispatchScope::ApplicationDispatchScope()
 {
     VerifyApplicationAccess();

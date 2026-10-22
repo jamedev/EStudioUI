@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.24)
-project(EStudioUI VERSION 0.12.0 LANGUAGES C CXX)
+project(EStudioUI VERSION 0.13.0 LANGUAGES C CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -64,6 +64,7 @@ find_package(glfw3 3.4 CONFIG REQUIRED)
 find_package(Threads REQUIRED)
 find_package(Freetype 2.13 REQUIRED)
 find_package(harfbuzz CONFIG REQUIRED)
+find_path(ESTUDIOUI_KIWI_INCLUDE_DIR kiwi/kiwi.h REQUIRED)
 
 # The pinned utf8proc 2.10 port exports the unnamespaced target. Also accept the
 # newer upstream package name for users integrating with a newer registry.
@@ -83,6 +84,7 @@ add_library(EStudioUI STATIC
     src/Widget.cpp src/UiContext.cpp src/Label.cpp src/Button.cpp src/TextBox.cpp src/Window.cpp
     src/SizeRule.cpp src/Layout.cpp src/ToolButton.cpp src/ToolBar.cpp src/TabWidget.cpp
     src/Measure.cpp src/LayoutStrategy.cpp src/BoxLayout.cpp src/GridLayout.cpp src/FormLayout.cpp src/FlowLayout.cpp
+    src/ConstraintExpression.cpp src/Constraint.cpp src/ConstraintItem.cpp src/ConstraintLayout.cpp src/NativeResizePump.cpp
     src/ContextMenu.cpp src/ScrollWidget.cpp src/ListWidget.cpp src/TreeWidget.cpp src/TableWidget.cpp src/OpenGLWidget.cpp
     src/FramePacer.cpp src/VisualStyle.cpp src/CssMotion.cpp src/EasingCurve.cpp src/StyleProperty.cpp src/Animation.cpp src/AnimationSystem.cpp
     src/CanvasScene.cpp src/CanvasGeometry.cpp src/CanvasWidget.cpp src/SketchDocument.cpp src/SketchWidget.cpp
@@ -97,6 +99,10 @@ add_library(EStudioUI STATIC
 add_library(EStudioUI::EStudioUI ALIAS EStudioUI)
 target_compile_features(EStudioUI PUBLIC cxx_std_20)
 target_include_directories(EStudioUI PUBLIC include)
+target_include_directories(EStudioUI SYSTEM PRIVATE "${ESTUDIOUI_KIWI_INCLUDE_DIR}")
+if(WIN32)
+    target_link_libraries(EStudioUI PRIVATE comctl32)
+endif()
 target_link_libraries(EStudioUI PRIVATE EStudioUIGl glfw Freetype::Freetype harfbuzz::harfbuzz ${ESTUDIOUI_UTF8PROC_TARGET})
 target_link_libraries(EStudioUI PUBLIC Threads::Threads)
 if(MSVC)
@@ -115,8 +121,10 @@ if(ESTUDIOUI_BUILD_DEMO)
         demo/SketchGallery.cpp demo/CanvasPrimitiveProbe.cpp demo/CanvasProbe.cpp demo/CanvasCurvesProbe.cpp
         demo/CustomWidgetGallery.cpp demo/PainterProbe.cpp demo/InputControlsProbe.cpp
         demo/WidgetStylesGallery.cpp demo/WidgetStylesProbe.cpp demo/ApplicationProbe.cpp demo/FoundationGallery.cpp
-        demo/StateGallery.cpp demo/ModelGallery.cpp demo/LayoutGallery.cpp)
+        demo/StateGallery.cpp demo/ModelGallery.cpp demo/LayoutGallery.cpp demo/ConstraintGallery.cpp)
     target_link_libraries(EStudioUIDemo PRIVATE EStudioUI::EStudioUI EStudioUIGl glfw)
+    add_executable(EStudioUIConstraintExample examples/ConstraintLayout.cpp)
+    target_link_libraries(EStudioUIConstraintExample PRIVATE EStudioUI::EStudioUI)
     if(MSVC)
         target_compile_options(EStudioUIDemo PRIVATE /utf-8)
     endif()
@@ -134,7 +142,7 @@ if(ESTUDIOUI_BUILD_DEMO)
         VERBATIM
     )
     if(DEFINED VCPKG_INSTALLED_DIR AND DEFINED VCPKG_TARGET_TRIPLET)
-        foreach(port glfw3 freetype harfbuzz utf8proc)
+        foreach(port glfw3 freetype harfbuzz utf8proc kiwi)
             set(copyright "${VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}/share/${port}/copyright")
             if(EXISTS "${copyright}")
                 add_custom_command(TARGET EStudioUIDemo POST_BUILD
@@ -187,7 +195,7 @@ if(ESTUDIOUI_BUILD_TESTS)
     foreach(suite CanvasScene CanvasGeometry SketchDocument CanvasWidget InputControls SplitToolButton Painter
                   StyleParts StyledCollections StyledScroll CompositeStyle
                   Dispatch ThreadAffinity Task QueuedSignal ControlAffinity ServiceAffinity
-                  State Binding Invalidation ControlUpdate Model ModelView Layout)
+                  State Binding Invalidation ControlUpdate Model ModelView Layout ConstraintLayout)
         add_executable(EStudioUI${suite}Tests tests/${suite}Tests.cpp)
         target_link_libraries(EStudioUI${suite}Tests PRIVATE EStudioUI::EStudioUI)
         target_compile_definitions(EStudioUI${suite}Tests PRIVATE
@@ -197,6 +205,14 @@ if(ESTUDIOUI_BUILD_TESTS)
         endif()
         add_test(NAME ${suite} COMMAND EStudioUI${suite}Tests)
     endforeach()
+
+    if(WIN32)
+        add_executable(EStudioUINativeResizeTests tests/NativeResizeTests.cpp src/NativeResizePump.cpp)
+        target_include_directories(EStudioUINativeResizeTests PRIVATE src)
+        target_link_libraries(EStudioUINativeResizeTests PRIVATE comctl32)
+        add_test(NAME NativeResize COMMAND EStudioUINativeResizeTests)
+        set_tests_properties(NativeResize PROPERTIES TIMEOUT 20)
+    endif()
 
     if(ESTUDIOUI_GPU_TESTS AND TARGET EStudioUIDemo AND UNIX AND NOT APPLE)
         add_test(NAME GpuIntegration COMMAND EStudioUIDemo --headless --self-test --output "${CMAKE_CURRENT_BINARY_DIR}/verification")

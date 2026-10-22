@@ -198,6 +198,7 @@ class Widget
   protected:
     friend class UiContext;
     friend class WidgetRef;
+    friend class ConstraintItem;
     friend class Detail::BindingAccess;
 
     //! Rejects tree mutation during style, measurement, layout, surfaces, or painting.

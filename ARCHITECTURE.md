@@ -55,6 +55,13 @@ arrangements, constrained hooks and strategy computations from stylesheet resolu
 and layout passes. Owned reports expose actual child/track decisions. See
 [STATE.md](STATE.md) and [LAYOUT.md](LAYOUT.md).
 
+The optional `ConstraintLayout` expands stable child anchors into private Kiwi
+linear rows. Widget limits and fixed sizes precede named required constraints;
+soft rules minimize weighted error. Width-dependent content uses one horizontal
+solve and a vertical solve with frozen widths, without feedback iteration.
+Three bounded query variants retain incremental tableaux; owned reports contain
+rule expressions/status/residuals. See [CONSTRAINT_LAYOUT.md](CONSTRAINT_LAYOUT.md).
+
 The event loop waits for GLFW events when nothing changes. A focused editable
 text box wakes at its next half-second caret deadline. Visible continuous scene
 surfaces request paced animation ticks; idle/hidden scenes do not. `FramePacer`
@@ -63,6 +70,15 @@ independently of vsync. Input wakeups retain the deadline; slow draws/swaps do
 not accumulate catch-up frames. Minimized/invisible windows suspend presentation.
 Unfocused windows suspend it by default; `m_RenderWhenUnfocused` opts in to
 background rendering. Manual `RenderFrame` calls bypass the event-loop limit.
+
+Native size/refresh callbacks also service safe frames directly. A private Win32
+HWND subclass runs the shared window scheduler during system move/size/menu modal
+loops, with an exit-cancelled timer and the same frame deadlines. It does not
+poll nested events. Callback-depth, rendering/service, phase, and state-update
+guards defer unsafe work; context restoration and deferred native destruction
+remain enforced. Viewport changes invalidate arrangement/hit testing/paint while
+retaining CSS/intrinsic caches. See the 0.13 live-resize contract and verification;
+OS timers and hardware throughput still bound observed frame rate.
 
 Property timelines share the context's nondecreasing clock and advance before
 layout, external scene preparation, and painting. Running timelines request

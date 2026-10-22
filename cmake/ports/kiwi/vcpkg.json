@@ -1,0 +1,7 @@
+{
+  "name": "kiwi",
+  "version": "1.4.8",
+  "description": "Header-only Cassowary linear constraint solver",
+  "homepage": "https://github.com/nucleic/kiwi",
+  "license": "BSD-3-Clause AND MIT"
+}

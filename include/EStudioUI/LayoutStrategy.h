@@ -35,7 +35,10 @@ enum class LayoutIssue
 {
     Overflow,
     IndefinitePercentage,
-    ContentClipped
+    ContentClipped,
+    ConstraintConflict,
+    ConstraintInactive,
+    ConstraintRelaxed
 };
 
 //! Owned diagnostic data; no widget address or borrowed text is retained.
@@ -76,6 +79,8 @@ struct LayoutChild
     Insets m_Margin;
     //! Legacy CSS growth weight on a box layout's main axis.
     float m_Grow = 0;
+    //! Stable widget identity used by constraint anchors; never an ownership index.
+    std::uint64_t m_Target = 0;
 };
 
 //! A child rectangle relative to the container's content origin.
@@ -127,6 +132,21 @@ struct LayoutTrack
     float m_Allocated = 0;
 };
 
+//! An owned explanation of one optional linear rule after the last solve.
+struct LayoutConstraintDecision
+{
+    //! Application name, or an automatically assigned rule number.
+    std::string m_Name;
+    //! Compiled symbolic expression with stable child identities.
+    std::string m_Expression;
+    //! Required, Strong, Medium, or Weak.
+    std::string m_Strength;
+    //! Satisfied, relaxed, conflict, or inactive.
+    std::string m_Status;
+    //! Absolute normalized error; zero for an inactive rule.
+    float m_Error = 0;
+};
+
 //! Pure strategy input; callbacks are valid only during Compute and must not be retained.
 struct LayoutContext
 {
@@ -159,6 +179,8 @@ struct LayoutPlan
     std::vector<LayoutProblem> m_Problems;
     //! Track decisions for strategies that allocate shared tracks.
     std::vector<LayoutTrack> m_Tracks;
+    //! Named linear rules, when supplied by a constraint strategy.
+    std::vector<LayoutConstraintDecision> m_Constraints;
 };
 
 //! An owned snapshot explaining one child's last allocation.
@@ -193,6 +215,8 @@ struct LayoutReport
     std::vector<LayoutDiagnostic> m_Diagnostics;
     //! Shared track rules and allocations.
     std::vector<LayoutTrack> m_Tracks;
+    //! Owned linear-rule decisions, without solver or widget pointers.
+    std::vector<LayoutConstraintDecision> m_Constraints;
     //! Formats rules, measurements, allocations, and causes for inspection.
     std::string Explain() const;
 };

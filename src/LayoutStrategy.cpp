@@ -54,6 +54,9 @@ std::string LayoutReport::Explain() const
             << child.m_Rules.m_Maximum.m_Y << ", allocated (" << bounds.m_X << ", " << bounds.m_Y << ") "
             << bounds.m_Width << " x " << bounds.m_Height << '\n';
     }
+    for (const auto& constraint : m_Constraints)
+        out << "  Rule '" << constraint.m_Name << "' [" << constraint.m_Strength << ", " << constraint.m_Status
+            << "]: " << constraint.m_Expression << "; error " << constraint.m_Error << '\n';
     for (const auto& issue : m_Diagnostics)
         out << "  " << (issue.m_Axis == Axis::Horizontal ? "width" : "height") << " #" << issue.m_ChildId << ": "
             << issue.m_Message << " (available " << issue.m_Available << ", required " << issue.m_Required << ")\n";

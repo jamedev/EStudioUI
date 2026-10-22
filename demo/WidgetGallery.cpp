@@ -74,6 +74,7 @@ WidgetGallery::WidgetGallery(Window& window, TabWidget& tabs, const std::filesys
     m_Foundation = std::make_unique<FoundationGallery>(window, tabs.AddTab("Async"), assets);
     m_State = std::make_unique<StateGallery>(window, tabs.AddTab("State"), assets);
     m_Models = std::make_unique<ModelGallery>(window, tabs.AddTab("Models"), assets);
+    m_Constraints = std::make_unique<ConstraintGallery>(window, tabs.AddTab("Constraints"));
 }
 
 void WidgetGallery::BuildCollections(Widget& page)
@@ -275,6 +276,9 @@ void WidgetGallery::BuildLayouts(Widget& page)
     }
     toolbar.AddSeparator();
     toolbar.AddButton("Inspect sizes").Clicked().Connect([this] { UpdateLayoutReadout(); });
+    auto& constraints = toolbar.AddButton("Constraint layouts");
+    m_ConstraintShortcut = WidgetRef(&constraints);
+    constraints.Clicked().Connect([this] { m_Tabs.SetCurrentIndex(m_Tabs.GetTabCount() - 1); });
     Caption(page,
             "Resize the native window or choose a preset. Fixed and content sizes stay stable; Fill divides the "
             "remaining space.\nA capped Fill returns its unused share to the others. Hard minima overflow explicitly "
@@ -431,6 +435,11 @@ void WidgetGallery::Verify(const std::filesystem::path& assets, const std::files
     m_State->Verify(output);
     m_Tabs.SetCurrentIndex(11);
     m_Models->Verify(output);
+    m_Tabs.SetCurrentIndex(3);
+    m_Window.RenderFrame(ui.GetTime());
+    Click(ui, Center(*m_ConstraintShortcut.Get()));
+    Check(m_Tabs.GetCurrentIndex() == 12, "visible Layout lab shortcut opens the constraints page");
+    m_Constraints->Verify(assets, output);
     m_Window.RenderFrame(ui.GetTime());
     std::ofstream report(output / "widgets-report.txt");
     report << "EStudioUI 0.3 widget integration: PASS\n"

@@ -7,18 +7,24 @@ redistributing binaries. **This software uses the FreeType project
 
 Runtime packages come from `vcpkg.json`, pinned to the official registry's
 2025.04.09 baseline `ce613c41372b23b1f51333815feb3edd87ef8a8b`.
+Kiwi uses the project overlay in `cmake/ports/kiwi`, pinned to upstream tag
+1.4.8, tree `ee80a5e061a61c0ff6d47b7c61ef95d68766b232` and a SHA-512 archive checksum.
+It has no binary or transitive dependencies and is private to the implementation.
+Both its BSD license and the bundled AssocVector notice permit commercial use;
+its vcpkg copyright file includes both authoritative upstream texts.
 
 | Component | Version at baseline | Selected license | Purpose |
 | --- | --- | --- | --- |
 | GLFW | 3.4#1 | zlib/libpng | Windows, input, GL contexts |
 | FreeType | 2.13.3 | FTL | Unhinted font outlines |
 | HarfBuzz | 10.2.0#3 | Old MIT / MIT-Modern-Variant | Text shaping |
+| Kiwi | 1.4.8 (project overlay) | BSD-3-Clause and bundled permissive Loki/MIT-style notice | Incremental linear layout solver |
 | utf8proc | 2.10.0 | MIT and permissive Unicode data notice | Grapheme boundaries |
 | Generated GLAD loader | glad2 2.0.8, generated GL 3.3 core | CC0-1.0 alternative and Apache-2.0 API definitions | GL entry points |
 | Slug reference shader | EricLengyel/Slug, retrieved 2026-10-21 | MIT alternative | Analytic outline coverage |
 | Noto Sans | google/fonts/ofl/notosans, retrieved 2026-10-21 | SIL OFL 1.1 | Demo font |
 
-All four vcpkg dependencies disable default features. HarfBuzz does not enable
+All five vcpkg dependencies disable default features. HarfBuzz does not enable
 GLib, ICU, Cairo, Graphite, or platform shapers; FreeType does not enable external
 image/compression libraries. The Windows triplet builds static dependencies with
 the dynamic MSVC runtime. vcpkg may download build-only tools such as Meson,

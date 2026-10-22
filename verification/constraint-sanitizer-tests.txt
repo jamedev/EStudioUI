@@ -1,0 +1,74 @@
+Test project /workspace/scratch/e2c95811cd0a/EStudioUI/build/gate-b-sanitizers
+      Start  1: Core
+ 1/30 Test  #1: Core .............................   Passed    0.32 sec
+      Start  2: WidgetsAndLayout
+ 2/30 Test  #2: WidgetsAndLayout .................   Passed    0.40 sec
+      Start  3: Animation
+ 3/30 Test  #3: Animation ........................   Passed    0.32 sec
+      Start  4: RichCss
+ 4/30 Test  #4: RichCss ..........................   Passed    2.00 sec
+      Start  5: CanvasScene
+ 5/30 Test  #5: CanvasScene ......................   Passed    2.15 sec
+      Start  6: CanvasGeometry
+ 6/30 Test  #6: CanvasGeometry ...................   Passed    1.06 sec
+      Start  7: SketchDocument
+ 7/30 Test  #7: SketchDocument ...................   Passed   12.22 sec
+      Start  8: CanvasWidget
+ 8/30 Test  #8: CanvasWidget .....................   Passed    0.33 sec
+      Start  9: InputControls
+ 9/30 Test  #9: InputControls ....................   Passed    0.29 sec
+      Start 10: SplitToolButton
+10/30 Test #10: SplitToolButton ..................   Passed    0.34 sec
+      Start 11: Painter
+11/30 Test #11: Painter ..........................   Passed    0.03 sec
+      Start 12: StyleParts
+12/30 Test #12: StyleParts .......................   Passed    1.52 sec
+      Start 13: StyledCollections
+13/30 Test #13: StyledCollections ................   Passed    0.35 sec
+      Start 14: StyledScroll
+14/30 Test #14: StyledScroll .....................   Passed    3.24 sec
+      Start 15: CompositeStyle
+15/30 Test #15: CompositeStyle ...................   Passed    0.27 sec
+      Start 16: Dispatch
+16/30 Test #16: Dispatch .........................   Passed    0.47 sec
+      Start 17: ThreadAffinity
+17/30 Test #17: ThreadAffinity ...................   Passed    0.29 sec
+      Start 18: Task
+18/30 Test #18: Task .............................   Passed    0.85 sec
+      Start 19: QueuedSignal
+19/30 Test #19: QueuedSignal .....................   Passed    0.04 sec
+      Start 20: ControlAffinity
+20/30 Test #20: ControlAffinity ..................   Passed    0.33 sec
+      Start 21: ServiceAffinity
+21/30 Test #21: ServiceAffinity ..................   Passed    0.25 sec
+      Start 22: State
+22/30 Test #22: State ............................   Passed    0.03 sec
+      Start 23: Binding
+23/30 Test #23: Binding ..........................   Passed    0.29 sec
+      Start 24: Invalidation
+24/30 Test #24: Invalidation .....................   Passed    0.93 sec
+      Start 25: ControlUpdate
+25/30 Test #25: ControlUpdate ....................   Passed    0.29 sec
+      Start 26: Model
+26/30 Test #26: Model ............................   Passed    0.23 sec
+      Start 27: ModelView
+27/30 Test #27: ModelView ........................   Passed    0.49 sec
+      Start 28: Layout
+28/30 Test #28: Layout ...........................   Passed    0.29 sec
+      Start 29: ConstraintLayout
+29/30 Test #29: ConstraintLayout .................   Passed   20.83 sec
+      Start 30: GpuIntegration
+30/30 Test #30: GpuIntegration ...................   Passed   37.44 sec
+
+100% tests passed out of 30
+
+Total Test time (real) =  87.92 sec
+
+Final demo navigation / padding regression:
+Test project /workspace/scratch/e2c95811cd0a/EStudioUI/build/gate-b-sanitizers
+    Start 30: GpuIntegration
+1/1 Test #30: GpuIntegration ...................   Passed   38.65 sec
+
+100% tests passed out of 1
+
+Total Test time (real) =  38.65 sec

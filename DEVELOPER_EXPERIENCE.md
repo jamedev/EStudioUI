@@ -152,3 +152,11 @@ percentage/content cycles have a deterministic fallback. Keep reports owned and
 bounded with the actual widget tree, keep model rows virtual, and retain the
 paint-only and unrelated-measurement work gates. See [LAYOUT.md](LAYOUT.md) for
 complete compiled examples and migration/extension contracts.
+
+Constraint layouts use ordinary expressions and stable child anchors. Give
+nontrivial rules names; inspect accepted, relaxed, inactive and conflicting rules
+through the same owned layout report. Required conflicts preserve hard widget
+limits and earlier rules, and remain visible. Keep simple layouts on Box/Grid/
+Form/Flow where explicit relationships would add ceremony. Native live resize is
+a window/runtime responsibility and needs no application event-pump workaround.
+See [CONSTRAINT_LAYOUT.md](CONSTRAINT_LAYOUT.md).

@@ -1,8 +1,9 @@
-# Measurement and layout / EStudioUI 0.12
+# Measurement and layout / EStudioUI 0.12–0.13
 
 F08 adds width-aware measurement, shared layout strategies, baselines, and owned
 allocation reports. Existing Fixed/Content/Fill APIs and CSS precedence remain.
-No dependency or constraint solver was added. The **Layout lab** is the default
+The optional linear solver and live-resize increment is documented in
+[CONSTRAINT_LAYOUT.md](CONSTRAINT_LAYOUT.md); F08 itself added no dependency. The **Layout lab** is the default
 demo page; its form fields and wrapping tool buttons are working controls.
 
 ## A small working form

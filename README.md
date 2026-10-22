@@ -12,6 +12,24 @@ current capabilities from proposed work and define delivery prerequisites.
 The [developer experience principles](DEVELOPER_EXPERIENCE.md) make simple,
 safe application code an acceptance requirement for every foundation change.
 
+## Linear constraints and live resizing (0.13)
+
+Open **Layout lab → Constraint layouts** for anchored panels, working editors, and aspect
+ratios. `ConstraintLayout` accepts linear relationships such as
+`field.Left() == sidebar.Right() + 12`, with required rules, weighted soft
+preferences, hard widget-size precedence, and named conflict diagnostics.
+Its private header-only Kiwi dependency is permissively licensed and installed
+by the existing pinned-vcpkg build flow.
+
+Native size/refresh callbacks now present safe frames directly. A Windows modal
+resize/menu timer keeps the shared scheduler progressing while the mouse button
+is held, using the normal 60 Hz cap and preserving style/intrinsic caches.
+See [CONSTRAINT_LAYOUT.md](CONSTRAINT_LAYOUT.md) for the compiled example,
+contracts and performance boundaries, and
+[0.13 verification](verification/CONSTRAINTS_0_13.md) for measured evidence.
+
+![Constraint layouts rendered by EStudioUI](verification/constraints-1180.png)
+
 ## Predictable measurement and layout (0.12)
 
 The **Layout lab** now opens by default. Width-dependent labels measure their
@@ -34,8 +52,7 @@ percentage/content cycles. Paint-only changes retain layout caches.
 See [LAYOUT.md](LAYOUT.md) for complete examples, sizing/extension contracts,
 wrapping boundaries and costs, and [0.12 verification](verification/LAYOUT_0_12.md)
 for actual work counts, resize captures and framebuffer comparisons. The optional
-linear constraint-layout experiment follows this foundation; a solver is not
-included in 0.12.
+linear constraint strategy is delivered separately in 0.13.
 
 ![Shared form, flow and grid layouts rendered by EStudioUI](verification/layout-foundation.png)
 

@@ -673,7 +673,8 @@ LayoutPlan UiContext::Plan(Widget& widget, MeasureConstraints content, bool defi
                                       {style.m_MinWidth, style.m_MinHeight},
                                       {style.m_MaxWidth, style.m_MaxHeight},
                                       style.m_Margin,
-                                      style.m_FlexGrow});
+                                      style.m_FlexGrow,
+                                      child->m_TargetKey});
     }
     context.m_Measure = [&](std::size_t index, MeasureConstraints allocation, bool width, bool height)
     {
@@ -907,6 +908,7 @@ void UiContext::Layout(Widget& widget, Rect bounds, Rect clip, bool definiteWidt
     report.m_Measure = widget.m_MeasuredResult;
     report.m_ContentMeasure = widget.m_ContentMeasurement;
     report.m_Tracks = plan.m_Tracks;
+    report.m_Constraints = plan.m_Constraints;
     for (const auto& slot : plan.m_Slots)
     {
         auto& child = *children[slot.m_Index];
@@ -918,7 +920,8 @@ void UiContext::Layout(Widget& widget, Rect bounds, Rect clip, bool definiteWidt
                                       slot.m_Measure.m_Minimum,
                                       {childStyle.m_MaxWidth, childStyle.m_MaxHeight},
                                       childStyle.m_Margin,
-                                      childStyle.m_FlexGrow},
+                                      childStyle.m_FlexGrow,
+                                      child.m_TargetKey},
                                      slot});
     }
     for (const auto& problem : plan.m_Problems)

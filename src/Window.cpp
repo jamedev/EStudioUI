@@ -4,10 +4,17 @@
 #include <EStudioUI/FramePacer.h>
 
 #include "ApplicationRuntime.h"
+#include "NativeResizePump.h"
 
 #include <glad/gl.h>
 #define GLFW_INCLUDE_NONE
 #include <GLFW/glfw3.h>
+#ifdef _WIN32
+#define NOMINMAX
+#define WIN32_LEAN_AND_MEAN
+#define GLFW_EXPOSE_NATIVE_WIN32
+#include <GLFW/glfw3native.h>
+#endif
 
 #include <algorithm>
 #include <cmath>
@@ -117,6 +124,7 @@ struct Window::Impl : std::enable_shared_from_this<Window::Impl>
     std::unique_ptr<FontFace> m_Font;
     std::unique_ptr<UiContext> m_Ui;
     std::unique_ptr<Renderer> m_Renderer;
+    std::unique_ptr<Detail::NativeResizePump> m_ResizePump;
     Signal<Key> m_KeyPressed;
     std::exception_ptr m_CallbackError;
     bool m_Initialized = false;
@@ -125,6 +133,7 @@ struct Window::Impl : std::enable_shared_from_this<Window::Impl>
     bool m_RenderWhenUnfocused = false;
     bool m_Closed = false;
     bool m_Rendering = false;
+    bool m_Servicing = false;
     FramePacer m_Pacer;
     WidgetRef m_CaretTarget;
     double m_CaretDeadline = -1;
@@ -136,6 +145,7 @@ struct Window::Impl : std::enable_shared_from_this<Window::Impl>
 
     ~Impl()
     {
+        m_ResizePump.reset();
         m_TargetLifetime.request_stop();
         if (m_Ui)
             m_Ui->GetDispatcher().Close();
@@ -157,6 +167,17 @@ struct Window::Impl : std::enable_shared_from_this<Window::Impl>
     {
         auto self = static_cast<Impl*>(glfwGetWindowUserPointer(window))->shared_from_this();
         Detail::ApplicationDispatchScope scope;
+
+        struct RestoreContext
+        {
+            GLFWwindow* m_Previous = glfwGetCurrentContext();
+
+            ~RestoreContext()
+            {
+                glfwMakeContextCurrent(m_Previous);
+            }
+        } restore;
+
         try
         {
             if (!self->m_Owner || self->m_Closed)
@@ -164,7 +185,8 @@ struct Window::Impl : std::enable_shared_from_this<Window::Impl>
             glfwMakeContextCurrent(self->m_Window);
             // Synchronous resize/focus callbacks may occur inside a state batch.
             // Route their invalidation now; advance animation time at the next safe boundary.
-            if (!StateStore::IsUpdatingOnThisThread())
+            if (!StateStore::IsUpdatingOnThisThread() && !self->m_Rendering && !self->m_Servicing &&
+                self->m_Ui->GetPhase() == UiPhase::Idle && Detail::CanServiceNativeFrame())
                 self->m_Ui->SetTime(self->GuiTime());
             if (!self->m_Owner || self->m_Closed)
                 return;
@@ -185,6 +207,8 @@ struct Window::Impl : std::enable_shared_from_this<Window::Impl>
 
     bool IsOpen() const
     {
+        if (m_ResizePump)
+            m_ResizePump->RethrowError();
         if (m_CallbackError)
             std::rethrow_exception(m_CallbackError);
         return m_Owner && !m_Closed && !glfwWindowShouldClose(m_Window);
@@ -192,6 +216,8 @@ struct Window::Impl : std::enable_shared_from_this<Window::Impl>
 
     void RequestClose()
     {
+        if (m_ResizePump)
+            m_ResizePump->Cancel();
         m_Closed = true;
         m_TargetLifetime.request_stop();
         if (m_Ui)
@@ -247,6 +273,24 @@ struct Window::Impl : std::enable_shared_from_this<Window::Impl>
 
     double Service()
     {
+        if (m_Servicing)
+            return -1;
+
+        struct ServiceScope
+        {
+            bool& m_Flag;
+
+            explicit ServiceScope(bool& flag) : m_Flag(flag)
+            {
+                flag = true;
+            }
+
+            ~ServiceScope()
+            {
+                m_Flag = false;
+            }
+        } servicing(m_Servicing);
+
         if (!IsOpen())
             return -1;
         glfwMakeContextCurrent(m_Window);
@@ -297,6 +341,15 @@ struct Window::Impl : std::enable_shared_from_this<Window::Impl>
                 wake = frame;
         }
         return wake;
+    }
+
+    double NativeFrame()
+    {
+        if (!Detail::CanServiceNativeFrame() || m_Rendering || m_Servicing || StateStore::IsUpdatingOnThisThread() ||
+            m_Ui->GetPhase() != UiPhase::Idle)
+            return 0.01;
+        const double deadline = Detail::ServiceNativeWindows();
+        return deadline < 0 ? -1 : std::max(0.0, deadline - glfwGetTime());
     }
 
     Point Cursor() const
@@ -394,24 +447,29 @@ Window::Window(const WindowOptions& options, const std::filesystem::path& fontPa
         });
 
     glfwSetWindowSizeCallback(self.m_Window,
-                              [](GLFWwindow* window, int width, int height)
+                              [](GLFWwindow* window, int, int)
                               {
                                   Impl::Dispatch(window,
                                                  [&](Impl& state)
                                                  {
-                                                     if (StateStore::IsUpdatingOnThisThread())
-                                                         state.m_Ui->Invalidate();
-                                                     else
-                                                         state.m_Ui->Prepare(static_cast<float>(width),
-                                                                             static_cast<float>(height));
+                                                     state.m_Ui->RequestRepaint();
+                                                     state.NativeFrame();
                                                  });
                               });
     glfwSetFramebufferSizeCallback(self.m_Window, [](GLFWwindow* window, int, int)
-                                   { Impl::Dispatch(window, [](Impl& state) { state.m_Ui->Invalidate(); }); });
+                                   { Impl::Dispatch(window, [](Impl& state) { state.m_Ui->RequestRepaint(); }); });
     glfwSetWindowContentScaleCallback(self.m_Window, [](GLFWwindow* window, float, float)
-                                      { Impl::Dispatch(window, [](Impl& state) { state.m_Ui->Invalidate(); }); });
-    glfwSetWindowRefreshCallback(self.m_Window, [](GLFWwindow* window)
-                                 { Impl::Dispatch(window, [](Impl& state) { state.m_Ui->RequestRepaint(); }); });
+                                      { Impl::Dispatch(window, [](Impl& state) { state.m_Ui->RequestRepaint(); }); });
+    glfwSetWindowRefreshCallback(self.m_Window,
+                                 [](GLFWwindow* window)
+                                 {
+                                     Impl::Dispatch(window,
+                                                    [](Impl& state)
+                                                    {
+                                                        state.m_Ui->RequestRepaint();
+                                                        state.NativeFrame();
+                                                    });
+                                 });
     glfwSetCursorPosCallback(
         self.m_Window,
         [](GLFWwindow* window, double x, double y)
@@ -510,6 +568,19 @@ Window::Window(const WindowOptions& options, const std::filesystem::path& fontPa
                                { Impl::Dispatch(window, [](Impl& state) { state.RequestClose(); }); });
     self.m_Ui->Prepare(static_cast<float>(options.m_Width), static_cast<float>(options.m_Height));
     self.m_Owner = this;
+#ifdef _WIN32
+    if (!options.m_Headless)
+    {
+        self.m_ResizePump = std::make_unique<Detail::NativeResizePump>(
+            [window = self.m_Window]
+            {
+                double remaining = -1;
+                Impl::Dispatch(window, [&](Impl& state) { remaining = state.NativeFrame(); });
+                return remaining;
+            });
+        self.m_ResizePump->Attach(glfwGetWin32Window(self.m_Window));
+    }
+#endif
     self.m_Registration = std::make_shared<Detail::ApplicationWindow>();
     const std::weak_ptr<Impl> weak = m_Impl;
     self.m_Registration->m_IsOpen = [weak]
@@ -657,7 +728,7 @@ void Window::SetSize(int width, int height)
         Detail::ApplicationDispatchScope scope;
         glfwSetWindowSize(self->m_Window, std::max(1, width), std::max(1, height));
         if (self->m_Owner && !self->m_Closed)
-            self->m_Ui->Invalidate();
+            self->m_Ui->RequestRepaint();
     }
     Detail::FlushRetiredWindows();
 }

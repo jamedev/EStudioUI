@@ -30,6 +30,12 @@ void RetireApplicationWindow(std::shared_ptr<void> window);
 //! Releases deferred resources only outside native callbacks and scheduler traversal.
 void FlushRetiredWindows();
 
+//! Allows native presentation only at an outermost callback, outside application-owned work.
+bool CanServiceNativeFrame();
+
+//! Services registered windows without recursively polling native events during a system modal loop.
+double ServiceNativeWindows();
+
 //! Marks a native or user callback region where destroying a GLFW window is deferred.
 class ApplicationDispatchScope
 {

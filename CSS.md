@@ -108,6 +108,12 @@ resize the native window.
 
 ## Control styling
 
+`ConstraintLayout` remains compatible with widget colors, borders, padding,
+effects and hard size limits. Its C++ anchor relationships own placement;
+`gap`, alignment and Fill weights do not synthesize constraints. See
+[CONSTRAINT_LAYOUT.md](CONSTRAINT_LAYOUT.md) for its explicit priority and
+measurement contracts. Ordinary box/grid/form/flow CSS behavior is unchanged.
+
 Tab strips use `tabbar .tab-button:selected`; the older `.selected` class remains available.
 ToolButton's `:checked` / `:selected` state is persistent; `:active` remains the
 transient press state. Toolbars and menus accept ordinary child selectors.

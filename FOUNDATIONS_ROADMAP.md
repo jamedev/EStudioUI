@@ -10,7 +10,7 @@ The goal is a dependable C++ GUI foundation for the applications described in
 input, layout, text, and resource contracts before many controls depend on
 different local solutions. Retain the working GPU renderer and existing tests.
 
-## Implementation status: 0.12 and constrained layout foundations
+## Implementation status: 0.13, constraints and live resizing
 
 **Gate A is implemented.** F01-F04 now have public APIs, lifetime/phase/error
 contracts, concurrency tests, and actual multiwindow/framebuffer probes.
@@ -54,10 +54,16 @@ strategy, baseline, cycle, cache and diagnostic contracts.
 [verification/LAYOUT_0_12.md](verification/LAYOUT_0_12.md) records actual resize,
 framebuffer, work-counter and sanitizer evidence and platform limits.
 
-**Next requested increment: the optional linear constraint-layout experiment.**
-Build it on the F08 strategy/measurement boundary, with hard/soft priorities and
-deterministic infeasibility diagnostics. A solver is not included in F08.
-Then continue F09 input/focus/commands, F11 interfaces and F14 consumer packaging.
+**The optional linear constraint-layout increment is implemented in 0.13.**
+[CONSTRAINT_LAYOUT.md](CONSTRAINT_LAYOUT.md) documents stable anchors, linear
+relationships, weighted priorities, deterministic infeasibility recovery,
+width-first measurement and bounded incremental caches. Native refresh/resize
+callbacks and a Win32 system-modal-loop timer present safe paced frames while
+resizing. [verification/CONSTRAINTS_0_13.md](verification/CONSTRAINTS_0_13.md)
+records CPU, framebuffer, sanitizer and platform evidence with explicit limits.
+This adds private header-only Kiwi under permissive licenses; Box/Grid/Form/Flow
+remain independent of the strategy. Continue F09 input/focus/commands, F11
+interfaces and F14 consumer packaging.
 Gate B remains open and broad widget expansion remains gated.
 
 ## Original assessment of the 0.8 implementation

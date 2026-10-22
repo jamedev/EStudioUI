@@ -10,6 +10,7 @@
 #include "StateGallery.h"
 #include "ModelGallery.h"
 #include "LayoutGallery.h"
+#include "ConstraintGallery.h"
 
 #include <EStudioUI/ContextMenu.h>
 #include <EStudioUI/ListWidget.h>
@@ -136,5 +137,9 @@ class WidgetGallery
 
     //! Owns constrained measurement, form, flow, grid, and actual framebuffer probes.
     std::unique_ptr<LayoutGallery> m_LayoutFoundation;
+    //! Owns linear constraint and live-resize examples.
+    std::unique_ptr<ConstraintGallery> m_Constraints;
+    //! Observes the visible shortcut to a tab beyond a narrow tab strip.
+    WidgetRef m_ConstraintShortcut;
 };
 } // namespace EStudioUI

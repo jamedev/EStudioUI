@@ -75,3 +75,13 @@
 - Record real narrow/wide and retained/full framebuffer evidence for layout changes.
   Expose child/track allocation causes through owned reports; keep the optional
   linear constraint solver separate from the delivered F08 foundation.
+
+- Constraint anchors use lifetime-unique child identities, not ownership indices or
+  retained widget pointers. Preserve hard size precedence, named inactive/relaxed/
+  conflicting rule reports, deterministic required-prefix recovery, width-first
+  measurement, bounded incremental tableaux, and finite numeric validation.
+- Native resize/damage frames share the ordinary scheduler and presentation cap.
+  Keep Win32 modal-loop timer/subclass lifetime safe, avoid nested event polling or
+  queue/frame traversal, and preserve CSS/intrinsic caches on viewport changes.
+  Verify actual intermediate framebuffer pixels and the separate Windows SC_SIZE
+  modal-loop probe; neither software GL nor CPU probes establish hardware 60 FPS.
