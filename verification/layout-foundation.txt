@@ -1,0 +1,36 @@
+Window width 880: notes 274.476 x 70.824; flow height 71
+Window width 1180: notes 424.476 x 53.118; flow height 32
+Window width 1520: notes 594.476 x 35.412; flow height 32
+Native resize, working editor, mixed-font baseline alignment: PASS
+Paint-only layout/constraint/arrange delta: 0/0/0
+Retained/full framebuffer equality: PASS; idle draw calls: 0
+Form #layout-form: content 580 x 145.118, preferred 580 x 145.118
+  Content hook: preferred 0 x 0
+  Column 0 Content: preferred 95.524, minimum 0, maximum 125, allocated 95.524
+  Column 1 Fill(1): preferred 934.479, minimum 100, maximum 1e+06, allocated 474.476
+  Row 0 Content: preferred 36, minimum 36, maximum 1e+06, allocated 36
+  Row 1 Content: preferred 36, minimum 36, maximum 1e+06, allocated 36
+  Row 2 Content: preferred 53.118, minimum 0, maximum 1e+06, allocated 53.118
+  # [149] Content / Content: preferred 95.524 x 17.706, minimum 0 x 0, maximum 1e+06 x 1e+06, allocated (0, 9.923) 95.524 x 17.706
+  # [150] Content / Fixed(36): preferred 474.476 x 36, minimum 28 x 36, maximum 1e+06 x 36, allocated (105.524, 0) 474.476 x 36
+  # [151] Content / Content: preferred 95.524 x 17.706, minimum 0 x 0, maximum 1e+06 x 1e+06, allocated (0, 54.147) 95.524 x 17.706
+  # [152] Content / Fixed(36): preferred 474.476 x 36, minimum 50 x 36, maximum 1e+06 x 36, allocated (105.524, 46) 474.476 x 36
+  # [156] Content / Content: preferred 95.524 x 17.706, minimum 0 x 0, maximum 1e+06 x 1e+06, allocated (0, 92) 95.524 x 17.706
+  #layout-notes [157] Content / Content: preferred 474.476 x 53.118, minimum 0 x 0, maximum 1e+06 x 1e+06, allocated (105.524, 92) 474.476 x 53.118
+Flow #layout-flow: content 580 x 32, preferred 580 x 32
+  Content hook: preferred 0 x 0
+  # [161] Content / Fixed(32): preferred 65 x 32, minimum 65 x 32, maximum 120 x 32, allocated (0, 0) 65 x 32
+  # [162] Content / Fixed(32): preferred 65 x 32, minimum 65 x 32, maximum 120 x 32, allocated (72, 0) 65 x 32
+  # [163] Content / Fixed(32): preferred 65 x 32, minimum 65 x 32, maximum 120 x 32, allocated (144, 0) 65 x 32
+  # [164] Content / Fixed(32): preferred 65 x 32, minimum 65 x 32, maximum 120 x 32, allocated (216, 0) 65 x 32
+  # [165] Content / Fixed(32): preferred 65 x 32, minimum 65 x 32, maximum 120 x 32, allocated (288, 0) 65 x 32
+  # [166] Content / Fixed(32): preferred 75.118 x 32, minimum 65 x 32, maximum 120 x 32, allocated (360, 0) 75.118 x 32
+Grid #layout-grid: content 580 x 26, preferred 580 x 26
+  Content hook: preferred 0 x 0
+  Column 0 Fixed(60): preferred 0, minimum 60, maximum 60, allocated 60
+  Column 1 Fill(1): preferred 0, minimum 30, maximum 90, allocated 90
+  Column 2 Fill(2): preferred 0, minimum 40, maximum 1e+06, allocated 416
+  Row 0 Content: preferred 26, minimum 26, maximum 1e+06, allocated 26
+  #layout-track-0 [169] Content / Fixed(26): preferred 0 x 26, minimum 0 x 26, maximum 1e+06 x 26, allocated (0, 0) 60 x 26
+  #layout-track-1 [170] Content / Fixed(26): preferred 0 x 26, minimum 0 x 26, maximum 1e+06 x 26, allocated (67, 0) 90 x 26
+  #layout-track-2 [171] Content / Fixed(26): preferred 0 x 26, minimum 0 x 26, maximum 1e+06 x 26, allocated (164, 0) 416 x 26

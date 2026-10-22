@@ -210,6 +210,17 @@ Point TextBox::Measure(FontFace& font) const
     return {180, height};
 }
 
+MeasureResult TextBox::MeasureConstrained(FontFace& font, const MeasureConstraints& constraints) const
+{
+    EnsureLayout(font);
+    const bool placeholder =
+        m_Buffer.GetText().empty() && !m_Placeholder.empty() && GetPartStyle("placeholder").m_Displayed;
+    const auto& line = placeholder ? m_PlaceholderLayout : m_Layout;
+    const float height = constraints.m_Height.value_or(GetIntrinsicSize().m_Y);
+    const float baseline = std::max(0.0f, (height - line.m_Ascender - line.m_Descender) * 0.5f + line.m_Ascender);
+    return {{}, GetIntrinsicSize(), baseline, false};
+}
+
 float TextBox::CaretWidth() const
 {
     const auto& style = GetPartStyle("caret");

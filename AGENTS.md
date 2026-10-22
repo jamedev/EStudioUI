@@ -64,3 +64,14 @@
   contracts. Decorative layers are paint records, not widgets. Preserve transformed
   hit testing AND world-space capture clipping. Extend the RichCss and framebuffer
   probes when changing gradients, shadow ordering, clipping, or timeline semantics.
+
+- Use the shared LayoutStrategy/MeasureResult boundary for container strategies.
+  Resolve width before dependent height; preserve explicit size precedence and
+  independent percentage-reference semantics. Do not add iterative content/percent
+  feedback. Keep three-entry constraint caches and unrelated intrinsic reuse.
+- Preserve actual painted baselines and composition baseline-child identity/lifetime
+  rules. Validate finite extension plans, unique child slots, hard limits and track
+  reports. Keep measurement/strategy hooks pure and restore phases on exceptions.
+- Record real narrow/wide and retained/full framebuffer evidence for layout changes.
+  Expose child/track allocation causes through owned reports; keep the optional
+  linear constraint solver separate from the delivered F08 foundation.

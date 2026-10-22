@@ -59,7 +59,8 @@ const auto s_Properties = std::to_array<PropertyInfo>({{"background-color", &Sty
                                                        {"shadow-layers", &Style::m_ShadowLayers},
                                                        {"overflow", &Style::m_ClipContent},
                                                        {"content", &Style::m_Decoration},
-                                                       {"inset", &Style::m_Anchors}});
+                                                       {"inset", &Style::m_Anchors},
+                                                       {"text-wrap", &Style::m_WordWrap}});
 static_assert(s_Properties.size() == static_cast<std::size_t>(StyleProperty::Count));
 
 const PropertyInfo& Info(StyleProperty property)
@@ -220,8 +221,8 @@ void SetStyleValue(Style& style, StyleProperty property, const StyleValue& value
             else if constexpr (std::is_same_v<Value, std::string>)
             {
                 const bool valid =
-                    property == StyleProperty::Align
-                        ? (*typed == "stretch" || *typed == "start" || *typed == "center" || *typed == "end")
+                    property == StyleProperty::Align ? (*typed == "stretch" || *typed == "start" ||
+                                                        *typed == "center" || *typed == "end" || *typed == "baseline")
                     : property == StyleProperty::Justify
                         ? (*typed == "start" || *typed == "center" || *typed == "end" || *typed == "space-between")
                         : (*typed == "left" || *typed == "center" || *typed == "right");

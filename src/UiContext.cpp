@@ -1,6 +1,7 @@
 #include <EStudioUI/UiContext.h>
 #include <EStudioUI/Renderer.h>
 #include <EStudioUI/CssMotion.h>
+#include <EStudioUI/BoxLayout.h>
 
 #include <algorithm>
 #include <cmath>
@@ -165,7 +166,7 @@ void UiContext::Invalidate(Widget& widget, Invalidation flags)
         for (auto* node = &widget; node; node = node->m_Parent)
             node->m_ArrangeDirty = true;
     m_HitTestDirty |= HasInvalidation(flags, Invalidation::HitTest | Invalidation::Measure | Invalidation::Arrange |
-                                              Invalidation::Selector | Invalidation::Structure);
+                                                 Invalidation::Selector | Invalidation::Structure);
     m_Dirty |= flags != Invalidation::Paint;
 }
 
@@ -511,14 +512,16 @@ void UiContext::Restyle(Widget& widget, const Style* parent, bool force)
             widget.m_Style = m_CssMotion->Resolve(widget, 0, m_StyleSheet.Compute(widget.m_Node, parent), m_StyleSheet);
             widget.m_CascadedStyle = widget.m_Style;
             for (int layer = 1; layer <= 2; ++layer)
-                m_CssMotion->Resolve(widget, layer, m_StyleSheet.Compute(widget.m_Node, &widget.m_Style, layer), m_StyleSheet);
+                m_CssMotion->Resolve(widget, layer, m_StyleSheet.Compute(widget.m_Node, &widget.m_Style, layer),
+                                     m_StyleSheet);
             m_Stats.m_StyleResolutions += 3;
             for (const auto& [property, value] : widget.m_StyleOverrides)
                 SetStyleValue(widget.m_Style, property, value);
             widget.m_Style.m_Displayed = widget.m_Style.m_Displayed && widget.m_Visible;
             widget.m_Style.m_MaxWidth = std::max(widget.m_Style.m_MaxWidth, widget.m_Style.m_MinWidth);
             widget.m_Style.m_MaxHeight = std::max(widget.m_Style.m_MaxHeight, widget.m_Style.m_MinHeight);
-            const auto applySize = [](const std::optional<SizeRule>& rule, Length& length, float& minimum, float& maximum)
+            const auto applySize =
+                [](const std::optional<SizeRule>& rule, Length& length, float& minimum, float& maximum)
             {
                 if (!rule)
                     return;
@@ -529,7 +532,8 @@ void UiContext::Restyle(Widget& widget, const Style* parent, bool force)
                                                                 : Length{};
             };
             applySize(widget.m_WidthRule, widget.m_Style.m_Width, widget.m_Style.m_MinWidth, widget.m_Style.m_MaxWidth);
-            applySize(widget.m_HeightRule, widget.m_Style.m_Height, widget.m_Style.m_MinHeight, widget.m_Style.m_MaxHeight);
+            applySize(widget.m_HeightRule, widget.m_Style.m_Height, widget.m_Style.m_MinHeight,
+                      widget.m_Style.m_MaxHeight);
             if (widget.m_Direction)
                 widget.m_Style.m_Row = *widget.m_Direction == Axis::Horizontal;
             if (widget.m_Gap)
@@ -631,73 +635,250 @@ void UiContext::ApplyPartOverrides(Widget& widget)
     }
 }
 
-Point UiContext::Measure(Widget& widget, float parentWidth, float parentHeight)
+std::vector<Widget*> UiContext::LayoutChildren(Widget& widget) const
 {
-    const auto& style = widget.m_Style;
-    if (!style.m_Displayed)
+    std::vector<Widget*> children;
+    for (auto& child : widget.m_Children)
+        if (child->m_Style.m_Displayed && !child->m_Overlay && !child->m_FloatingBounds)
+            children.push_back(child.get());
+    return children;
+}
+
+LayoutPlan UiContext::Plan(Widget& widget, MeasureConstraints content, bool definiteWidth, bool definiteHeight)
+{
+    const PhaseScope phase(*this, UiPhase::Measure);
+    const auto children = LayoutChildren(widget);
+    LayoutContext context;
+    context.m_Constraints = content;
+    context.m_DefiniteWidth = definiteWidth && content.m_Width.has_value();
+    context.m_DefiniteHeight = definiteHeight && content.m_Height.has_value();
+    context.m_Gap = widget.m_Style.m_Gap;
+    const auto& align = widget.m_Style.m_Align;
+    context.m_Alignment = widget.m_Alignment.value_or(align == "start"      ? LayoutAlignment::Start
+                                                      : align == "center"   ? LayoutAlignment::Center
+                                                      : align == "end"      ? LayoutAlignment::End
+                                                      : align == "baseline" ? LayoutAlignment::Baseline
+                                                                            : LayoutAlignment::Stretch);
+    const auto& justify = widget.m_Style.m_Justify;
+    context.m_Justification =
+        widget.m_Justification.value_or(justify == "center"          ? LayoutJustification::Center
+                                        : justify == "end"           ? LayoutJustification::End
+                                        : justify == "space-between" ? LayoutJustification::SpaceBetween
+                                                                     : LayoutJustification::Start);
+    for (const auto* child : children)
     {
-        widget.m_MeasuredSize = {};
-        widget.m_MeasureConstraints = {parentWidth, parentHeight};
-        widget.m_MeasureValid = true;
+        const auto& style = child->m_Style;
+        context.m_Children.push_back({style.m_Width,
+                                      style.m_Height,
+                                      {style.m_MinWidth, style.m_MinHeight},
+                                      {style.m_MaxWidth, style.m_MaxHeight},
+                                      style.m_Margin,
+                                      style.m_FlexGrow});
+    }
+    context.m_Measure = [&](std::size_t index, MeasureConstraints allocation, bool width, bool height)
+    {
+        if (index >= children.size())
+            throw std::out_of_range("Layout strategy requested an unknown child.");
+        return Measure(*children[index],
+                       {context.m_DefiniteWidth ? content.m_Width : std::nullopt,
+                        context.m_DefiniteHeight ? content.m_Height : std::nullopt},
+                       allocation, width, height);
+    };
+    if (children.empty() && !widget.m_Layout)
         return {};
-    }
-    if (widget.m_MeasureValid && widget.m_MeasureConstraints.m_X == parentWidth &&
-        widget.m_MeasureConstraints.m_Y == parentHeight)
+    const BoxLayout box(widget.m_Style.m_Row ? Axis::Horizontal : Axis::Vertical);
+    const auto& strategy = widget.m_Layout ? *widget.m_Layout : static_cast<const LayoutStrategy&>(box);
+    ++m_Stats.m_LayoutPlans;
+    auto plan = strategy.Compute(context);
+    const auto fail = [&](const char* message)
     {
-        ++m_Stats.m_MeasureCacheHits;
-        return widget.m_MeasuredSize;
+        throw std::logic_error("Layout " + std::string(strategy.GetName()) + " #" + widget.m_Node.m_Id + ": " +
+                               message);
+    };
+    plan.m_Measure.Validate();
+    if (plan.m_Slots.size() != children.size())
+        fail("return exactly one slot for each displayed, in-flow child.");
+    std::vector<bool> visited(children.size());
+    std::vector<unsigned char> reportedAxes(children.size());
+    for (const auto& problem : plan.m_Problems)
+        if (problem.m_Issue == LayoutIssue::Overflow && problem.m_Child && *problem.m_Child < children.size())
+            reportedAxes[*problem.m_Child] |= problem.m_Axis == Axis::Horizontal ? 1 : 2;
+    for (const auto& slot : plan.m_Slots)
+    {
+        if (slot.m_Index >= children.size() || visited[slot.m_Index])
+            fail("child indices must be unique and in range.");
+        visited[slot.m_Index] = true;
+        slot.m_Measure.Validate();
+        for (const float value : {slot.m_Bounds.m_X, slot.m_Bounds.m_Y, slot.m_Bounds.m_Width, slot.m_Bounds.m_Height})
+            if (!std::isfinite(value))
+                fail("allocated rectangles must be finite.");
+        if (slot.m_Bounds.m_Width < 0 || slot.m_Bounds.m_Height < 0)
+            fail("allocated dimensions must be nonnegative.");
+        const auto& child = context.m_Children[slot.m_Index];
+        if (slot.m_Bounds.m_Width <
+                std::min(child.m_Maximum.m_X, std::max(child.m_Minimum.m_X, slot.m_Measure.m_Minimum.m_X)) - 0.01f ||
+            slot.m_Bounds.m_Height <
+                std::min(child.m_Maximum.m_Y, std::max(child.m_Minimum.m_Y, slot.m_Measure.m_Minimum.m_Y)) - 0.01f ||
+            slot.m_Bounds.m_Width > child.m_Maximum.m_X + 0.01f || slot.m_Bounds.m_Height > child.m_Maximum.m_Y + 0.01f)
+            fail("allocated rectangle violates an explicit hard size limit.");
+        for (const bool width : {true, false})
+        {
+            const auto available = width ? content.m_Width : content.m_Height;
+            if (!available || (reportedAxes[slot.m_Index] & (width ? 1 : 2)))
+                continue;
+            const float start = width ? slot.m_Bounds.m_X : slot.m_Bounds.m_Y;
+            const float size = width ? slot.m_Bounds.m_Width : slot.m_Bounds.m_Height;
+            const float after = width ? child.m_Margin.m_Right : child.m_Margin.m_Bottom;
+            if (start < -0.01f || start + size + after > *available + 0.01f)
+                plan.m_Problems.push_back(
+                    {LayoutIssue::Overflow, width ? Axis::Horizontal : Axis::Vertical, slot.m_Index, *available,
+                     std::max(size, start + size + after),
+                     "Custom allocation exceeds available space; hard size limits are preserved."});
+        }
     }
+    for (const auto& problem : plan.m_Problems)
+        if ((problem.m_Child && *problem.m_Child >= children.size()) || !std::isfinite(problem.m_Available) ||
+            !std::isfinite(problem.m_Required))
+            fail("diagnostics must refer to valid children and finite sizes.");
+    for (const auto& track : plan.m_Tracks)
+    {
+        track.m_Rule.Validate();
+        if (!std::isfinite(track.m_Preferred) || !std::isfinite(track.m_Minimum) || !std::isfinite(track.m_Allocated) ||
+            track.m_Preferred < 0 || track.m_Minimum < 0 || track.m_Allocated < track.m_Minimum - 0.01f ||
+            track.m_Allocated > track.m_Rule.m_Maximum + 0.01f)
+            fail("track reports must contain finite sizes within their declared bounds.");
+    }
+    if (widget.m_BaselineChild)
+    {
+        plan.m_Measure.m_Baseline.reset();
+        for (auto& slot : plan.m_Slots)
+            if (children[slot.m_Index]->m_TargetKey == widget.m_BaselineChild)
+            {
+                slot.m_Measure = context.m_Measure(slot.m_Index, {slot.m_Bounds.m_Width, slot.m_Bounds.m_Height},
+                                                   slot.m_DefiniteWidth, slot.m_DefiniteHeight);
+                if (slot.m_Measure.m_Baseline)
+                    plan.m_Measure.m_Baseline = slot.m_Bounds.m_Y + *slot.m_Measure.m_Baseline;
+                break;
+            }
+    }
+    plan.m_Measure.Validate();
+    return plan;
+}
+
+MeasureResult UiContext::Measure(Widget& widget, MeasureConstraints parent, MeasureConstraints allocation,
+                                 bool definiteWidth, bool definiteHeight)
+{
+    const PhaseScope phase(*this, UiPhase::Measure);
+    const auto& style = widget.m_Style;
+    parent.Validate();
+    allocation.Validate();
+    if (!style.m_Displayed)
+        return {};
+    if (style.m_Width.m_Unit != Length::Unit::Percent)
+        parent.m_Width.reset();
+    if (style.m_Height.m_Unit != Length::Unit::Percent)
+        parent.m_Height.reset();
+    if (style.m_MinWidth == style.m_MaxWidth)
+        allocation.m_Width.reset();
+    if (style.m_MinHeight == style.m_MaxHeight)
+        allocation.m_Height.reset();
+    definiteWidth &= allocation.m_Width.has_value();
+    definiteHeight &= allocation.m_Height.has_value();
+    if (!widget.m_MeasureValid)
+        for (auto& entry : widget.m_MeasureCache)
+            entry.m_Valid = false;
+    for (const auto& entry : widget.m_MeasureCache)
+        if (entry.m_Valid && entry.m_Parent == parent && entry.m_Allocation == allocation &&
+            entry.m_DefiniteWidth == definiteWidth && entry.m_DefiniteHeight == definiteHeight)
+        {
+            ++m_Stats.m_MeasureCacheHits;
+            widget.m_MeasuredSize = entry.m_Result.m_Preferred;
+            widget.m_MeasuredResult = entry.m_Result;
+            widget.m_ContentMeasurement = entry.m_Content;
+            return entry.m_Result;
+        }
     ++m_Stats.m_MeasureCalculations;
     widget.m_ArrangeDirty = true;
     if (!widget.m_IntrinsicValid)
     {
         ++m_Stats.m_Measurements;
         widget.m_IntrinsicSize = widget.Measure(m_Font);
+        MeasureResult{{}, widget.m_IntrinsicSize, {}, false}.Validate();
         widget.m_IntrinsicValid = true;
     }
-    Point size = widget.m_IntrinsicSize;
-    const float width = style.m_Width.Resolve(parentWidth, parentWidth);
-    const float height = style.m_Height.Resolve(parentHeight, parentHeight);
-    const float innerWidth =
-        std::max(0.0f, width - style.m_Padding.m_Left - style.m_Padding.m_Right - 2 * style.m_BorderWidth);
-    const float innerHeight =
-        std::max(0.0f, height - style.m_Padding.m_Top - style.m_Padding.m_Bottom - 2 * style.m_BorderWidth);
-    float main = 0;
-    float cross = 0;
-    int count = 0;
-    for (auto& child : widget.m_Children)
+    const float paddingWidth = style.m_Padding.m_Left + style.m_Padding.m_Right + 2 * style.m_BorderWidth;
+    const float paddingHeight = style.m_Padding.m_Top + style.m_Padding.m_Bottom + 2 * style.m_BorderWidth;
+    const auto dimension = [](Length length, std::optional<float> reference, std::optional<float> assigned,
+                              float minimum, float maximum) -> std::optional<float>
     {
-        if (!child->m_Style.m_Displayed)
-            continue;
-        const auto measured = Measure(*child, innerWidth, innerHeight);
-        if (child->m_Overlay || child->m_FloatingBounds)
-            continue;
-        const auto& margin = child->m_Style.m_Margin;
-        const float childWidth = measured.m_X + margin.m_Left + margin.m_Right;
-        const float childHeight = measured.m_Y + margin.m_Top + margin.m_Bottom;
-        main += style.m_Row ? childWidth : childHeight;
-        cross = std::max(cross, style.m_Row ? childHeight : childWidth);
-        ++count;
+        if (assigned)
+            return std::clamp(*assigned, minimum, maximum);
+        if (length.m_Unit == Length::Unit::Pixels || (length.m_Unit == Length::Unit::Percent && reference))
+            return std::clamp(length.Resolve(reference.value_or(0), 0), minimum, maximum);
+        return {};
+    };
+    const auto outerWidth =
+        dimension(style.m_Width, parent.m_Width, allocation.m_Width, style.m_MinWidth, style.m_MaxWidth);
+    const auto outerHeight =
+        dimension(style.m_Height, parent.m_Height, allocation.m_Height, style.m_MinHeight, style.m_MaxHeight);
+    MeasureConstraints content{
+        outerWidth ? std::optional<float>(std::max(0.0f, *outerWidth - paddingWidth)) : std::nullopt,
+        outerHeight ? std::optional<float>(std::max(0.0f, *outerHeight - paddingHeight)) : std::nullopt};
+    const bool widthReference = style.m_Width.m_Unit == Length::Unit::Pixels || definiteWidth ||
+                                (style.m_Width.m_Unit == Length::Unit::Percent && parent.m_Width);
+    const bool heightReference = style.m_Height.m_Unit == Length::Unit::Pixels || definiteHeight ||
+                                 (style.m_Height.m_Unit == Length::Unit::Percent && parent.m_Height);
+    const auto measureContent = [&]
+    {
+        ++m_Stats.m_ConstrainedMeasurements;
+        auto value = widget.MeasureConstrained(m_Font, content);
+        value.Validate();
+        return value;
+    };
+    auto raw = measureContent();
+    auto plan = Plan(widget, content, widthReference, heightReference);
+    const auto naturalWidth = [&]
+    { return std::max(raw.m_Preferred.m_X, plan.m_Measure.m_Preferred.m_X) + paddingWidth; };
+    const auto minimumWidth = [&]
+    {
+        return std::clamp(std::max(raw.m_Minimum.m_X, plan.m_Measure.m_Minimum.m_X) + paddingWidth, style.m_MinWidth,
+                          style.m_MaxWidth);
+    };
+    float width = outerWidth.value_or(style.m_Width.m_Unit == Length::Unit::Fraction
+                                          ? minimumWidth()
+                                          : std::clamp(naturalWidth(), minimumWidth(), style.m_MaxWidth));
+    // Width is resolved before height. A content/percentage cycle never triggers fixed-point iteration.
+    if (!content.m_Width && style.m_Width.m_Unit != Length::Unit::Fraction)
+    {
+        content.m_Width = std::max(0.0f, width - paddingWidth);
+        if (raw.m_HeightForWidth)
+            raw = measureContent();
+        if (!widget.m_Children.empty() || widget.m_Layout)
+            plan = Plan(widget, content, widthReference, heightReference);
     }
-    if (count > 1)
-        main += static_cast<float>(count - 1) * style.m_Gap;
-    size.m_X = std::max(size.m_X, style.m_Row ? main : cross) + style.m_Padding.m_Left + style.m_Padding.m_Right +
-               2 * style.m_BorderWidth;
-    size.m_Y = std::max(size.m_Y, style.m_Row ? cross : main) + style.m_Padding.m_Top + style.m_Padding.m_Bottom +
-               2 * style.m_BorderWidth;
-    size.m_X =
-        std::clamp(style.m_Width.m_Unit == Length::Unit::Fraction ? 0.0f : style.m_Width.Resolve(parentWidth, size.m_X),
-                   style.m_MinWidth, style.m_MaxWidth);
-    size.m_Y = std::clamp(
-        style.m_Height.m_Unit == Length::Unit::Fraction ? 0.0f : style.m_Height.Resolve(parentHeight, size.m_Y),
-        style.m_MinHeight, style.m_MaxHeight);
-    widget.m_MeasuredSize = size;
-    widget.m_MeasureConstraints = {parentWidth, parentHeight};
+    const float minimumHeight = std::clamp(std::max(raw.m_Minimum.m_Y, plan.m_Measure.m_Minimum.m_Y) + paddingHeight,
+                                           style.m_MinHeight, style.m_MaxHeight);
+    const float naturalHeight = std::max(raw.m_Preferred.m_Y, plan.m_Measure.m_Preferred.m_Y) + paddingHeight;
+    const float height = outerHeight.value_or(style.m_Height.m_Unit == Length::Unit::Fraction
+                                                  ? minimumHeight
+                                                  : std::clamp(naturalHeight, minimumHeight, style.m_MaxHeight));
+    MeasureResult result;
+    result.m_Minimum = {minimumWidth(), minimumHeight};
+    result.m_Preferred = {std::max(width, result.m_Minimum.m_X), std::max(height, minimumHeight)};
+    result.m_HeightForWidth = raw.m_HeightForWidth || plan.m_Measure.m_HeightForWidth;
+    if (const auto baseline = raw.m_Baseline ? raw.m_Baseline : plan.m_Measure.m_Baseline)
+        result.m_Baseline = *baseline + style.m_Padding.m_Top + style.m_BorderWidth;
+    result.Validate();
+    auto& entry = widget.m_MeasureCache[widget.m_NextMeasureCache++ % widget.m_MeasureCache.size()];
+    entry = {parent, allocation, definiteWidth, definiteHeight, result, raw, true};
+    widget.m_MeasuredResult = result;
+    widget.m_MeasuredSize = result.m_Preferred;
+    widget.m_ContentMeasurement = raw;
     widget.m_MeasureValid = true;
-    return size;
+    return result;
 }
 
-void UiContext::Layout(Widget& widget, Rect bounds, Rect clip)
+void UiContext::Layout(Widget& widget, Rect bounds, Rect clip, bool definiteWidth, bool definiteHeight)
 {
     bounds.m_X += widget.m_Style.m_TranslateX;
     bounds.m_Y += widget.m_Style.m_TranslateY;
@@ -706,7 +887,8 @@ void UiContext::Layout(Widget& widget, Rect bounds, Rect clip)
         return left.m_X == right.m_X && left.m_Y == right.m_Y && left.m_Width == right.m_Width &&
                left.m_Height == right.m_Height;
     };
-    if (!widget.m_ArrangeDirty && equal(widget.m_Bounds, bounds) && equal(widget.m_Clip, clip))
+    if (!widget.m_ArrangeDirty && equal(widget.m_Bounds, bounds) && equal(widget.m_Clip, clip) &&
+        widget.m_ArrangedDefiniteWidth == definiteWidth && widget.m_ArrangedDefiniteHeight == definiteHeight)
         return;
     ++m_Stats.m_Arrangements;
     widget.m_ArrangeDirty = true;
@@ -715,81 +897,82 @@ void UiContext::Layout(Widget& widget, Rect bounds, Rect clip)
     widget.OnLayout();
     const auto content = widget.GetContentBounds();
     const auto childClip = clip.Intersect(content);
+    const auto children = LayoutChildren(widget);
     const auto& style = widget.m_Style;
-    std::vector<Widget*> children;
-    std::vector<LayoutItem> items;
-    std::vector<Point> measuredSizes;
-    float margins = 0;
-    for (auto& child : widget.m_Children)
+    const auto plan = Plan(widget, {content.m_Width, content.m_Height}, definiteWidth, definiteHeight);
+    LayoutReport report;
+    report.m_Strategy = widget.m_Layout ? std::string(widget.m_Layout->GetName()) : (style.m_Row ? "Row" : "Column");
+    report.m_ContainerId = widget.m_Node.m_Id;
+    report.m_ContentSize = {content.m_Width, content.m_Height};
+    report.m_Measure = widget.m_MeasuredResult;
+    report.m_ContentMeasure = widget.m_ContentMeasurement;
+    report.m_Tracks = plan.m_Tracks;
+    for (const auto& slot : plan.m_Slots)
     {
-        const auto& childStyle = child->m_Style;
-        if (!childStyle.m_Displayed || child->m_Overlay || child->m_FloatingBounds)
-            continue;
-        auto size = child->m_MeasuredSize;
-        if (childStyle.m_Width.m_Unit == Length::Unit::Percent)
-            size.m_X = std::clamp(childStyle.m_Width.Resolve(content.m_Width, size.m_X), childStyle.m_MinWidth,
-                                  childStyle.m_MaxWidth);
-        if (childStyle.m_Height.m_Unit == Length::Unit::Percent)
-            size.m_Y = std::clamp(childStyle.m_Height.Resolve(content.m_Height, size.m_Y), childStyle.m_MinHeight,
-                                  childStyle.m_MaxHeight);
-        measuredSizes.push_back(size);
-        const auto& dimension = style.m_Row ? childStyle.m_Width : childStyle.m_Height;
-        const auto& margin = childStyle.m_Margin;
-        margins += style.m_Row ? margin.m_Left + margin.m_Right : margin.m_Top + margin.m_Bottom;
-        items.push_back({style.m_Row ? size.m_X : size.m_Y,
-                         style.m_Row ? childStyle.m_MinWidth : childStyle.m_MinHeight,
-                         style.m_Row ? childStyle.m_MaxWidth : childStyle.m_MaxHeight,
-                         dimension.m_Unit == Length::Unit::Fraction ? dimension.m_Value : childStyle.m_FlexGrow});
-        children.push_back(child.get());
-    }
-    float gap = style.m_Gap;
-    const float gaps = children.empty() ? 0 : gap * static_cast<float>(children.size() - 1);
-    const float available = style.m_Row ? content.m_Width : content.m_Height;
-    const auto allocation = EStudioUI::Layout::Distribute(available - margins - gaps, items);
-    std::erase_if(m_OverflowingContainers, [&widget](const WidgetRef& reference)
-                  { return !reference.Get() || reference.Get() == &widget; });
-    widget.m_Overflowing = allocation.m_Overflow > 0.01f || margins + gaps > available + 0.01f;
-    if (widget.m_Overflowing)
-        m_OverflowingContainers.emplace_back(&widget);
-    float position = style.m_Row ? content.m_X : content.m_Y;
-    if (style.m_Justify == "center")
-        position += allocation.m_Unused * 0.5f;
-    else if (style.m_Justify == "end")
-        position += allocation.m_Unused;
-    else if (style.m_Justify == "space-between" && children.size() > 1)
-        gap += allocation.m_Unused / static_cast<float>(children.size() - 1);
-    for (std::size_t i = 0; i < children.size(); ++i)
-    {
-        auto& child = *children[i];
+        auto& child = *children[slot.m_Index];
         const auto& childStyle = child.m_Style;
-        const auto& margin = childStyle.m_Margin;
-        const auto size = measuredSizes[i];
-        const float before = style.m_Row ? margin.m_Left : margin.m_Top;
-        const float after = style.m_Row ? margin.m_Right : margin.m_Bottom;
-        const float crossBefore = style.m_Row ? margin.m_Top : margin.m_Left;
-        const float crossAfter = style.m_Row ? margin.m_Bottom : margin.m_Right;
-        const float crossAvailable =
-            std::max(0.0f, (style.m_Row ? content.m_Height : content.m_Width) - crossBefore - crossAfter);
-        const auto crossUnit = style.m_Row ? childStyle.m_Height.m_Unit : childStyle.m_Width.m_Unit;
-        float cross = style.m_Row ? size.m_Y : size.m_X;
-        if (crossUnit == Length::Unit::Fraction || (style.m_Align == "stretch" && crossUnit == Length::Unit::Auto))
-            cross = crossAvailable;
-        cross = std::clamp(cross, style.m_Row ? childStyle.m_MinHeight : childStyle.m_MinWidth,
-                           style.m_Row ? childStyle.m_MaxHeight : childStyle.m_MaxWidth);
-        float crossPosition = (style.m_Row ? content.m_Y : content.m_X) + crossBefore;
-        if (style.m_Align == "center")
-            crossPosition += (crossAvailable - cross) * 0.5f;
-        else if (style.m_Align == "end")
-            crossPosition += crossAvailable - cross;
-        position += before;
-        const Rect childBounds = style.m_Row ? Rect{position, crossPosition, allocation.m_Sizes[i], cross}
-                                             : Rect{crossPosition, position, cross, allocation.m_Sizes[i]};
-        Layout(child, childBounds, childClip);
-        position += allocation.m_Sizes[i] + after + gap;
+        report.m_Children.push_back({child.m_TargetKey,
+                                     child.m_Node.m_Id,
+                                     {childStyle.m_Width,
+                                      childStyle.m_Height,
+                                      slot.m_Measure.m_Minimum,
+                                      {childStyle.m_MaxWidth, childStyle.m_MaxHeight},
+                                      childStyle.m_Margin,
+                                      childStyle.m_FlexGrow},
+                                     slot});
+    }
+    for (const auto& problem : plan.m_Problems)
+    {
+        const auto* child = problem.m_Child ? children[*problem.m_Child] : nullptr;
+        report.m_Diagnostics.push_back({problem.m_Issue, problem.m_Axis, widget.m_TargetKey, widget.m_Node.m_Id,
+                                        child ? child->m_TargetKey : 0, child ? child->m_Node.m_Id : std::string{},
+                                        problem.m_Available, problem.m_Required, problem.m_Message});
+    }
+    const auto& raw = widget.m_ContentMeasurement;
+    for (const bool width : {true, false})
+    {
+        const float required =
+            width ? raw.m_Minimum.m_X : (raw.m_HeightForWidth ? raw.m_Preferred.m_Y : raw.m_Minimum.m_Y);
+        const float available = width ? content.m_Width : content.m_Height;
+        if (required > available + 0.01f)
+            report.m_Diagnostics.push_back(
+                {LayoutIssue::ContentClipped,
+                 width ? Axis::Horizontal : Axis::Vertical,
+                 widget.m_TargetKey,
+                 widget.m_Node.m_Id,
+                 0,
+                 {},
+                 available,
+                 required,
+                 "Content exceeds its explicit allocation; hard size limits are preserved and content is clipped."});
+    }
+    for (const auto& slot : plan.m_Slots)
+    {
+        auto childBounds = slot.m_Bounds;
+        childBounds.m_X += content.m_X;
+        childBounds.m_Y += content.m_Y;
+        Layout(*children[slot.m_Index], childBounds, childClip, slot.m_DefiniteWidth, slot.m_DefiniteHeight);
     }
     for (auto& child : widget.m_Children)
         if (child->m_Style.m_Displayed && child->m_FloatingBounds && !child->m_Overlay)
-            Layout(*child, *child->m_FloatingBounds, childClip);
+        {
+            const auto floating = *child->m_FloatingBounds;
+            Measure(*child,
+                    {definiteWidth ? std::optional<float>(content.m_Width) : std::nullopt,
+                     definiteHeight ? std::optional<float>(content.m_Height) : std::nullopt},
+                    {floating.m_Width, floating.m_Height}, true, true);
+            Layout(*child, floating, childClip, true, true);
+        }
+    std::erase_if(m_OverflowingContainers,
+                  [&widget](const WidgetRef& reference) { return !reference.Get() || reference.Get() == &widget; });
+    widget.m_Overflowing =
+        std::any_of(report.m_Diagnostics.begin(), report.m_Diagnostics.end(),
+                    [](const LayoutDiagnostic& issue) { return issue.m_Issue != LayoutIssue::IndefinitePercentage; });
+    if (widget.m_Overflowing)
+        m_OverflowingContainers.emplace_back(&widget);
+    widget.m_LayoutReport = std::move(report);
+    widget.m_ArrangedDefiniteWidth = definiteWidth;
+    widget.m_ArrangedDefiniteHeight = definiteHeight;
     widget.m_ArrangeDirty = !widget.m_MeasureValid;
 }
 
@@ -866,24 +1049,28 @@ void UiContext::Prepare(float width, float height)
         if (m_Root.m_ArrangeDirty || !m_Root.m_MeasureValid)
             Arrange();
     }
-    m_Dirty = m_FullStyleDirty || m_Root.m_SubtreeStyleDirty || m_Root.m_ArrangeDirty ||
-              !m_Root.m_MeasureValid || m_HitTestDirty;
+    m_Dirty = m_FullStyleDirty || m_Root.m_SubtreeStyleDirty || m_Root.m_ArrangeDirty || !m_Root.m_MeasureValid ||
+              m_HitTestDirty;
 }
 
 void UiContext::Arrange()
 {
     ++m_Stats.m_LayoutPasses;
-    std::erase_if(m_OverflowingContainers, [](const WidgetRef& reference)
-                  { const auto* widget = reference.Get(); return !widget || !widget->IsVisible(); });
+    std::erase_if(m_OverflowingContainers,
+                  [](const WidgetRef& reference)
+                  {
+                      const auto* widget = reference.Get();
+                      return !widget || !widget->IsVisible();
+                  });
     {
         const PhaseScope phase(*this, UiPhase::Measure);
-        Measure(m_Root, m_Width, m_Height);
+        Measure(m_Root, {m_Width, m_Height}, {m_Width, m_Height}, true, true);
     }
     const PhaseScope phase(*this, UiPhase::Layout);
-    Layout(m_Root, {0, 0, m_Width, m_Height}, {0, 0, m_Width, m_Height});
+    Layout(m_Root, {0, 0, m_Width, m_Height}, {0, 0, m_Width, m_Height}, true, true);
     if (auto* popup = m_Popup.Get(); popup && popup->IsVisible())
     {
-        const auto measured = popup->m_MeasuredSize;
+        const auto measured = Measure(*popup, {m_Width, m_Height}).m_Preferred;
         const float popupWidth = std::min(m_Width, measured.m_X);
         const float popupHeight = std::min(m_Height, measured.m_Y);
         Layout(*popup,
@@ -1423,5 +1610,22 @@ const std::vector<WidgetRef>& UiContext::GetOverflowingContainers() const
 {
     VerifyAccess();
     return m_OverflowingContainers;
+}
+
+std::vector<LayoutDiagnostic> UiContext::GetLayoutDiagnostics() const
+{
+    VerifyAccess();
+    std::vector<LayoutDiagnostic> diagnostics;
+    const auto visit = [&](auto&& self, const Widget& widget) -> void
+    {
+        if (!widget.m_Style.m_Displayed)
+            return;
+        diagnostics.insert(diagnostics.end(), widget.m_LayoutReport.m_Diagnostics.begin(),
+                           widget.m_LayoutReport.m_Diagnostics.end());
+        for (const auto& child : widget.m_Children)
+            self(self, *child);
+    };
+    visit(visit, m_Root);
+    return diagnostics;
 }
 } // namespace EStudioUI

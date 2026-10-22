@@ -3,12 +3,15 @@
 #include "Signal.h"
 #include "Style.h"
 #include "Layout.h"
+#include "LayoutStrategy.h"
 #include "SizeRule.h"
 #include "StyleProperty.h"
 #include "Invalidation.h"
 #include "ThreadAffinity.h"
 
 #include <memory>
+#include <array>
+#include <concepts>
 #include <map>
 #include <optional>
 #include <stop_token>
@@ -22,6 +25,7 @@ class UiContext;
 class CssMotion;
 class FontFace;
 class Renderer;
+
 namespace Detail
 {
 class BindingAccess;
@@ -108,6 +112,32 @@ class Widget
     //! Sets a nonnegative logical-pixel distance between children.
     void SetGap(float pixels);
 
+    //! Owns a container strategy; null restores the CSS/code row or column layout.
+    void SetLayout(std::unique_ptr<LayoutStrategy> strategy);
+
+    //! Installs an owned strategy value without application allocation plumbing.
+    template <typename T>
+        requires std::derived_from<T, LayoutStrategy>
+    void SetLayout(T strategy)
+    {
+        SetLayout(std::make_unique<T>(std::move(strategy)));
+    }
+
+    //! Returns the explicit immutable strategy, or null for the default box layout.
+    const LayoutStrategy* GetLayout() const;
+
+    //! Overrides cross-axis alignment independently of CSS.
+    void SetAlignment(LayoutAlignment alignment);
+
+    //! Overrides distribution of unused space independently of CSS.
+    void SetJustification(LayoutJustification justification);
+
+    //! Uses an immediate in-flow child's baseline; null restores the first participating child.
+    void SetBaselineChild(Widget* child);
+
+    //! Returns an owned explanation of the last completed container allocation.
+    LayoutReport GetLayoutReport() const;
+
     //! Places a child outside normal flow at absolute window coordinates.
     void SetFloatingBounds(Rect bounds);
 
@@ -179,8 +209,14 @@ class Widget
     //! Returns intrinsic content size before padding, border, and explicit CSS.
     virtual Point Measure(FontFace& font) const;
 
+    //! Measures content at allocated content dimensions; overrides must be pure and flag width dependence.
+    virtual MeasureResult MeasureConstrained(FontFace& font, const MeasureConstraints& constraints) const;
+
     //! Returns this widget's last prepared intrinsic size without invoking its measurement hook.
     Point GetIntrinsicSize() const;
+
+    //! Returns the last prepared content requirements, including constrained height and baseline.
+    MeasureResult GetContentMeasurement() const;
 
     //! Appends this widget's own drawing commands.
     virtual void Paint(Renderer& renderer, FontFace& font, double time, float opacity) const;
@@ -276,6 +312,9 @@ class Widget
     //! Marks this container's allocation path for arrangement.
     bool m_ArrangeDirty = true;
 
+    //! Retains percentage-reference semantics when geometry itself remains unchanged.
+    bool m_ArrangedDefiniteWidth = false, m_ArrangedDefiniteHeight = false;
+
     //! Retains the last intrinsic result independently of available constraints.
     Point m_IntrinsicSize;
 
@@ -285,8 +324,34 @@ class Widget
     //! Retains the aggregate measurement before arrangement adjustments.
     Point m_MeasuredSize;
 
-    //! Stores the exact parent constraints used by the aggregate measurement.
-    Point m_MeasureConstraints;
+    //! Retains the current outer measurement for arrangement and reporting.
+    MeasureResult m_MeasuredResult;
+
+    //! Retains the content hook result used by custom painting.
+    MeasureResult m_ContentMeasurement;
+
+    //! A bounded cache entry for natural, width-constrained, and baseline measurements.
+    struct MeasureCache
+    {
+        //! Definite parent references used by percentage rules.
+        MeasureConstraints m_Parent;
+        //! Allocated outer dimensions.
+        MeasureConstraints m_Allocation;
+        //! Whether allocated dimensions supply independent percentage references.
+        bool m_DefiniteWidth = false, m_DefiniteHeight = false;
+        //! Cached outer requirements.
+        MeasureResult m_Result;
+        //! Cached content requirements for extension painting.
+        MeasureResult m_Content;
+        //! Whether the entry belongs to the current invalidation generation.
+        bool m_Valid = false;
+    };
+
+    //! Holds at most three constraint variants without retaining a resize history.
+    std::array<MeasureCache, 3> m_MeasureCache;
+
+    //! Selects the next replacement entry.
+    std::size_t m_NextMeasureCache = 0;
 
     //! Reports whether the aggregate measurement remains reusable.
     bool m_MeasureValid = false;
@@ -372,6 +437,21 @@ class Widget
 
     //! Stores an optional code-level gap.
     std::optional<float> m_Gap;
+
+    //! Owns an optional pure container strategy.
+    std::unique_ptr<LayoutStrategy> m_Layout;
+
+    //! Stores an optional code-level alignment.
+    std::optional<LayoutAlignment> m_Alignment;
+
+    //! Stores an optional code-level justification.
+    std::optional<LayoutJustification> m_Justification;
+
+    //! Selects a composition baseline by lifetime-unique child identity, without retaining a pointer.
+    std::uint64_t m_BaselineChild = 0;
+
+    //! Stores owned decisions and issues from the last completed allocation.
+    LayoutReport m_LayoutReport;
 
     //! Stores absolute geometry for an out-of-flow child.
     std::optional<Rect> m_FloatingBounds;

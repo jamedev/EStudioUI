@@ -303,3 +303,22 @@ These remain dense model values, not full selector-tree widget instances.
 content paint override. `Painter::SetBrush(const Style&)` can reuse typed computed
 fills/gradients/shadows; applications choose which style values affect their own
 painted shapes. See [CUSTOM_WIDGETS.md](CUSTOM_WIDGETS.md).
+
+## Width-dependent labels and baselines (0.12)
+
+`text-wrap: wrap | nowrap` is inherited and controls label/button wrapping; the
+C++ SetWordWrap override takes precedence. Wrapping preserves explicit newlines,
+uses ASCII space/hyphen opportunities and extended-grapheme fallback, and caches
+at most three widths. This is the current LTR label path; full Unicode paragraph
+line breaking, bidi and IME remain F10 work. No text widget is created per line.
+
+`align-items: baseline` joins the existing stretch/start/center/end values. Rows
+align the actual painted first baseline, including border, padding and vertical
+placement. Forms use shared column/baseline strategy defaults. Grid/form/flow
+strategies are selected through C++ SetLayout; CSS still supplies spacing,
+limits, alignment and widget presentation. CSS Grid syntax is not implemented.
+
+An unresolved percentage inside a content-derived parent dimension uses Content
+sizing and a named diagnostic. SizeRule contracts retain precedence throughout
+resizing and style animation. See [LAYOUT.md](LAYOUT.md) for the exact rules,
+extension API, allocation reports and costs.

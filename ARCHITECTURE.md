@@ -14,9 +14,10 @@ without exposing third-party types in its public widget headers.
 | `UiDispatcher`, `UiHandle`, `DispatchReceipt` | Bounded producer queues, owner delivery, target lifetime, coalescing, inspectable outcomes |
 | `BackgroundTasks`, `Task`, `RequestScope` | Cooperative workers, UI continuations, progress, cancellation and stale-request retirement |
 | `State`, `StateStore`, `Binding` | Typed snapshots, validated coherent revisions, savepoints, control synchronization and reconciliation |
-| `UiContext` | Widget tree, CSS resolution, row/column layout, clipping, focus, capture |
+| `UiContext` | Widget tree, CSS resolution, constrained measurement, strategy allocation, clipping, focus, capture |
 | `Widget`, `Label`, `Button`, `TextBox` | Owned model, cached shaping, behavior, emitted signals |
-| `SizeRule`, `Layout` | Fixed/content/fill contracts, bounded weighted distribution, overflow |
+| `SizeRule`, `Layout` | Fixed/content/fill contracts and shared bounded weighted distribution |
+| `MeasureResult`, `LayoutStrategy`, `BoxLayout`, `GridLayout`, `FormLayout`, `FlowLayout` | Width-first measurement, baseline alignment, shared tracks, wrapping rows, owned allocation reports |
 | `Animation`, `AnimationSystem`, `EasingCurve` | Synchronized typed tracks, elapsed-time scheduling, easing, cancellation and lifetime safety |
 | `CssMotion`, `VisualStyle` | Compiled CSS timelines, decorative paint layers, gradients, affine transforms |
 | `StyleProperty` | Typed computed-style access, valid-range clamping, paint-only invalidation classification |
@@ -34,17 +35,25 @@ without exposing third-party types in its public widget headers.
 Input and model changes declare their `Invalidation` impacts. Paint-only changes
 retain styles and geometry; content changes discard the source intrinsic result
 and its ancestor aggregate/allocation dependency path. Per-widget aggregate
-measurements cache their actual parent-width/height arguments separately from
-intrinsic hooks. Arrangement skips unchanged bounds/clips and clean subtrees.
+measurements retain at most three variants of allocated dimensions and independent
+percentage references, separately from intrinsic hooks. Arrangement skips unchanged
+bounds/clips/reference semantics and clean subtrees.
 Selector and structural changes conservatively match the tree, compare final
 computed properties, and retain unrelated intrinsic measurements. The legacy
 no-argument invalidation remains a full fallback for custom widgets.
 
-Preparation resolves inherited styles, measures contents, assigns logical-pixel
-bounds, and computes ancestor clips. Painting still records the visible tree in
+Preparation resolves inherited styles, allocates widths before measuring dependent
+heights, assigns logical-pixel bounds, and computes ancestor clips. Pure container
+strategies share a temporary child measurement callback; extension output is
+validated before child arrangement. Grid/flow/form layouts do not create track or
+line widgets. Unresolved percentage/content cycles use a diagnosed Content fallback
+rather than iteration. Compositions can select an immediate child baseline by
+lifetime-unique identity; NumericInput selects its editor. Painting still records the visible tree in
 order; incremental layout does not imply cached paint subtrees. `UiStats`
 distinguishes actual intrinsic hooks, aggregate calculations/cache hits, and
-arrangements from stylesheet resolutions and layout passes. See [STATE.md](STATE.md).
+arrangements, constrained hooks and strategy computations from stylesheet resolutions
+and layout passes. Owned reports expose actual child/track decisions. See
+[STATE.md](STATE.md) and [LAYOUT.md](LAYOUT.md).
 
 The event loop waits for GLFW events when nothing changes. A focused editable
 text box wakes at its next half-second caret deadline. Visible continuous scene
@@ -87,7 +96,9 @@ draws, shapes, glyphs, instance/effect upload bytes, gradients, and shadows, plu
 actual repainted pixels, submitted instances, and replayed glyphs. Recorded
 glyph/shape counts describe the paint stream; submitted counts describe GPU work.
 
-Each label/editor caches shaping until text or CSS font size changes. FreeType
+Each label/editor caches natural shaping until text or CSS font size changes.
+Wrapped labels additionally retain at most three width-specific line layouts,
+using space/hyphen breaks and grapheme-safe fallback in the current LTR service. FreeType
 loads unhinted outlines only once per glyph ID. Curves use em-space coordinates;
 TrueType quadratics remain exact. CFF cubic curves are recursively approximated
 with quadratic segments to a 0.00005 em control-point tolerance, bounded at depth

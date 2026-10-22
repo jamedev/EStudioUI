@@ -9,6 +9,7 @@
 #include "FoundationGallery.h"
 #include "StateGallery.h"
 #include "ModelGallery.h"
+#include "LayoutGallery.h"
 
 #include <EStudioUI/ContextMenu.h>
 #include <EStudioUI/ListWidget.h>
@@ -132,5 +133,8 @@ class WidgetGallery
 
     //! Owns shared model, projection, selection, and typed editing examples.
     std::unique_ptr<ModelGallery> m_Models;
+
+    //! Owns constrained measurement, form, flow, grid, and actual framebuffer probes.
+    std::unique_ptr<LayoutGallery> m_LayoutFoundation;
 };
 } // namespace EStudioUI

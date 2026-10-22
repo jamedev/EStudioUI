@@ -23,6 +23,7 @@ NumericInput::NumericInput(double value) : Widget("numericinput")
     m_Editor->AddClass("numeric-editor");
     m_Editor->SetWidth(SizeRule::Fill(1, 24));
     m_Editor->SetMaxBytes(512);
+    SetBaselineChild(m_Editor);
     m_Increment = &Add<ToolButton>("+");
     m_Increment->AddClass("numeric-increment");
     const WidgetRef owner(this);

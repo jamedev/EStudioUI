@@ -69,6 +69,9 @@ class TextBox : public Widget
     //! Measures intrinsic editor dimensions.
     Point Measure(FontFace& font) const override;
 
+    //! Reports the painted editor baseline for form and row alignment.
+    MeasureResult MeasureConstrained(FontFace& font, const MeasureConstraints& constraints) const override;
+
     //! Draws clipped text, selection, placeholder, and caret.
     void Paint(Renderer& renderer, FontFace& font, double time, float opacity) const override;
 

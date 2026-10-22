@@ -1010,9 +1010,15 @@ void StyleSheet::Apply(Style& style, const Declaration& declaration)
     else if (name == "align-items")
     {
         if (value != "stretch" && value != "start" && value != "center" && value != "end" && value != "flex-start" &&
-            value != "flex-end")
+            value != "flex-end" && value != "baseline")
             throw std::runtime_error("Unsupported align-items value.");
         style.m_Align = value.starts_with("flex-") ? value.substr(5) : value;
+    }
+    else if (name == "text-wrap")
+    {
+        if (value != "wrap" && value != "nowrap")
+            throw std::runtime_error("text-wrap supports wrap and nowrap.");
+        style.m_WordWrap = value == "wrap";
     }
     else if (name == "justify-content")
     {
@@ -1439,6 +1445,7 @@ Style StyleSheet::Compute(const StyleNode& node, const Style* inherited, int pse
         style.m_Color = inherited->m_Color;
         style.m_FontSize = inherited->m_FontSize;
         style.m_TextAlign = inherited->m_TextAlign;
+        style.m_WordWrap = inherited->m_WordWrap;
     }
     if (pseudoElement == 0 && (node.m_Type == "button" || node.m_Type == "toolbutton" || node.m_Type == "textbox"))
     {

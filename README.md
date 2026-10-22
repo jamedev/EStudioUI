@@ -12,6 +12,33 @@ current capabilities from proposed work and define delivery prerequisites.
 The [developer experience principles](DEVELOPER_EXPERIENCE.md) make simple,
 safe application code an acceptance requirement for every foundation change.
 
+## Predictable measurement and layout (0.12)
+
+The **Layout lab** now opens by default. Width-dependent labels measure their
+height at the allocated width; forms align painted baselines and share columns;
+flow rows wrap working tools; grids share Fixed/Content/Fill track allocation.
+Existing explicit sizes retain precedence over CSS. No runtime dependency was added.
+
+```cpp
+form.SetLayout(EStudioUI::FormLayout{});
+form.SetGap(12);
+notes.SetWordWrap(true);
+```
+
+Containers accept owned strategy values, including custom LayoutStrategy
+implementations. Custom widgets can supply minimum/preferred sizes, baselines,
+and height-for-width measurement without changing the GPU paint path. Owned
+allocation reports explain child and track rules, caps, overflow, and unresolved
+percentage/content cycles. Paint-only changes retain layout caches.
+
+See [LAYOUT.md](LAYOUT.md) for complete examples, sizing/extension contracts,
+wrapping boundaries and costs, and [0.12 verification](verification/LAYOUT_0_12.md)
+for actual work counts, resize captures and framebuffer comparisons. The optional
+linear constraint-layout experiment follows this foundation; a solver is not
+included in 0.12.
+
+![Shared form, flow and grid layouts rendered by EStudioUI](verification/layout-foundation.png)
+
 ## Shared collection models (0.11)
 
 One typed model can serve lists, tables, and trees with shared stable-ID selection,
@@ -34,7 +61,7 @@ list.SetSelectionModel(selection);
 Include `EStudioUI/Models.h` for the model entry points. See [MODELS.md](MODELS.md)
 for complete applications, ownership and transaction contracts, delegate hooks,
 external-provider boundaries, and sizing costs. [0.11 verification](verification/MODELS_0_11.md)
-records actual counters and framebuffer comparisons. The default demo opens Models.
+records actual counters and framebuffer comparisons. Select Models to open that demo.
 
 ![Shared collection models rendered by EStudioUI](verification/models-foundation.png)
 
@@ -86,7 +113,7 @@ to a live canvas, and demonstrates replacement, cancellation, receiver deletion,
 and another window. See [THREADING.md](THREADING.md) for the common workflow and
 the exact lifetime/error rules. See [foundation verification](verification/FOUNDATIONS_0_9.md)
 for concurrency and actual framebuffer evidence. Shared collection models and
-selection remain part of the next foundation work.
+selection are delivered in the 0.11 model foundation described above.
 
 ![Worker-built canvas rendered by EStudioUI](verification/foundation-async.png)
 

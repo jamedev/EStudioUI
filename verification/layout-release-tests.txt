@@ -1,0 +1,63 @@
+Test project /workspace/scratch/e2c95811cd0a/EStudioUI/build/gate-b-release
+      Start  1: Core
+ 1/29 Test  #1: Core .............................   Passed    0.02 sec
+      Start  2: WidgetsAndLayout
+ 2/29 Test  #2: WidgetsAndLayout .................   Passed    0.03 sec
+      Start  3: Animation
+ 3/29 Test  #3: Animation ........................   Passed    0.01 sec
+      Start  4: RichCss
+ 4/29 Test  #4: RichCss ..........................   Passed    0.08 sec
+      Start  5: CanvasScene
+ 5/29 Test  #5: CanvasScene ......................   Passed    0.19 sec
+      Start  6: CanvasGeometry
+ 6/29 Test  #6: CanvasGeometry ...................   Passed    0.10 sec
+      Start  7: SketchDocument
+ 7/29 Test  #7: SketchDocument ...................   Passed    0.97 sec
+      Start  8: CanvasWidget
+ 8/29 Test  #8: CanvasWidget .....................   Passed    0.01 sec
+      Start  9: InputControls
+ 9/29 Test  #9: InputControls ....................   Passed    0.01 sec
+      Start 10: SplitToolButton
+10/29 Test #10: SplitToolButton ..................   Passed    0.01 sec
+      Start 11: Painter
+11/29 Test #11: Painter ..........................   Passed    0.01 sec
+      Start 12: StyleParts
+12/29 Test #12: StyleParts .......................   Passed    0.10 sec
+      Start 13: StyledCollections
+13/29 Test #13: StyledCollections ................   Passed    0.02 sec
+      Start 14: StyledScroll
+14/29 Test #14: StyledScroll .....................   Passed    0.19 sec
+      Start 15: CompositeStyle
+15/29 Test #15: CompositeStyle ...................   Passed    0.01 sec
+      Start 16: Dispatch
+16/29 Test #16: Dispatch .........................   Passed    0.04 sec
+      Start 17: ThreadAffinity
+17/29 Test #17: ThreadAffinity ...................   Passed    0.01 sec
+      Start 18: Task
+18/29 Test #18: Task .............................   Passed    0.05 sec
+      Start 19: QueuedSignal
+19/29 Test #19: QueuedSignal .....................   Passed    0.01 sec
+      Start 20: ControlAffinity
+20/29 Test #20: ControlAffinity ..................   Passed    0.01 sec
+      Start 21: ServiceAffinity
+21/29 Test #21: ServiceAffinity ..................   Passed    0.01 sec
+      Start 22: State
+22/29 Test #22: State ............................   Passed    0.01 sec
+      Start 23: Binding
+23/29 Test #23: Binding ..........................   Passed    0.01 sec
+      Start 24: Invalidation
+24/29 Test #24: Invalidation .....................   Passed    0.10 sec
+      Start 25: ControlUpdate
+25/29 Test #25: ControlUpdate ....................   Passed    0.01 sec
+      Start 26: Model
+26/29 Test #26: Model ............................   Passed    0.03 sec
+      Start 27: ModelView
+27/29 Test #27: ModelView ........................   Passed    0.03 sec
+      Start 28: Layout
+28/29 Test #28: Layout ...........................   Passed    0.01 sec
+      Start 29: GpuIntegration
+29/29 Test #29: GpuIntegration ...................   Passed    7.44 sec
+
+100% tests passed out of 29
+
+Total Test time (real) =   9.57 sec

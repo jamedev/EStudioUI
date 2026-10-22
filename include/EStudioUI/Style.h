@@ -251,6 +251,9 @@ struct Style
     //! Text alignment: left, center, right.
     std::string m_TextAlign = "left";
 
+    //! Wraps label text at spaces/hyphens with a grapheme-safe fallback.
+    bool m_WordWrap = false;
+
     //! Height of a list/tree/table row in logical pixels.
     float m_RowHeight = 32;
 

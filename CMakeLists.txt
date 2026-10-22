@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.24)
-project(EStudioUI VERSION 0.11.0 LANGUAGES C CXX)
+project(EStudioUI VERSION 0.12.0 LANGUAGES C CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -82,6 +82,7 @@ add_library(EStudioUI STATIC
     src/Style.cpp src/TextBuffer.cpp src/FontFace.cpp src/Renderer.cpp
     src/Widget.cpp src/UiContext.cpp src/Label.cpp src/Button.cpp src/TextBox.cpp src/Window.cpp
     src/SizeRule.cpp src/Layout.cpp src/ToolButton.cpp src/ToolBar.cpp src/TabWidget.cpp
+    src/Measure.cpp src/LayoutStrategy.cpp src/BoxLayout.cpp src/GridLayout.cpp src/FormLayout.cpp src/FlowLayout.cpp
     src/ContextMenu.cpp src/ScrollWidget.cpp src/ListWidget.cpp src/TreeWidget.cpp src/TableWidget.cpp src/OpenGLWidget.cpp
     src/FramePacer.cpp src/VisualStyle.cpp src/CssMotion.cpp src/EasingCurve.cpp src/StyleProperty.cpp src/Animation.cpp src/AnimationSystem.cpp
     src/CanvasScene.cpp src/CanvasGeometry.cpp src/CanvasWidget.cpp src/SketchDocument.cpp src/SketchWidget.cpp
@@ -114,7 +115,7 @@ if(ESTUDIOUI_BUILD_DEMO)
         demo/SketchGallery.cpp demo/CanvasPrimitiveProbe.cpp demo/CanvasProbe.cpp demo/CanvasCurvesProbe.cpp
         demo/CustomWidgetGallery.cpp demo/PainterProbe.cpp demo/InputControlsProbe.cpp
         demo/WidgetStylesGallery.cpp demo/WidgetStylesProbe.cpp demo/ApplicationProbe.cpp demo/FoundationGallery.cpp
-        demo/StateGallery.cpp demo/ModelGallery.cpp)
+        demo/StateGallery.cpp demo/ModelGallery.cpp demo/LayoutGallery.cpp)
     target_link_libraries(EStudioUIDemo PRIVATE EStudioUI::EStudioUI EStudioUIGl glfw)
     if(MSVC)
         target_compile_options(EStudioUIDemo PRIVATE /utf-8)
@@ -186,7 +187,7 @@ if(ESTUDIOUI_BUILD_TESTS)
     foreach(suite CanvasScene CanvasGeometry SketchDocument CanvasWidget InputControls SplitToolButton Painter
                   StyleParts StyledCollections StyledScroll CompositeStyle
                   Dispatch ThreadAffinity Task QueuedSignal ControlAffinity ServiceAffinity
-                  State Binding Invalidation ControlUpdate Model ModelView)
+                  State Binding Invalidation ControlUpdate Model ModelView Layout)
         add_executable(EStudioUI${suite}Tests tests/${suite}Tests.cpp)
         target_link_libraries(EStudioUI${suite}Tests PRIVATE EStudioUI::EStudioUI)
         target_compile_definitions(EStudioUI${suite}Tests PRIVATE

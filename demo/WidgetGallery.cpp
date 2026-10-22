@@ -282,7 +282,7 @@ void WidgetGallery::BuildLayouts(Widget& page)
             "layout-note");
     auto& row = page.Add<Widget>();
     row.SetLayoutDirection(Axis::Horizontal);
-    row.SetHeight(SizeRule::Fill(1, 160));
+    row.SetHeight(SizeRule::Fixed(160));
     row.SetGap(12);
     const auto box = [&](const std::string& style, const std::string& title, const std::string& description) -> Widget&
     {
@@ -302,6 +302,7 @@ void WidgetGallery::BuildLayouts(Widget& page)
                          "Minimum: 160 px / weight: 2\nReceives the remaining free space,\nincluding space returned by "
                          "a capped neighbor.");
     m_LayoutFluid->SetWidth(SizeRule::Fill(2, 160));
+    m_LayoutFoundation = std::make_unique<LayoutGallery>(m_Window, page);
     m_LayoutReadout = &Caption(page, "Use Inspect sizes to read the current geometry.", "gallery-status");
 }
 
@@ -336,7 +337,7 @@ void WidgetGallery::UpdateLayoutReadout()
     const auto pixels = [](const Widget* widget)
     { return std::to_string(static_cast<int>(std::lround(widget->GetBounds().m_Width))); };
     m_LayoutReadout->SetText(
-        "Measured widths: fixed " + pixels(m_LayoutFixed) + " px / capped " + pixels(m_LayoutCapped) + " px / fluid " +
+        "Last inspection: fixed " + pixels(m_LayoutFixed) + " px / capped " + pixels(m_LayoutCapped) + " px / fluid " +
         pixels(m_LayoutFluid) +
         " px / overflowing containers: " + std::to_string(m_Window.Ui().GetOverflowingContainers().size()));
 }
@@ -411,6 +412,7 @@ void WidgetGallery::Verify(const std::filesystem::path& assets, const std::files
         Check(m_LayoutFluid->GetBounds().m_Width >= 160, "remaining Fill obeys its minimum");
         gpu.SavePpm(output / ("layout-" + std::to_string(width) + ".ppm"));
     }
+    m_LayoutFoundation->Verify(output, [this] { UpdateLayoutReadout(); });
     VerifyContexts(assets, output);
     m_Tabs.SetCurrentIndex(4);
     m_Animations->Verify(output);

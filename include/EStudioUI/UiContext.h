@@ -56,6 +56,12 @@ struct UiStats
 
     //! Number of widgets whose arrangement and layout hook executed.
     std::size_t m_Arrangements = 0;
+
+    //! Number of pure constraint-aware content hooks invoked after cache misses.
+    std::size_t m_ConstrainedMeasurements = 0;
+
+    //! Number of container strategy computations, including natural-size queries.
+    std::size_t m_LayoutPlans = 0;
 };
 
 //! Owns one window's widget tree, style resolution, layout, and input routing.
@@ -210,6 +216,9 @@ class UiContext
     //! Reports containers whose fixed/content bases exceed their available space.
     const std::vector<WidgetRef>& GetOverflowingContainers() const;
 
+    //! Copies the last prepared issues of visible containers; explicitly visits the visible widget tree.
+    std::vector<LayoutDiagnostic> GetLayoutDiagnostics() const;
+
     //! Dispatches a keyboard event or performs Tab navigation.
     void KeyEvent(Key key, bool down, bool repeat = false, Modifiers modifiers = {});
 
@@ -323,13 +332,20 @@ class UiContext
     void Restyle(Widget& widget, const Style* parent, bool force = false);
 
     //! Computes intrinsic and explicit widget dimensions.
-    Point Measure(Widget& widget, float parentWidth, float parentHeight);
+    MeasureResult Measure(Widget& widget, MeasureConstraints parent, MeasureConstraints allocation = {},
+                          bool definiteWidth = false, bool definiteHeight = false);
+
+    //! Builds and validates a pure strategy plan against the current displayed children.
+    LayoutPlan Plan(Widget& widget, MeasureConstraints content, bool definiteWidth, bool definiteHeight);
+
+    //! Returns descriptors for displayed, in-flow children in ownership order.
+    std::vector<Widget*> LayoutChildren(Widget& widget) const;
 
     //! Measures and arranges the current computed styles without changing input ownership.
     void Arrange();
 
     //! Places children using the documented flex subset.
-    void Layout(Widget& widget, Rect bounds, Rect clip);
+    void Layout(Widget& widget, Rect bounds, Rect clip, bool definiteWidth = false, bool definiteHeight = false);
 
     //! Finds the frontmost displayed widget inside all ancestor clips.
     Widget* HitTest(Widget& widget, Point position, Affine parentTransform = {}) const;

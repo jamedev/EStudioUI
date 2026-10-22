@@ -136,3 +136,19 @@ Prefer simplifying a confusing call site before adding another convenience alias
 Record changes to public semantics in the relevant guide and roadmap, with a
 migration example when callers must adapt. Retain the repository's readable
 English identifiers, Allman braces, and brief `//!` header documentation.
+
+## Layout as composition
+
+The ordinary path is SetLayout(FormLayout{}), SetGap, and explicit size rules;
+wrapping labels report their required height without application geometry loops.
+Row/column, grid and flow containers share allocator and measurement contracts.
+SetBaselineChild lets composed controls choose their editor without a paint or
+layout subclass. Strategy values have ordinary ownership and are replaced at an
+idle owner boundary. Custom strategies and measurement hooks are pure queries.
+
+Review allocations with GetLayoutReport().Explain or GetLayoutDiagnostics.
+Reports name affected children and show track rules, limits and final sizes;
+percentage/content cycles have a deterministic fallback. Keep reports owned and
+bounded with the actual widget tree, keep model rows virtual, and retain the
+paint-only and unrelated-measurement work gates. See [LAYOUT.md](LAYOUT.md) for
+complete compiled examples and migration/extension contracts.

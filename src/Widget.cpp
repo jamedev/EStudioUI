@@ -91,6 +91,8 @@ bool Widget::RemoveChild(Widget& child)
                                     [&](const auto& pointer) { return pointer.get() == &child; });
     if (found == m_Children.end())
         return false;
+    if (m_BaselineChild == child.m_TargetKey)
+        m_BaselineChild = 0;
     auto removed = std::move(*found);
     m_Children.erase(found);
     Invalidate(Invalidation::Structure);
@@ -103,6 +105,7 @@ void Widget::ClearChildren()
     VerifyStructuralMutation();
     const auto ownerLease = RetainOwner();
     auto removed = std::move(m_Children);
+    m_BaselineChild = 0;
     Invalidate(Invalidation::Structure);
     removed.clear();
 }
@@ -178,7 +181,7 @@ bool Widget::IsVisible() const
 
 void Widget::SetWidth(SizeRule rule)
 {
-    VerifyAccess();
+    VerifyStructuralMutation();
     rule.Validate();
     m_WidthRule = rule;
     Invalidate(Invalidation::Style | Invalidation::Content);
@@ -186,7 +189,7 @@ void Widget::SetWidth(SizeRule rule)
 
 void Widget::SetHeight(SizeRule rule)
 {
-    VerifyAccess();
+    VerifyStructuralMutation();
     rule.Validate();
     m_HeightRule = rule;
     Invalidate(Invalidation::Style | Invalidation::Content);
@@ -194,18 +197,77 @@ void Widget::SetHeight(SizeRule rule)
 
 void Widget::SetLayoutDirection(Axis axis)
 {
-    VerifyAccess();
+    VerifyStructuralMutation();
+    if (axis != Axis::Horizontal && axis != Axis::Vertical)
+        throw std::invalid_argument("Invalid layout axis.");
     m_Direction = axis;
     Invalidate(Invalidation::Style | Invalidation::Content);
 }
 
 void Widget::SetGap(float pixels)
 {
-    VerifyAccess();
+    VerifyStructuralMutation();
     if (!std::isfinite(pixels) || pixels < 0 || pixels > 1000000)
         throw std::invalid_argument("A layout gap must be finite and nonnegative.");
     m_Gap = pixels;
     Invalidate(Invalidation::Style | Invalidation::Content);
+}
+
+void Widget::SetLayout(std::unique_ptr<LayoutStrategy> strategy)
+{
+    VerifyStructuralMutation();
+    if (!strategy && !m_Layout)
+        return;
+    m_Layout = std::move(strategy);
+    Invalidate(Invalidation::Content);
+}
+
+const LayoutStrategy* Widget::GetLayout() const
+{
+    VerifyAccess();
+    return m_Layout.get();
+}
+
+void Widget::SetAlignment(LayoutAlignment alignment)
+{
+    VerifyStructuralMutation();
+    if (alignment < LayoutAlignment::Stretch || alignment > LayoutAlignment::Baseline)
+        throw std::invalid_argument("Invalid layout alignment.");
+    if (m_Alignment == alignment)
+        return;
+    m_Alignment = alignment;
+    Invalidate(Invalidation::Content);
+}
+
+void Widget::SetJustification(LayoutJustification justification)
+{
+    VerifyStructuralMutation();
+    if (justification < LayoutJustification::Start || justification > LayoutJustification::SpaceBetween)
+        throw std::invalid_argument("Invalid layout justification.");
+    if (m_Justification == justification)
+        return;
+    m_Justification = justification;
+    Invalidate(Invalidation::Content);
+}
+
+LayoutReport Widget::GetLayoutReport() const
+{
+    VerifyAccess();
+    return m_LayoutReport;
+}
+
+void Widget::SetBaselineChild(Widget* child)
+{
+    VerifyStructuralMutation();
+    if (child)
+        child->VerifyAccess();
+    if (child && (child->m_Parent != this || child->m_FloatingBounds || child->m_Overlay))
+        throw std::invalid_argument("A baseline source must be an immediate in-flow child.");
+    const auto key = child ? child->m_TargetKey : 0;
+    if (m_BaselineChild == key)
+        return;
+    m_BaselineChild = key;
+    Invalidate(Invalidation::Content);
 }
 
 void Widget::SetFloatingBounds(Rect bounds)
@@ -340,6 +402,12 @@ Point Widget::GetIntrinsicSize() const
     return m_IntrinsicSize;
 }
 
+MeasureResult Widget::GetContentMeasurement() const
+{
+    VerifyAccess();
+    return m_ContentMeasurement;
+}
+
 Rect Widget::GetClip() const
 {
     VerifyAccess();
@@ -389,6 +457,11 @@ Point Widget::Measure(FontFace&) const
 {
     VerifyAccess();
     return {};
+}
+
+MeasureResult Widget::MeasureConstrained(FontFace&, const MeasureConstraints&) const
+{
+    return {{}, GetIntrinsicSize(), {}, false};
 }
 
 void Widget::Paint(Renderer& renderer, FontFace&, double, float opacity) const
@@ -484,7 +557,8 @@ void Widget::Invalidate(Invalidation flags)
         m_DescendantStyleDirty |= HasInvalidation(flags, Invalidation::InheritedStyle | Invalidation::Structure);
         if (HasInvalidation(flags, Invalidation::Measure | Invalidation::Structure))
             m_IntrinsicValid = m_MeasureValid = false;
-        m_ArrangeDirty |= HasInvalidation(flags, Invalidation::Measure | Invalidation::Arrange | Invalidation::Structure);
+        m_ArrangeDirty |=
+            HasInvalidation(flags, Invalidation::Measure | Invalidation::Arrange | Invalidation::Structure);
     }
 }
 

@@ -51,6 +51,7 @@ enum class StyleProperty
     ClipContent,
     Decoration,
     Anchors,
+    WordWrap,
     Count
 };
 

@@ -10,7 +10,7 @@ The goal is a dependable C++ GUI foundation for the applications described in
 input, layout, text, and resource contracts before many controls depend on
 different local solutions. Retain the working GPU renderer and existing tests.
 
-## Implementation status: 0.11 and shared model foundations
+## Implementation status: 0.12 and constrained layout foundations
 
 **Gate A is implemented.** F01-F04 now have public APIs, lifetime/phase/error
 contracts, concurrency tests, and actual multiwindow/framebuffer probes.
@@ -34,7 +34,8 @@ and its remaining platform limits.
 | F13 | Gate A baseline implemented: owner checks, traversal phase guards, deferred mutation, receipt/task failures, queue counters; visual inspector remains planned |
 | F15 | Gate A concurrency/lifetime/framebuffer coverage implemented; native hardware and broader platform coverage remain open |
 | F06 | Core implemented: typed external snapshot models, stable IDs, batched edits/structural changes, shared selection, prevalidated sort/filter chains, delegates, worker publication, bounded content sizing, and expanded-branch row maps; integration evidence recorded with 0.11 |
-| F08, F09, F11, F14 | Remaining Gate B work: constrained layout strategies, input/focus/commands, semantic/platform interfaces, and install/export consumer integration |
+| F08 | Implemented in 0.12: width-first constrained measurement, baselines and composition sources, shared box/grid/form/flow strategies, bounded caches, percentage-cycle fallback, owned child/track diagnostics; verification recorded below |
+| F09, F11, F14 | Remaining Gate B work: input/focus/commands, semantic/platform interfaces, and install/export consumer integration |
 | F10, F12, F16 | Planned, with the existing baseline capabilities described below |
 
 Ease of use is a standing acceptance criterion, not a separate polish phase.
@@ -48,10 +49,16 @@ actual model/view, selection, delegate, transaction, and provider contracts.
 and scope limits, including future asynchronous provider paging/cache services.
 No runtime dependency was added.
 
-**Next: constrained measurement and layout strategies (F08).** Build on the
-retained layout caches with available-size measurement, height-for-width,
-baselines, predictable overflow, and shared grid/form/flow allocation strategies.
-F08/F09/F11/F14 remain open. Broad widget expansion remains gated.
+**F08 is implemented in 0.12.** [LAYOUT.md](LAYOUT.md) documents the public sizing,
+strategy, baseline, cycle, cache and diagnostic contracts.
+[verification/LAYOUT_0_12.md](verification/LAYOUT_0_12.md) records actual resize,
+framebuffer, work-counter and sanitizer evidence and platform limits.
+
+**Next requested increment: the optional linear constraint-layout experiment.**
+Build it on the F08 strategy/measurement boundary, with hard/soft priorities and
+deterministic infeasibility diagnostics. A solver is not included in F08.
+Then continue F09 input/focus/commands, F11 interfaces and F14 consumer packaging.
+Gate B remains open and broad widget expansion remains gated.
 
 ## Original assessment of the 0.8 implementation
 
