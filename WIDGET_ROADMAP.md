@@ -207,3 +207,9 @@ The 0.18 and 0.19 batches add no new runtime dependency. Next catalog work can b
 these controls; document storage/editor families remain F10b and module extraction
 remains deferred. Image/icon resources, standalone scrolling/stacked containers
 and broader workspace controls retain their separate entries.
+
+
+The 0.19 command/dialog batch is verified at `77ae3ac`: Windows 40/40 Release and
+Debug, five extra native Debug runs of 95 checks, Linux/software GL 38/38, TSan
+6/6 and local ASan/UBSan 38/38. The verification guide records actual captures,
+zero-idle-work checks, native cancellation hardening and remaining manual gates.

@@ -576,3 +576,11 @@ button candidates, owner/phase checks and actual retained/full framebuffer gates
 See [COMMAND_DIALOGS.md](COMMAND_DIALOGS.md) and
 [verification/COMMAND_DIALOGS_0_19.md](verification/COMMAND_DIALOGS_0_19.md).
 Human native acceptance, F10b and deferred F14 retain their separate scopes.
+
+
+The 0.19 integration is verified at `77ae3ac`: Windows Release/Debug 40/40 each,
+five extra native Debug runs of 95 checks each, Linux/software GL 38/38 and TSan
+6/6; local ASan/UBSan 38/38. No compiler warnings. Native picker cancellation now
+queues native close messages outside Shell callbacks, correcting successful COM
+Close acknowledgements that could leave Show running. Human platform acceptance
+and hard preemption of unresponsive Shell extensions retain their separate scope.

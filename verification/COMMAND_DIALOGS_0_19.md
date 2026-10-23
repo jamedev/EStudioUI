@@ -11,18 +11,17 @@ checks and real software-GL framebuffer integration (14.51 seconds total).
 ASan/UBSan: **38/38**, including the GPU probe (86.06 seconds total; GPU 32.85).
 No compiler warnings. Leak detection is disabled under host tracing; native
 third-party libraries/Mesa are uninstrumented. Tested library code: `d1faaa8`;
-Windows-only native fixture corrections: `6ee8e49` / `8111a55`.
+Windows-only native fixture corrections: `6ee8e49` / `8111a55`, and picker
+cancellation hardening: `77ae3ac`.
 Generated executable headers were checked; confirmed empty generated build
 artifacts were rebuilt before accepting local test results.
 
 Linux CI: **38/38** Release/software-GL suites and **6/6** isolated
 ThreadSanitizer suites, with no compiler warnings.
 Windows / MSVC 2022 / x64-windows-estudioui: **40/40 Release** and **40/40 Debug**
-pass, with no compiler warnings. Two additional native Debug runs pass **95**
-checks each; a third exposed an intermittent native file-picker startup-cancel
-hang. Native cancellation is being hardened and reverified with five repeated
-Debug probes. The widget, menu/dialog and collection assertions are preserved.
-[CI run](https://github.com/jamedev/EStudioUI/actions/runs/39905320152).
+pass, plus **five additional native Debug runs of 95 checks each**. No compiler
+warnings. Both CI jobs pass for `77ae3ac`.
+[Verified CI run](https://github.com/jamedev/EStudioUI/actions/runs/39909747911).
 
 CPU coverage includes anchored edge flips, live transform placement without
 intrinsic remeasurement, explicit fixed-size preservation, weak anchor/owner
@@ -52,6 +51,13 @@ floating bounds to preserve the collection fixture's viewport budget and its
 original cell-reveal assertion. The matching portable reproduction verifies a
 394 x 32 logical-pixel revealed cell after the fixture correction.
 
+Picker diagnostics showed successful IFileDialog::Close returns without Show
+unwinding when invoked from timers. Cancellation now queues native WM_CLOSE
+after the initial folder-ready callback and dismisses an owned confirmation
+before the picker. Its timer is attached to the actual dialog HWND. Native
+acceptance diagnostics identify Show/Close/COM-release phases. CI separates
+Release, Debug and repeated native steps so their results remain inspectable.
+
 Hosted Windows CI explicitly skips GPU; Build.ps1 defaults to a native GPU check
 on developer machines. Human installed-language IME, Narrator and mixed-monitor
 acceptance remain in [PLATFORM_ACCEPTANCE.md](PLATFORM_ACCEPTANCE.md).
@@ -61,11 +67,3 @@ acceptance remain in [PLATFORM_ACCEPTANCE.md](PLATFORM_ACCEPTANCE.md).
 ![GPU command menu](commands-menu-0-19.png)
 
 ![Validated input prompt](commands-input-0-19.png)
-
-
-Picker diagnostics showed successful IFileDialog::Close returns without Show
-unwinding when invoked from timers. Cancellation now queues native WM_CLOSE
-after the initial folder-ready callback and dismisses an owned confirmation
-before the picker. Its timer is attached to the actual dialog HWND. Native
-acceptance diagnostics identify Show/Close/COM-release phases. CI separates
-Release, Debug and repeated native steps so their results remain inspectable.

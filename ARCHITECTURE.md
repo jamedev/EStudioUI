@@ -554,3 +554,14 @@ callbacks; no result owns an editor, context or native window. Modeless closure
 preserves focus already moved outside its dialog. All surfaces reuse the ordinary
 scheduler, input transforms, semantics and retained GPU renderer. See
 [COMMAND_DIALOGS.md](COMMAND_DIALOGS.md) for the public ownership/cost contract.
+
+
+Native picker cancellation uses queued WM_CLOSE on its STA-owned dialog HWND,
+with a 100 ms native timer and a helper-window channel after folder readiness.
+Only an observed same-thread owned confirmation may be dismissed first. No
+Shell window is destroyed and no native thread is interrupted. Timers/property
+cleanup and COM retirement preserve the native owner lease; diagnostic phases
+are enabled by the explicit native-test environment flag. This replaces
+IFileDialog::Close calls from timer/helper callbacks, which could acknowledge
+success without unwinding Show. Arbitrary unresponsive extensions still require
+a future isolation policy rather than unsafe in-process preemption.
