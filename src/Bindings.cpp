@@ -1,4 +1,7 @@
 #include <EStudioUI/CheckBox.h>
+#include <EStudioUI/UnitEditor.h>
+#include <EStudioUI/VectorEditor.h>
+#include <EStudioUI/ColorEditor.h>
 #include <EStudioUI/Bindings.h>
 #include <EStudioUI/FilePathEditor.h>
 #include <EStudioUI/Label.h>
@@ -199,6 +202,52 @@ Binding BindText(TextBox& target, State<std::string>& state, BindingMode mode)
     if (mode == BindingMode::TwoWay && data->IsConnected())
         Detail::AddBindingWriter(data, target, state, target.TextChanged(), setter,
                                  [](const TextBox& live) { return live.GetText(); });
+    return binding;
+}
+
+Binding BindValue(UnitEditor& target, State<double>& state, BindingMode mode)
+{
+    const auto setter = [](UnitEditor& live, double value) { live.SetValue(value); };
+    auto [binding, data] = Detail::MakeBinding(
+        target, state, setter,
+        [](UnitEditor& live, double value)
+        {
+            if (!std::isfinite(value) || value < live.GetMinimum() || value > live.GetMaximum())
+                throw std::invalid_argument("Bound unit value must be finite and in its canonical range.");
+        });
+    if (mode == BindingMode::TwoWay && data->IsConnected())
+        Detail::AddBindingWriter(data, target, state, target.ValueChanged(), setter,
+                                 [](const UnitEditor& live) { return live.GetValue(); });
+    return binding;
+}
+
+Binding BindValue(VectorEditor& target, State<VectorValue>& state, BindingMode mode)
+{
+    const auto setter = [](VectorEditor& live, const VectorValue& value) { live.SetValue(value); };
+    auto [binding, data] = Detail::MakeBinding(
+        target, state, setter,
+        [](VectorEditor& live, const VectorValue& value)
+        {
+            if (value.size() != live.GetValue().size())
+                throw std::invalid_argument("Bound vector component count must match its editor.");
+            for (const double component : value)
+                if (!std::isfinite(component) || component < live.GetMinimum() || component > live.GetMaximum())
+                    throw std::invalid_argument("Bound vector components must be finite and in range.");
+        });
+    if (mode == BindingMode::TwoWay && data->IsConnected())
+        Detail::AddBindingWriter(data, target, state, target.ValueChanged(), setter,
+                                 [](const VectorEditor& live) { return live.GetValue(); });
+    return binding;
+}
+
+Binding BindColor(ColorEditor& target, State<Color>& state, BindingMode mode)
+{
+    const auto setter = [](ColorEditor& live, Color value) { live.SetColor(value); };
+    auto [binding, data] =
+        Detail::MakeBinding(target, state, setter, [](ColorEditor&, Color value) { ValidateColor(value); });
+    if (mode == BindingMode::TwoWay && data->IsConnected())
+        Detail::AddBindingWriter(data, target, state, target.ColorChanged(), setter,
+                                 [](const ColorEditor& live) { return live.GetColor(); });
     return binding;
 }
 

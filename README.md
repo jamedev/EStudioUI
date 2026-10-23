@@ -21,6 +21,29 @@ packaging are deferred until that use informs reusable boundaries, including
 services for applications without a UI. Standalone modules are planned, not
 current package capabilities; see the roadmaps for acceptance criteria.
 
+## Property editing and EStudioUICreator (0.23)
+
+The framework now provides collapsible inspector sections, a virtual `PropertyGrid`,
+RGB/HSV/alpha color controls, unit-aware scalar editors and two-to-four component
+vectors. They share canonical State validation and bindings, ordinary rich CSS,
+and the existing GPU renderer.
+
+`EStudioUICreator` is the first real authoring application: add and select actual
+widgets, edit properties/styles, choose layouts, drag/resize under constraints,
+author named rules, edit CSS source lines, undo/redo, and save either open JSON or
+direct editable C++. Runtime construction works in ordinary windows and existing
+sparse canvas widget hosts. The C++ export creates widgets directly and does not
+require a JSON document. Its generated output is compiled in the test build.
+
+```powershell
+.\Build.ps1 -RunCreator
+```
+
+See [property APIs](PROPERTY_EDITING.md), [Creator workflow and missing blocks](CREATOR.md),
+and [verification](verification/PROPERTY_CREATOR_0_23.md). This is the first Creator
+increment; complete widget-specific adapters, multiple content slots, scoped
+styles and richer visual authoring remain explicitly tracked.
+
 ## Application workspaces (0.22)
 
 The demo opens **Application workspace**; its launch button opens a real separate

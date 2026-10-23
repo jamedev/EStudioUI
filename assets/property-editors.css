@@ -1,0 +1,26 @@
+/* Ordinary widget selectors and compiled row/category paint parts. */
+collapsiblepanel { background: transparent; gap: 0; padding: 0; }
+collapsiblepanel > .section-header { background: #243147; color: #dce7fa; border: 0; border-radius: 5px; text-align: left; min-height: 32px; }
+collapsiblepanel > .section-header:hover { background: #30425d; }
+collapsiblepanel:expanded > .section-header { color: #a7dfff; }
+section-content { padding: 6px 0; gap: 6px; }
+propertygrid { background: #172131; color: #dce7fa; border: 1px solid #30405a; border-radius: 5px; padding: 0; font-size: 13px; }
+propertygrid::row:alternate { background: #1b2739; }
+propertygrid::row:selected { background: #234668; color: white; }
+propertygrid::row:read-only { color: #8a9db7; }
+propertygrid::row:invalid { background: #623646; }
+propertygrid::category { background: #28364c; color: #afc7eb; font-weight: 600; }
+propertygrid::category:expanded { color: #cde8ff; }
+.property-editor { margin: 2px; }
+uniteditor, vectoreditor, coloreditor { background: transparent; padding: 0; gap: 4px; }
+vector-component { padding: 0; gap: 2px; }
+vector-label { font-size: 11px; color: #8fa8cc; }
+.unit-choice { min-width: 64px; }
+coloreditor:invalid { border: 1px solid #e86f88; }
+colorpicker { background: #202d41; padding: 10px; gap: 8px; }
+color-channel { padding: 0; gap: 6px; }
+color-palette { padding: 4px 0 0; gap: 4px; }
+.color-popover { background: #202d41; border: 1px solid #55739b; border-radius: 8px; padding: 2px; box-shadow: 0 10px 24px #00000070; }
+/* Compact vector fields keep full component values visible. Arrow keys and wheel still step. */
+vectoreditor numericinput > .numeric-decrement, vectoreditor numericinput > .numeric-increment { display: none; }
+vectoreditor .numeric-editor { padding: 4px; font-size: 12px; }

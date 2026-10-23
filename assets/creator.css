@@ -1,0 +1,5 @@
+.creator-mark { font-size: 11px; color: #8aabc9; }
+designer-surface { background: #0b111e; border: 1px solid #3c5374; padding: 0; }
+design-host { background: transparent; padding: 0; gap: 0; }
+design-overlay { background: transparent; padding: 0; border: 0; }
+#creator-palette, #creator-properties { min-width: 200px; }

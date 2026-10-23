@@ -198,3 +198,20 @@ ownership. Shared State/bindings follow actual widgets; old dispatcher-bound
 handles expire on transfer and new direct handles come from the destination.
 See [WORKSPACES.md](WORKSPACES.md) for the explicit initial docking topology and
 native/manual acceptance limits.
+
+## Property editing and authoring
+
+`PropertyModel(ui.States(), definitions)` is the canonical value boundary; add a
+`PropertyGrid`, call `SetModel`, and use ordinary State validators/transactions.
+Independent unit, vector and color controls expose normal bindings. Categories,
+virtual painting, active-editor lifetime and rollback belong to the framework.
+See [PROPERTY_EDITING.md](PROPERTY_EDITING.md) and the compiled
+[example](examples/PropertyEditing.cpp).
+
+`WidgetRegistry` explicitly describes runtime factories, content slots, typed
+properties and direct C++ emission. `UiDocument` remains an owned design value;
+it neither creates a window nor installs a stylesheet implicitly. The compiled
+[runtime example](examples/RuntimeUi.cpp) covers window and canvas hosts. The
+Creator uses these same APIs rather than a private substitute widget system.
+Complete adapter coverage and authoring ergonomics remain visible in
+[CREATOR.md](CREATOR.md).

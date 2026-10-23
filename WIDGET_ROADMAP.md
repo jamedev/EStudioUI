@@ -25,6 +25,14 @@ acceptance continues through the platform checklist. F10b document editing and
 W04/W05 remain a later dedicated track; basic forms and workspaces do not wait
 for a document engine. These are sequencing changes, not new shipped features.
 
+The 0.23 [property-editing increment](PROPERTY_EDITING.md) supplies the next
+inspector controls and their canonical validation/binding boundary. The first
+[EStudioUICreator application](CREATOR.md) consumes them and records missing
+framework blocks. Its JSON/runtime builder and direct C++ generator share an
+explicit extensible adapter catalog; construction coverage does not mean every
+widget API or content-slot configuration is serialized. F10b and F14 remain
+deferred. See [verification](verification/PROPERTY_CREATOR_0_23.md).
+
 ## Current coverage
 
 The library already includes `Widget`, `Label`, `Button`, `ToolButton`,
@@ -34,6 +42,7 @@ single-line `TextBox`, `NumericInput`, `Slider`, `SplitToolButton`, `TabWidget`,
 `ScrollArea`, `Splitter`, `GroupBox`, `Frame`, `Separator`, `ProgressBar`,
 `BusyIndicator`, `ToolTip`, `MenuBar`, `MenuItem`, `Popup`, `Dialog`,
 `DialogButtonBox`, `MessageBox`, `InputDialog`, `ImageView`, shared `Image`/`Icon` resources,
+`CollapsiblePanel`, `PropertyGrid`, `ColorEditor`/`ColorPicker`, `UnitEditor`, `VectorEditor`,
 and custom painting through `PaintWidget`/`Painter`.
 
 Existing collections render viewport model entries rather than creating a widget
@@ -81,7 +90,7 @@ only change appearance should share implementations and semantic roles.
 | W16 | Splitter | Nested user-resizable panes, hard minima, saved positions | Essential — **0.18 delivered** |
 | W17 | StackedWidget | Persistent pages without requiring a visible tab strip | Essential — **0.21 delivered** |
 | W18 | GroupBox / Frame / Separator | Titled/checkable groups and reusable visual structure | Essential — **0.18 delivered** |
-| W19 | CollapsiblePanel / Accordion / ToolBox | Expandable inspector sections and categorized tools | High |
+| W19 | CollapsiblePanel / Accordion / ToolBox | Expandable inspector sections and categorized tools | High — **0.23 CollapsiblePanel delivered; Accordion/ToolBox pending** |
 | W20 | MainWindow | Central workspace, title-row menus/widgets, toolbars, status, owned windows | High — **0.22 delivered; interactive acceptance recorded separately** |
 | W21 | DockWidget / DockManager | Four edge tab groups, splitters, dock/float, grip dragging, tabify/reorder and bounded restore | High — **0.22 delivered**; arbitrary nested dock trees remain later |
 | W22 | DocumentWorkspace | Multiple documents, close/reorder/detach tabs, unsaved-state indicators | High |
@@ -99,7 +108,7 @@ only change appearance should share implementations and semantic roles.
 | W29 | FileDialog / FolderPicker / FilePathEditor | Asynchronous open/save/folder selection, filters, recent paths, canonical path bindings | Essential — **0.22 delivered** |
 | W30 | StatusBar | Message and permanent application widget area | High — **0.22 delivered** |
 | W31 | Banner / Toast / ValidationMessage | Nonmodal and field-level feedback with accessible announcements | High |
-| W32 | ColorPicker / ColorEditor | Palette, RGB/HSV, alpha, hexadecimal input | High |
+| W32 | ColorPicker / ColorEditor | Palette, RGB/HSV, alpha, hexadecimal input | High — **0.23 delivered** |
 | W33 | FontPicker / FontEditor | Family, size, style, preview using the shared font service | High |
 | W34 | DateEdit / TimeEdit / DateTimeEdit / Calendar | Validated temporal input and popup calendar | Later |
 | W35 | CommandPalette | Searchable shared actions and shortcuts | High |
@@ -113,7 +122,7 @@ modal convenience APIs that could introduce nested event loops.
 
 | ID | Widget/family | Scope | Priority |
 | --- | --- | --- | --- |
-| W37 | PropertyGrid / PropertyInspector | Categories and typed editors for booleans, enums, strings, numbers, colors, vectors | High |
+| W37 | PropertyGrid / PropertyInspector | Categories and typed editors for booleans, enums, strings, numbers, colors, vectors | High — **0.23 virtual inspector delivered; mixed/multiple-selection editing pending** |
 | W38 | TreeTable | Hierarchy with columns for assemblies, layers, model properties | High |
 | W39 | IconGrid / ThumbnailView | Virtualized assets, materials, documents, images | High |
 | W40 | FileBrowser | Filesystem model with tree/list/thumbnail presentations | Later |
@@ -154,8 +163,8 @@ compatibility is implied by the presence of a rich-text editor.
 
 | ID | Module/control family | Scope | Priority |
 | --- | --- | --- | --- |
-| W42 | Unit-aware scalar editors | Unit conversion, dimensional validation, display precision | High |
-| W43 | Vector / matrix / coordinate-system editors | Composition of typed value editors | High |
+| W42 | Unit-aware scalar editors | Unit conversion, dimensional validation, display precision | High — **0.23 affine UnitEditor delivered** |
+| W43 | Vector / matrix / coordinate-system editors | Composition of typed value editors | High — **0.23 VectorEditor(2/3/4) delivered; matrices/frames pending** |
 | W44 | LogView / Console | Bounded streaming content, filtering, search, optional command input | High |
 | W45 | CodeEditor | Plain editor plus gutter, syntax styling, completion/folding interfaces | Later |
 | W46 | Plot / Chart / Legend / ColorMapEditor | Scientific data display with explicit data/LOD/performance contracts | Later |

@@ -655,3 +655,28 @@ the prior GL context after cleanup, including retirement at a frame boundary.
 A bounded versioned snapshot stores panel placement, selection, visibility,
 floating bounds and splitter sizes; parsing rejects the complete invalid payload
 before touching live state. [WORKSPACES.md](WORKSPACES.md) documents costs and limits.
+
+## Property values and UI documents (0.23)
+
+`PropertyDefinition` describes immutable typed editor metadata. `PropertyModel`
+uses canonical State values, final-candidate validation and owned notifications;
+`PropertyGrid` caches category/row positions, paints only visible rows, keeps one
+live editor and exposes lazy dataset-qualified semantic cells. Independent color,
+unit and vector controls reuse ordinary widget composition, shared popup sessions,
+State bindings, narrow invalidation and bounded reentrant notifications.
+
+`WidgetRegistry` supplies explicit trusted factories/content slots/property adapters
+for both `UiDocument` runtime construction and direct C++ generation. Documents
+contain owned stable design IDs, typed overrides, layout/constraint values and
+optional CSS; unknown types or incomplete references reject before attachment.
+Factories construct off-tree, and a failure preserves the live host. The canvas
+loader uses existing sparse `HostWidget` subtrees. JSON parsing is private,
+header-only nlohmann/json at the pinned permissive baseline. Generated C++ calls
+ordinary constructors/setters/layout APIs without a runtime document dependency.
+
+The Creator is a separate application target consuming those public APIs. It
+coalesces preview work at frame preparation, preserves actual widget identity for
+property-only updates and commits one document snapshot per completed geometry
+gesture. Structural changes rebuild a staged preview. F14 packaging/module
+extraction remains deferred; this boundary is evidence from a real consumer,
+not a new SDK compatibility commitment. See [CREATOR.md](CREATOR.md).

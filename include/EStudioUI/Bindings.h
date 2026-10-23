@@ -1,5 +1,7 @@
 #pragma once
 
+#include "PropertyValue.h"
+
 #include "State.h"
 #include "Widget.h"
 #include "UiContext.h"
@@ -18,6 +20,9 @@ namespace EStudioUI
 {
 class Label;
 class TextBox;
+class UnitEditor;
+class VectorEditor;
+class ColorEditor;
 class NumericInput;
 class Slider;
 class ScrollBar;
@@ -336,6 +341,15 @@ Binding BindText(TextBox& target, State<std::string>& state, BindingMode mode = 
 
 //! Binds committed numeric values, keeping intermediate editor text local until commit.
 Binding BindValue(NumericInput& target, State<double>& state, BindingMode mode = BindingMode::TwoWay);
+
+//! Binds canonical unit values independently of display units.
+Binding BindValue(UnitEditor& target, State<double>& state, BindingMode mode = BindingMode::TwoWay);
+
+//! Binds complete validated component tuples atomically.
+Binding BindValue(VectorEditor& target, State<VectorValue>& state, BindingMode mode = BindingMode::TwoWay);
+
+//! Binds normalized canonical RGBA values with coherent rollback.
+Binding BindColor(ColorEditor& target, State<Color>& state, BindingMode mode = BindingMode::TwoWay);
 
 //! Binds scalar slider values with exact range validation before state commits.
 Binding BindValue(Slider& target, State<double>& state, BindingMode mode = BindingMode::TwoWay);

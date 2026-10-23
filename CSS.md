@@ -431,3 +431,21 @@ Toolbar navigation uses `.toolbar-scroll`; `toolbar-strip` supplies command gap,
 padding and clipping independently of the outer navigation row. Custom concrete
 ToolBar::Add/AddChild route inside Content. [Working rich styles](assets/essential-widgets.css)
 cover the new components without per-frame parsing or new dependencies.
+
+## Property editing (0.23)
+
+`CollapsiblePanel`, `PropertyGrid`, `UnitEditor`, `VectorEditor`, `ColorEditor`
+and `ColorPicker` use ordinary compiled CSS. The virtual property grid registers
+`::row` (`:selected`, `:alternate`, `:read-only`, `:invalid`) and `::category`
+(`:expanded`) paint parts. `assets/property-editors.css` supplies a complete first
+theme; composition children expose `.section-header`, `section-content`,
+`.property-editor`, `.unit-choice`, `vector-component`, `vector-label`,
+`color-channel`, `color-palette` and `.color-popover` selectors. Existing effects
+and animations remain available without parsing during paint.
+
+Creator visual CSS edits use typed `SetStyleProperty` presentation overrides;
+Clear CSS overrides restores source-cascade behavior. The initial visual editor
+covers common colors, border width/radius, opacity and font size; source editing
+supports the full existing parser. A document stylesheet is installed explicitly
+on its UI context, so preview-only selectors should use the design root ID until
+subtree stylesheet scoping is implemented. See [CREATOR.md](CREATOR.md).

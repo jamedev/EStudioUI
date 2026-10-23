@@ -136,6 +136,17 @@ remains open, so protocol tests alone do not establish application readiness. Ga
 verified for the F10a/common-control automated integration; human native
 acceptance remains explicitly tracked.
 
+**The 0.23 property-editing/Creator slice** uses existing State, bindings, shared
+commands, platform pickers, layout/constraint and sparse canvas widget-hosting
+contracts. `PropertyModel` owns validated typed values; `PropertyGrid` keeps rows
+virtual and exposes lazy stable semantic cells. `UiDocument` provides bounded,
+versioned open JSON construction and independently generated direct C++. The
+Creator has a small application-owned snapshot history, not the proposed generic
+F16 command/history service. Its [missing-block list](CREATOR.md) informs future
+framework work without moving F10b or F14 into this increment. The private
+header-only nlohmann/json dependency uses MIT and the existing pinned manifest.
+See [verification](verification/PROPERTY_CREATOR_0_23.md).
+
 ## Original assessment of the 0.8 implementation
 
 | Area | Existing foundation | Source-visible gap |
