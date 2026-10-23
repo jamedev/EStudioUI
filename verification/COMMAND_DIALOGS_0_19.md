@@ -1,5 +1,9 @@
 # Command/dialog batch verification (0.19)
 
+The later [interaction regression follow-up](INTERACTION_REGRESSIONS_0_19.md)
+records the production scrollbar/bidi/tab fixes and new Windows framebuffer gate.
+The results below describe the original `77ae3ac` verification boundary.
+
 Delivered: W24, W26, W27 and W28, with glyph icons and in-window dialog surfaces.
 [COMMAND_DIALOGS.md](../COMMAND_DIALOGS.md) records ownership, keyboard behavior,
 size/resource bounds and the remaining native-window/image/workspace scopes.

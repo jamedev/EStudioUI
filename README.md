@@ -407,6 +407,8 @@ selected alternatives, including FreeType's FTL.
   read-only mode, and `TextChanged()` / `Submitted()` signals.
 - `TabWidget` owns persistent pages and excludes inactive pages from layout/input.
   Arrow/Home/End keys navigate the tab strip; Ctrl+Tab / Ctrl+Shift+Tab switch pages.
+  A `...` chooser lists all pages in a virtual scrolling popup; selected and focused
+  selectors remain visible when the natural-width row overflows.
 - `ListWidget` supports selection, prefix search, activation, keyboard/page
   navigation, and scrolling. `TreeWidget` adds stable IDs and expansion/navigation.
 - `TableWidget` supports virtualized rows, cell selection/copying, stable
@@ -480,7 +482,8 @@ UI owner and retire when it disappears. Both support connection mutation and
 sender deletion. Live widget access remains owner-only; use typed handles for
 cross-thread delivery. See [THREADING.md](THREADING.md).
 
-The demo opens on State. Data & actions has 10,000 table rows and 2,006 list items.
+The demo opens on Menus & dialogs. The `...` tab chooser reaches every gallery page.
+Data & actions has 10,000 table rows and 2,006 list items.
 Only viewport rows are painted. Inputs preserves the original editor/button
 examples; 3D surfaces has two independent orbit/zoom scenes; Layout lab exposes
 fixed and bounded Fill behavior at different native window sizes.
@@ -547,7 +550,9 @@ timings include CPU submission and synchronous readback, excluding widget layout
 and shaping; use Release and your actual GPU for meaningful performance results.
 
 The repository's workflow builds MSVC 2022 Debug/Release with the same PowerShell
-script (explicitly skipping native GPU checks on hosted Windows runners) and
-runs Linux vcpkg/core/headless-GL checks. `verification/` contains local test
+script for core/native CPU checks, plus a staged Win32/WGL framebuffer run with a
+SHA-256-pinned Mesa software runtime. The test driver is isolated from system and
+application installations. Linux CI runs vcpkg/core/headless-GL checks.
+`verification/` contains local test
 records and actual framebuffer screenshots. Linux captures use Mesa llvmpipe
 software OpenGL; they verify behavior rather than hardware GPU throughput.

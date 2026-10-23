@@ -508,6 +508,13 @@ pruning. See [WIDGET_STYLING.md](WIDGET_STYLING.md).
 
 ## Common-control composition (0.18)
 
+TabWidget reserves a navigation row containing the actual `tabbar` and a persistent
+tab chooser. A pure row strategy preserves caption widths and clips around the
+selected/focused selector. The chooser reuses the owned popup stack and a virtual
+ListWidget; captions and weak page identities are copied on opening, never during
+paint. Choosing a snapshot row resolves its persistent page again after popup
+closure, so removal of preceding tabs cannot select an unrelated page.
+
 ComboBox composes the existing TextBox and a nonfocusable analytic arrow button.
 Its ListWidget popup shares canonical model storage with independent preview
 selection; a bounded Unicode prefix index and numeric enabled-row index avoid
@@ -518,6 +525,8 @@ ScrollArea composes a clipping viewport and ordinary content widget. A scroll
 change explicitly invalidates the child strategy input through InvalidateChild;
 this preserves intrinsic caches while rearranging translated descendants. Focus
 reveal uses the common ancestor hook and transformed coordinate conversion.
+The base ScrollWidget starts thumb/track capture on pointer-down, so ScrollArea
+uses the same production drag path as collections without a test-only adapter.
 Splitter assigns lifetime-keyed stretch weights through the shared allocator;
 hard fixed/min/max rules remain authoritative. Prepared reports are borrowed in
 paint and copied only through the public owned diagnostics API.

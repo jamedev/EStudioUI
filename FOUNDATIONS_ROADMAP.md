@@ -584,3 +584,11 @@ five extra native Debug runs of 95 checks each, Linux/software GL 38/38 and TSan
 queues native close messages outside Shell callbacks, correcting successful COM
 Close acknowledgements that could leave Show running. Human platform acceptance
 and hard preemption of unresponsive Shell extensions retain their separate scope.
+
+The subsequent Windows interaction report exposed missing production ScrollArea
+press coverage, ambiguous bidi pointer endpoints and clipped gallery tabs.
+[Interaction follow-up](verification/INTERACTION_REGRESSIONS_0_19.md) records their
+regressions and corrections. Windows CI now also executes native Win32/WGL
+framebuffer integration with an isolated pinned software driver; the prior
+Windows core/native CPU results did not cover that rendering path. Hardware and
+human native acceptance remain separate gates.

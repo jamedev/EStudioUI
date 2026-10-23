@@ -70,9 +70,10 @@ are supported.
 
 ScrollArea owns a clipping viewport and an ordinary `Content()` widget. Add forms,
 layouts and controls there; use List/Table/Tree/Canvas for large virtual datasets.
-It reuses wheel, drag and CSS scrollbar behavior. Focus movement reveals nested
-controls, including transformed geometry. Scrolling invalidates the dependent
-viewport arrangement and preserves intrinsic text/measurement caches. Both axes
+It reuses wheel, drag and CSS scrollbar behavior. Thumb/track presses are handled
+directly by ScrollWidget; release/deactivation terminates capture. Focus movement
+reveals nested controls, including transformed geometry. Scrolling invalidates
+the dependent viewport arrangement and preserves intrinsic measurement caches. Both axes
 are supported; the gallery hides the horizontal gutter through CSS. Arbitrary
 child controls retain ordinary widget/layout cost; ScrollArea does not virtualize
 a large application widget tree.

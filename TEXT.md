@@ -36,7 +36,11 @@ TextBox storage and selections remain logical UTF-8 grapheme boundaries. Pointer
 hit testing and Left/Right operate in visual order; Ctrl+Left/Right use Unicode
 word boundaries, Home/End use paragraph visual edges. Bidi boundaries retain
 caret affinity. Required shaping remains enabled; optional ligatures are disabled
-for editing. GDEF ligature caret positions are used when present, with evenly
+for editing. At coincident bidi boundaries, pointer hit testing chooses the edge
+of the grapheme on the pointed side, rather than another run's logical endpoint.
+This uses the existing sorted caret/span indices without allocation or reshaping.
+The highlight still follows the logical UTF-8 range and may be visually disjoint.
+GDEF ligature caret positions are used when present, with evenly
 partitioned grapheme advances as a deterministic fallback. Selection may produce
 several painted rectangles. UIA text ranges report those clipped rectangles and
 logical visible intervals. Clipboard, validators, undo, F09 shortcut/AltGr rules
