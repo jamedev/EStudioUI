@@ -610,7 +610,7 @@ bool UiContext::RoutePointer(const PointerEvent& event)
     {
         if (event.m_Button == PointerButton::None || matchingCapture)
             return false;
-        if (event.m_Button == PointerButton::Left)
+        if (event.m_Button == PointerButton::Left && !event.m_PreserveFocus)
             SetFocus(widget->IsFocusable() ? widget : nullptr);
         widget = target.Get();
         if (!widget || !IsInputAllowed(*widget))

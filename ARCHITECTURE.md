@@ -638,6 +638,9 @@ entering User32's native button tracker. Frame calculation and activation keep
 the client/GPU caption separate from native caption painting; native resize,
 move, system-menu and Snap hit roles remain available. Client size is preserved
 across frame changes and computed from actual frame insets for explicit sizing.
+Native caption presses carry an explicit preserve-focus pointer policy through
+the shared input boundary, leaving client focus and preedit intact; native
+caption controls do not become client Tab stops.
 Maximize/restore presentation synchronizes only at ordinary frame boundaries.
 See [native title-bar verification](verification/TITLEBAR_FIX.md).
 

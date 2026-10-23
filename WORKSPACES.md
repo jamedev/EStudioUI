@@ -61,6 +61,11 @@ cancellation clear the press. User32's native button tracker is not used for
 these custom rectangles. Caption repaint messages cannot draw a second title
 bar over the GPU; resize borders and DWM shadows remain native.
 
+Caption presses preserve client keyboard focus and an active editor composition.
+The three native caption controls are excluded from client Tab traversal. This
+policy belongs to their native role; ordinary toolbar and dock controls retain
+their existing keyboard behavior.
+
 Switching the frame preserves client dimensions, and `SetSize()` accounts for
 the actual custom frame instead of adding the removed native caption height.
 Maximizing updates the restore symbol and accessible command name at the normal

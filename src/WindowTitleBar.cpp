@@ -29,9 +29,9 @@ WindowTitleBar::WindowTitleBar(Window& window) : Widget("window-titlebar")
     m_Caption->SetWidth(SizeRule::Content());
     m_Caption->SetHeight(SizeRule::Fill());
     m_Caption->SetWindowDragRegion(true);
-    m_Minimize = &Add<Detail::WindowCommandButton>(Detail::WindowCommand::Minimize);
-    m_Maximize = &Add<Detail::WindowCommandButton>(Detail::WindowCommand::Maximize);
-    m_Close = &Add<Detail::WindowCommandButton>(Detail::WindowCommand::Close);
+    m_Minimize = &Add<Detail::WindowCommandButton>(Detail::WindowCommand::Minimize, true);
+    m_Maximize = &Add<Detail::WindowCommandButton>(Detail::WindowCommand::Maximize, true);
+    m_Close = &Add<Detail::WindowCommandButton>(Detail::WindowCommand::Close, true);
     for (auto* button : {m_Minimize, m_Maximize, m_Close})
     {
         button->AddClass("caption-button");

@@ -6,8 +6,15 @@
 
 namespace EStudioUI::Detail
 {
-WindowCommandButton::WindowCommandButton(WindowCommand command) : ToolButton(), m_Command(command)
+WindowCommandButton::WindowCommandButton(WindowCommand command, bool nativeCaption)
+    : ToolButton(), m_Command(command), m_NativeCaption(nativeCaption)
 {
+}
+
+bool WindowCommandButton::IsFocusable() const
+{
+    VerifyAccess();
+    return !m_NativeCaption && ToolButton::IsFocusable();
 }
 
 void WindowCommandButton::SetCommand(WindowCommand command)

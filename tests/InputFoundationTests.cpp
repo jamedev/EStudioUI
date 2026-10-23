@@ -548,6 +548,38 @@ void CallbackAndDomainLifetimes(FontFace& font)
     ui.CloseAllPopups();
 }
 
+void CaptionFocusPolicy(FontFace& font)
+{
+    UiContext ui(font);
+    auto& editor = ui.Root().Add<TextBox>("Editing");
+    auto& command = ui.Root().Add<Button>("Caption command");
+    ui.Prepare(500, 240);
+    ui.SetFocus(&editor);
+    const auto session = ui.GetTextInputState();
+    Check(ui.DispatchComposition({TextCompositionKind::Preedit, "pending", 1, session.m_Client, session.m_Epoch}),
+          "Caption focus fixture begins composition in the client editor");
+    int activations = 0;
+    command.Clicked().Connect([&] { ++activations; });
+    PointerEvent press{};
+    press.m_Position = Center(command);
+    press.m_Type = PointerEventType::Down;
+    press.m_Button = PointerButton::Left;
+    press.m_Buttons = 1;
+    press.m_PreserveFocus = true;
+    ui.DispatchInput(press);
+    Check(ui.GetFocus() == &editor && ui.GetTextInputState().m_Composing && editor.GetText() == "Editing",
+          "A native caption press preserves client focus, composition and canonical text");
+    auto release = press;
+    release.m_Type = PointerEventType::Up;
+    release.m_Buttons = 0;
+    ui.DispatchInput(release);
+    Check(activations == 1 && ui.GetFocus() == &editor && ui.GetTextInputState().m_Composing,
+          "Caption activation releases pointer capture without redirecting keyboard focus");
+    Click(ui, command);
+    Check(activations == 2 && ui.GetFocus() == &command && !ui.GetTextInputState().m_Composing,
+          "Ordinary client clicks retain their focus and composition-cancellation behavior");
+}
+
 void TransformedKeyboardAnchor(FontFace& font)
 {
     UiContext ui(font);
@@ -593,6 +625,7 @@ int main()
         FocusAndPopupStack(font);
         MenuAndLifetime(font);
         CallbackAndDomainLifetimes(font);
+        CaptionFocusPolicy(font);
         TransformedKeyboardAnchor(font);
         std::cout << s_Checks << " input/action/focus/popup checks passed.\n";
         return 0;

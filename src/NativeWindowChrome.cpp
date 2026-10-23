@@ -66,6 +66,7 @@ struct NativeWindowChrome::Impl : std::enable_shared_from_this<Impl>
         event.m_Type = type;
         event.m_Button = type == PointerEventType::Move ? PointerButton::None : PointerButton::Left;
         event.m_Buttons = held ? 1u : 0u;
+        event.m_PreserveFocus = true;
         if (m_Pointer && !m_Owner.expired())
         {
             // Keep the callable alive if delivery retires its window or this adapter.

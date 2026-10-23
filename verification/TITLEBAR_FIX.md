@@ -21,6 +21,10 @@ loss, deactivation, receiver expiry and callback-driven retirement cannot leave
 a pressed control or a native capture behind. Ordinary client controls, title
 dragging and native system menus retain their existing paths.
 
+Native caption presses preserve client keyboard focus and active text preedit
+through the owning pointer event policy. Caption controls are not client Tab
+stops. Regular client presses keep their normal focus behavior.
+
 Button callbacks execute the containing window's commands. A maximized window
 displays a restore symbol and exposes `Restore window` in accessibility metadata.
 The title-row commands are adjacent, and the bundled close-button press uses the
@@ -33,10 +37,11 @@ Maximized client calculation preserves auto-hidden taskbar reveal edges.
 
 ## Verification
 
-Local GNU 13 Release passes all 46 suites in 15.89 s, including actual retained/full GPU
-framebuffer and workspace checks. A MinGW-w64 C++20 cross-syntax pass compiles
-the Windows branches of `NativeWindowChrome.cpp`, its native tests, the GLFW
-caption probe and `Window.cpp` with `-Wall -Wextra -Wconversion`, without warnings.
+Local GNU 13 Release passes all 46 suites, including actual retained/full GPU
+framebuffer, workspace and focus/composition checks. A MinGW-w64 C++20
+cross-syntax pass compiles the Windows branches of `NativeWindowChrome.cpp`,
+its native tests, the GLFW caption probe, `Window.cpp`, `WindowTitleBar.cpp`
+and `WindowCommandButton.cpp` with `-Wall -Wextra -Wconversion`, without warnings.
 This compile check is separate from execution on Windows.
 
 The expanded native test checks actual HWND client origin and dimensions, native
@@ -52,6 +57,10 @@ caption messages through the production adapter. It verifies painted hover and
 press state, outside release/cancellation, and single-click native minimize,
 maximize, restore and close. Captures come from the actual C++ renderer.
 Headless workspace checks exercise the restore symbol and accessible name.
+GPU captures contain client content; removal of the native caption is checked
+separately against the actual HWND outer/client origins, not inferred from a
+headless image. Native probes use the window's normal monotonic clock so native
+callbacks cannot invalidate a separate manual test clock.
 
 Windows Release/Debug CI and sanitizer results will be recorded after they
 complete. Windows 11 Snap flyout appearance, physical snap gestures and actual

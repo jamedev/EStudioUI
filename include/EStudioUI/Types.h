@@ -270,6 +270,9 @@ struct PointerEvent
 
     //! Normalized pen pressure when supplied by a capable adapter.
     float m_Pressure = 0;
+
+    //! Leaves client keyboard focus unchanged for native non-client presses.
+    bool m_PreserveFocus = false;
 };
 
 //! A normalized keyboard event delivered to an embedded scene.

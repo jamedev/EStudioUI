@@ -179,7 +179,8 @@ int main()
         SendMessageW(window, WM_NCLBUTTONDOWN, HTMAXBUTTON, MAKELPARAM(hover.x, hover.y));
         Check(GetCapture() == window && pointerEvents.size() == 1 &&
                   pointerEvents.front().m_Type == PointerEventType::Down &&
-                  pointerEvents.front().m_Button == PointerButton::Left && pointerEvents.front().m_Buttons == 1,
+                  pointerEvents.front().m_Button == PointerButton::Left && pointerEvents.front().m_Buttons == 1 &&
+                  pointerEvents.front().m_PreserveFocus,
               "Pressing the painted caption captures the native mouse and delivers one owning pointer down");
         SendMessageW(window, WM_LBUTTONUP, 0, MAKELPARAM(270, 25));
         Check(GetCapture() != window && pointerEvents.size() == 2 &&

@@ -107,6 +107,9 @@ Widget/subtree eligibility follows logical ancestry, including owned overlays.
 
 Positions enter the router in window coordinates. Receiving widget hooks get
 inverse-transformed layout coordinates while retaining the other pointer fields.
+Native non-client presses set `PointerEvent::m_PreserveFocus` to retain client
+keyboard focus and editor composition. The default remains false for ordinary
+client clicks; this policy does not bypass preview, modal or capture routing.
 `ToLayoutPoint` and `ToWindowPoint` support explicit conversion; popup anchors are
 window coordinates. Keyboard context-menu requests and split/submenu anchors also
 follow the source's visual transform.

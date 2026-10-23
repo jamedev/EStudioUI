@@ -112,8 +112,7 @@ int VerifyGpuProbeChrome(Window& owner, const std::filesystem::path& assets, con
     check(window->Ui().SetStyleSheet(read(assets / "dark.css") + '\n' + read(assets / "essential-widgets.css"), error),
           "The native caption probe uses the production theme");
     window->SetPosition({32, 32});
-    double time = 0;
-    const auto render = [&] { window->RenderFrame(time += .1); };
+    const auto render = [&] { window->RenderFrame(); };
     render();
     checkFrame(*window);
     window->SetSize(720, 440);
@@ -178,6 +177,7 @@ int VerifyGpuProbeChrome(Window& owner, const std::filesystem::path& assets, con
           "Unused title-menu space retains native window dragging");
     std::filesystem::create_directories(output);
     window->Graphics().SavePpm(output / "native-titlebar-restored.ppm");
+    window->Ui().SetFocus(&search);
     auto& close = button(WindowHitRegion::Close);
     const auto closePoint = center(close.GetBounds());
     SendMessageW(native, WM_NCMOUSEMOVE, HTCLOSE, nativePoint(closePoint, true));
@@ -186,6 +186,7 @@ int VerifyGpuProbeChrome(Window& owner, const std::filesystem::path& assets, con
     SendMessageW(native, WM_NCLBUTTONDOWN, HTCLOSE, nativePoint(closePoint, true));
     render();
     check(close.IsPressed() && GetCapture() == native, "The painted close button owns its press and native capture");
+    check(window->Ui().GetFocus() == &search, "A non-client caption press preserves client editor keyboard focus");
     window->Graphics().SavePpm(output / "native-titlebar-pressed.ppm");
     SendMessageW(native, WM_MOUSEMOVE, MK_LBUTTON, nativePoint({20, 100}, false));
     SendMessageW(native, WM_LBUTTONUP, 0, nativePoint({20, 100}, false));
@@ -200,9 +201,11 @@ int VerifyGpuProbeChrome(Window& owner, const std::filesystem::path& assets, con
     check(IsIconic(native), "A single click on the painted minimize button minimizes the actual HWND");
     window->Restore();
     render();
+    window->Ui().SetFocus(&search);
     click(WindowHitRegion::Maximize, HTMAXBUTTON);
     check(window->IsMaximized(), "A single click on the painted maximize button maximizes the actual HWND");
     render();
+    check(window->Ui().GetFocus() == &search, "Maximizing retains the focused client editor");
     auto& semantics = window->Ui().Semantics();
     check(semantics.GetNode(semantics.GetId(button(WindowHitRegion::Maximize)))->m_Info.m_Name == "Restore window",
           "The maximized caption exposes a restore symbol and accessible command name");
