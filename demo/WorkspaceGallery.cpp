@@ -435,6 +435,19 @@ void WorkspaceGallery::Verify(const std::filesystem::path& assets, const std::fi
     auto* finalHost = docks.GetFloatingWindow(*properties);
     probe->Close();
     Check(finalHost->IsClosed(), "Closing MainWindow closes its owned floating surfaces");
+    // Stop callbacks may inspect the manager while floating host facades are being destroyed.
+    auto lifetimeProbe = m_Owner.CreateOwnedWindow(options);
+    auto& lifetimeShell = lifetimeProbe->Ui().Root().Add<MainWindow>(*lifetimeProbe);
+    auto& lifetimeDocks = lifetimeShell.Docks();
+    auto& first = lifetimeDocks.AddDock("first", "First");
+    auto& second = lifetimeDocks.AddDock("second", "Second");
+    lifetimeDocks.Float(first);
+    lifetimeDocks.Float(second);
+    bool emptyDuringRetirement = false;
+    std::stop_callback observeRetirement(lifetimeDocks.GetFloatingWindow(second)->GetHandle().GetTargetStopToken(),
+                                         [&] { emptyDuringRetirement = lifetimeDocks.FindDock("first") == nullptr; });
+    lifetimeProbe->Ui().Root().RemoveChild(lifetimeShell);
+    Check(emptyDuringRetirement, "Floating retirement callbacks cannot observe partially destroyed panel metadata");
     std::ofstream report(output / "workspace-report.txt");
     report << "Application workspace actual GPU: PASS (" << s_Checks << " checks)\n"
            << "File/path controls; native title-row integration; stable docking/floating identities; shared State; "

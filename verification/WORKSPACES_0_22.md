@@ -25,7 +25,7 @@ ApplicationWorkspace example compiles the ordinary public API.
 
 ## Actual GPU coverage
 
-WorkspaceGallery::Verify currently runs **46 checks** using production Window,
+WorkspaceGallery::Verify currently runs **47 checks** using production Window,
 UiContext and Renderer, with complete rich CSS loaded independently of prior
 gallery fixtures. It exercises physical grip dragging/drop previews, tabifying,
 renaming, hiding/reopening, native owned floating windows, State edits across
@@ -43,7 +43,9 @@ Narrow/wide captures verify caption visibility and prepared close hit geometry.
 The checks exposed and fixed a context-retirement defect: releasing a floating
 Window implementation after a frame left its context current/destroyed instead
 of restoring the containing context. A nonempty framebuffer and retained/full
-comparison now guard that path.
+comparison now guard that path. A further regression checks manager lookup from a floating
+window retirement callback; panel metadata leaves the manager before those
+callbacks run.
 
 Generated captures are actual C++ renderer output. No hardware speed/FPS claim
 is inferred from OSMesa or native software WGL.
@@ -64,7 +66,7 @@ screen-reader usability.
 
 ## Validation status
 
-- Final GNU 13 Release build: **42/42 passed**, 15.76 seconds, including actual
+- Final GNU 13 Release build: **42/42 passed**, 16.23 seconds, including actual
   Linux OSMesa GPU integration and rendering-profile smoke; zero C++ compiler
   warnings. The pre-existing libunibreak CMake developer-scope warnings remain.
 - Local AddressSanitizer/UndefinedBehaviorSanitizer: running for this source.

@@ -368,8 +368,10 @@ DockManager::~DockManager()
     for (const auto& connection : m_Impl->m_Connections)
         connection.Disconnect();
     // Retire native surfaces before the manager's ordinary child ownership is torn down.
-    m_Impl->m_Entries.clear();
-    m_Impl->m_Retired.clear();
+    auto entries = std::move(m_Impl->m_Entries);
+    auto retired = std::move(m_Impl->m_Retired);
+    entries.clear();
+    retired.clear();
 }
 
 Widget& DockManager::Central() const
