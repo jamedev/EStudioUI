@@ -36,7 +36,13 @@ A confirmed zero-byte generated Style object was rebuilt before sanitizer checks
 Linux CI also passes **38/38** Release/software-GL suites and **6/6** isolated
 ThreadSanitizer suites. Windows compiled the library without warnings; its new
 native test required an explicit owned BSTR for the UI Automation value setter.
-That Windows-only test correction is being reverified in CI.
+A subsequent Release run passed 39/40 suites and all added menu/dialog probes,
+then detected that the added in-flow fixture controls displaced the existing
+grid's viewport. The independent controls now use explicit floating bounds;
+the original grid assertion is preserved. A portable reproduction using the
+same actual widget setup changes the revealed cell from 394 x 0 to 394 x 32
+logical pixels and restores the table from y=585.584 to y=489.584. Windows
+verification is being rerun with the corrected fixture.
 [CI run](https://github.com/jamedev/EStudioUI/actions/runs/39902816587).
 
 NativePlatform includes actual Windows UI Automation menu-bar/expansion,
@@ -51,3 +57,7 @@ remain in [PLATFORM_ACCEPTANCE.md](PLATFORM_ACCEPTANCE.md).
 ![GPU command menu](commands-menu-0-19.png)
 
 ![Validated input prompt](commands-input-0-19.png)
+
+The actual full demo application was separately rendered at 1280 x 800 in both
+themes, with its real tab/header composition and a menu open. Its default command
+page is visible and starts idle with zero repaint pixels.

@@ -764,6 +764,8 @@ void Accessibility(UiContext& ui, HWND window)
     radio.SetId("native-radio");
     auto& menuBar = ui.Root().Add<MenuBar>();
     menuBar.SetId("native-menubar");
+    // Keep independent command probes outside the collection fixture's fixed viewport budget.
+    menuBar.SetFloatingBounds({590, 0, 180, 40});
     auto& commandMenu = menuBar.AddMenu("Commands");
     menuBar.GetButton(0).SetId("native-menu-trigger");
     auto& menuToggle = commandMenu.AddAction("Native menu grid");
@@ -771,6 +773,7 @@ void Accessibility(UiContext& ui, HWND window)
     menuToggle.SetCheckable(true);
     auto& promptButton = ui.Root().Add<Button>("Open native prompt");
     promptButton.SetId("native-open-prompt");
+    promptButton.SetFloatingBounds({590, 48, 180, 36});
     auto& prompt = InputDialog::Create(promptButton, "Native prompt", "Project name", "Before");
     prompt.SetId("native-prompt");
     prompt.Editor().SetId("native-prompt-value");
