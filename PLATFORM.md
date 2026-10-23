@@ -290,9 +290,11 @@ Native hardware GPU timing and additional platform adapters remain F15 evidence.
 
 
 Native picker cancellation is deferred out of shell initialization callbacks.
-After the initial folder-ready event, cancellation can close the dialog from a
-100 ms timer attached to its actual HWND as well as the existing helper-window
-channel. The picker STA owns both timers; cleanup removes its window property
+After the initial folder-ready event, a 100 ms timer on the actual dialog HWND
+and the helper-window channel queue WM_CLOSE on the picker STA. A live owned
+confirmation is dismissed before the picker; no foreign window is destroyed or
+thread interrupted. IFileDialog::Close is not called from a timer: it can report
+success without ending Show outside Shell event callbacks. The picker STA owns both timers; cleanup removes its window property
 and timers before releasing the worker state. This makes cancellation independent
 of dispatch to a message-only helper during the shell's modal loop. It does not
 pump the framework loop or request GPU frames. Native acceptance runs enable
@@ -300,3 +302,8 @@ phase/Close-result diagnostics through `ESTUDIOUI_NATIVE_PLATFORM_TESTS=1`.
 See Microsoft's [IFileDialog::Close](https://learn.microsoft.com/en-us/windows/win32/api/shobjidl_core/nf-shobjidl_core-ifiledialog-close)
 and [SetTimer](https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-settimer)
 contracts for callback and thread ownership.
+
+The asynchronous close path is consistent with Chromium's
+[Win32 shell dialog handler](https://chromium.googlesource.com/chromium/src.git/+/refs/tags/136.0.7103.95/ui/shell_dialogs/auto_close_dialog_event_handler_win.cc).
+In-process cancellation remains cooperative with native Shell/extension message
+handling; there is no hard preemption of an unresponsive third-party extension.

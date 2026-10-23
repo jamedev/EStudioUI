@@ -61,10 +61,10 @@ struct WorkerState
     mutable std::mutex m_Mutex;
     HWND m_Control = nullptr;
     IFileDialog* m_Dialog = nullptr;
-    bool m_Closing = false;
     bool m_Ready = false;
     HWND m_CancelWindow = nullptr;
     unsigned m_CloseAttempts = 0;
+    const ULONGLONG m_Started = GetTickCount64();
     bool m_Trace = []
     {
         wchar_t value[2]{};
@@ -74,8 +74,10 @@ struct WorkerState
     void Trace(const char* phase, HRESULT result = S_OK) const
     {
         if (m_Trace)
-            std::fprintf(stderr, "Native picker STA %lu: %s (0x%08lx)\n",
-                         static_cast<unsigned long>(GetCurrentThreadId()), phase, static_cast<unsigned long>(result));
+            std::fprintf(stderr, "Native picker STA %lu +%llums: %s (0x%08lx)\n",
+                         static_cast<unsigned long>(GetCurrentThreadId()),
+                         static_cast<unsigned long long>(GetTickCount64() - m_Started), phase,
+                         static_cast<unsigned long>(result));
     }
 
     void StopWindowTimer()
@@ -128,16 +130,35 @@ struct WorkerState
 
     void RequestNativeClose(IFileDialog* dialog)
     {
-        // Only the picker STA calls this method. Shell callbacks can reenter it.
-        if (!dialog || !m_Ready || m_Closing || !Cancelled())
+        // IFileDialog::Close can acknowledge a timer/helper-window call without
+        // ending Show. Queue the ordinary native close action on its own STA.
+        // A nested shell confirmation is dismissed first; later ticks close the
+        // picker itself. Never destroy a shell window or interrupt its thread.
+        if (!dialog || !m_Ready || !Cancelled())
             return;
-        m_Closing = true;
+        ObserveWindow(dialog);
+        HWND target = m_CancelWindow;
+        if (!target)
+            return;
+        const auto active = GetLastActivePopup(target);
+        if (active && active != target && IsWindowVisible(active) &&
+            GetWindowThreadProcessId(active, nullptr) == GetCurrentThreadId())
+        {
+            HWND ancestor = active;
+            for (unsigned depth = 0; ancestor && depth < 64; ++depth)
+            {
+                if (ancestor == m_CancelWindow)
+                {
+                    target = active;
+                    break;
+                }
+                ancestor = GetWindow(ancestor, GW_OWNER);
+            }
+        }
+        const BOOL posted = PostMessageW(target, WM_CLOSE, 0, 0);
         if (++m_CloseAttempts <= 3)
-            Trace("request Close");
-        const auto result = dialog->Close(HRESULT_FROM_WIN32(ERROR_CANCELLED));
-        if (m_CloseAttempts <= 3)
-            Trace("Close returned", result);
-        m_Closing = false;
+            Trace(target == m_CancelWindow ? "post picker WM_CLOSE" : "post owned confirmation WM_CLOSE",
+                  posted ? S_OK : HRESULT_FROM_WIN32(GetLastError()));
     }
 };
 

@@ -63,7 +63,9 @@ acceptance remain in [PLATFORM_ACCEPTANCE.md](PLATFORM_ACCEPTANCE.md).
 ![Validated input prompt](commands-input-0-19.png)
 
 
-Picker hardening defers Close until the initial folder-ready callback has
-returned and attaches a cancellation timer to the actual dialog HWND. Native
+Picker diagnostics showed successful IFileDialog::Close returns without Show
+unwinding when invoked from timers. Cancellation now queues native WM_CLOSE
+after the initial folder-ready callback and dismisses an owned confirmation
+before the picker. Its timer is attached to the actual dialog HWND. Native
 acceptance diagnostics identify Show/Close/COM-release phases. CI separates
 Release, Debug and repeated native steps so their results remain inspectable.
