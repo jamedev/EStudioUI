@@ -633,6 +633,13 @@ and StatusBar. NativeWindowChrome contains Win32 subclass/DWM details, delegates
 caption/resize hit regions, and chains with NativeResizePump. Prepared hit queries
 never pump, lay out or render. Other native platforms retain their standard frame.
 Small caption/panel symbols use analytic GPU lines independent of font coverage.
+Custom Windows caption controls own their pointer/capture path instead of
+entering User32's native button tracker. Frame calculation and activation keep
+the client/GPU caption separate from native caption painting; native resize,
+move, system-menu and Snap hit roles remain available. Client size is preserved
+across frame changes and computed from actual frame insets for explicit sizing.
+Maximize/restore presentation synchronizes only at ordinary frame boundaries.
+See [native title-bar verification](verification/TITLEBAR_FIX.md).
 
 FileDialog is an owner-lifetime facade over PlatformServices. FilePathEditor and
 FolderPicker own an ordinary editor, bounded recent choices and a session/revision

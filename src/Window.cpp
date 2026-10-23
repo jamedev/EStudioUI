@@ -16,7 +16,9 @@
 #define GLFW_INCLUDE_NONE
 #include <GLFW/glfw3.h>
 #ifdef _WIN32
+#ifndef NOMINMAX
 #define NOMINMAX
+#endif
 #define WIN32_LEAN_AND_MEAN
 #define GLFW_EXPOSE_NATIVE_WIN32
 #include <GLFW/glfw3native.h>
@@ -611,6 +613,9 @@ struct Window::Impl : std::enable_shared_from_this<Window::Impl>
         m_FramePreparing.Emit();
         if (!m_Owner || m_Closed)
             return;
+        if (auto* title = dynamic_cast<WindowTitleBar*>(m_TitleBar.Get()))
+            title->SynchronizeWindowState(m_Headless ? m_HeadlessMaximized
+                                                   : glfwGetWindowAttrib(m_Window, GLFW_MAXIMIZED) != 0);
         if (m_Chrome)
         {
             const auto* title = m_TitleBar.Get();
@@ -1178,13 +1183,15 @@ Window::Window(const WindowOptions& options, const std::filesystem::path& fontPa
                         return hit->IsWindowDragRegion() ? WindowHitRegion::Caption : WindowHitRegion::Client;
                 return WindowHitRegion::Client;
             },
-            [window = self.m_Window](Point nativePoint)
+            [window = self.m_Window](PointerEvent event)
             {
                 Impl::Dispatch(window,
                                [&](Impl& state)
                                {
-                                   if (state.m_Ui->GetPhase() == UiPhase::Idle)
-                                       state.DeliverInput(PointerEvent{state.m_Metrics.FromNative(nativePoint)});
+                                   event.m_Position = state.m_Metrics.FromNative(event.m_Position);
+                                   event.m_Modifiers = state.CurrentModifiers();
+                                   event.m_Timestamp = glfwGetTime();
+                                   state.DeliverInput(event);
                                });
             });
     }
@@ -1536,8 +1543,10 @@ void Window::SetSize(int width, int height)
             return static_cast<int>(std::clamp(std::round(static_cast<double>(std::max(1, value)) * scale), 1.0,
                                                static_cast<double>(std::numeric_limits<int>::max())));
         };
-        glfwSetWindowSize(self->m_Window, dimension(width, self->m_Metrics.m_InputScale.m_X),
-                          dimension(height, self->m_Metrics.m_InputScale.m_Y));
+        const int nativeWidth = dimension(width, self->m_Metrics.m_InputScale.m_X);
+        const int nativeHeight = dimension(height, self->m_Metrics.m_InputScale.m_Y);
+        if (!self->m_Chrome || !self->m_Chrome->ResizeClient(nativeWidth, nativeHeight))
+            glfwSetWindowSize(self->m_Window, nativeWidth, nativeHeight);
         self->UpdateMetrics();
         if (self->m_Owner && !self->m_Closed)
             self->m_Ui->RequestRepaint();

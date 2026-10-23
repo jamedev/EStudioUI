@@ -51,10 +51,23 @@ as draggable; interactive children keep ordinary client input by default.
 On Windows, the adapter extends the client frame while retaining the decorated
 HWND, thick resize frame, system menu, and native minimize/maximize styles.
 Prepared hit regions return `HTCAPTION`, `HTMINBUTTON`, `HTMAXBUTTON`, and
-`HTCLOSE`; the operating system owns caption move/resize/commands. The maximize
-region supplies Windows' Snap Layout hit-test protocol. The existing resize
-pump continues servicing the normal capped scheduler inside native move/size
-loops. Hit testing itself never lays out, advances frames or pumps events.
+`HTCLOSE`. Native move/resize loops, caption double-click, system menus and
+system commands remain available. The maximize region supplies Windows' Snap
+Layout hit-test protocol. The GPU owns caption-button presentation and input:
+non-client presses enter the shared pointer boundary, use native mouse capture,
+and activate the ordinary minimize/maximize/restore/close callbacks on release
+inside the same painted control. Moving out, losing capture, deactivation and
+cancellation clear the press. User32's native button tracker is not used for
+these custom rectangles. Caption repaint messages cannot draw a second title
+bar over the GPU; resize borders and DWM shadows remain native.
+
+Switching the frame preserves client dimensions, and `SetSize()` accounts for
+the actual custom frame instead of adding the removed native caption height.
+Maximizing updates the restore symbol and accessible command name at the normal
+frame boundary. The existing resize pump continues servicing the normal capped
+scheduler inside native move/size loops. Hit testing itself never lays out,
+advances frames or pumps events. See the [title-bar correction and native
+regressions](verification/TITLEBAR_FIX.md).
 
 `Window::GetTitleBarSupport()` reports **Native** on Windows and **Emulated** in
 headless verification. Other native platforms currently report **Unsupported**:

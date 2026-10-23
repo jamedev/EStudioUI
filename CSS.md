@@ -416,6 +416,9 @@ MainWindow exposes `mainwindow`, `mainwindow-toolbars`, `window-titlebar`,
 caption buttons use `.caption-button` / `.caption-close`. Captions/panel commands
 paint small analytic symbols with the computed color; ordinary backgrounds,
 borders, shadows and hover/disabled states retain the shared GPU pipeline.
+Caption commands also receive ordinary `:pressed` styling through the shared
+pointer path; `.caption-close:pressed` uses the bundled close accent. The
+maximize symbol switches to restore with the containing window's native state.
 
 Docking exposes `dockmanager`, `.workspace-splitter`, `.dock-tabs`, `dockwidget`,
 `dock-header`, `dock-grip`, `dock-content`, `dock-storage` and `dock-preview`.

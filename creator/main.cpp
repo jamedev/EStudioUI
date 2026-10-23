@@ -37,7 +37,8 @@ void Check(bool condition, const char* description, int& count)
     ++count;
 }
 
-int Verify(CreatorWindow& creator, Window& window, const std::filesystem::path& output)
+int Verify(CreatorWindow& creator, Window& window, const std::filesystem::path& assets,
+           const std::filesystem::path& output)
 {
     AllowOversizedGpuProbe(window);
     window.SetSize(1440, 1000);
@@ -202,6 +203,7 @@ int Verify(CreatorWindow& creator, Window& window, const std::filesystem::path& 
         canvasWindow->Graphics().SavePpm(output / "creator-canvas.ppm");
         canvasWindow->Close();
     }
+    checks += VerifyGpuProbeChrome(window, assets, output);
     std::cout << "Creator GPU integration: " << checks << " checks passed\n";
     return checks;
 }
@@ -262,7 +264,7 @@ int main(int argc, char** argv)
         }
         if (verify)
         {
-            Verify(creator, window, output);
+            Verify(creator, window, assets, output);
             return 0;
         }
         return application.Run();

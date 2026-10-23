@@ -25,6 +25,14 @@ class WindowTitleBar final : public Widget
     WindowHitRegion HitTest(Point windowPoint) const;
 
   private:
+    friend class Window;
+
+    //! Synchronizes the caption presentation at a normal frame boundary.
+    void SynchronizeWindowState(bool maximized);
+
+    //! Tracks the displayed maximize/restore command.
+    bool m_Maximized = false;
+
     //! Observes the owned menu bar.
     MenuBar* m_Menus = nullptr;
 

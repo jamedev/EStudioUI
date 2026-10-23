@@ -8,6 +8,7 @@
 #include <EStudioUI/FolderPicker.h>
 #include <EStudioUI/ListWidget.h>
 #include <EStudioUI/MainWindow.h>
+#include <EStudioUI/SemanticTree.h>
 #include <EStudioUI/NumericInput.h>
 #include <EStudioUI/OpenGLWidget.h>
 #include <EStudioUI/TabWidget.h>
@@ -470,6 +471,22 @@ void WorkspaceGallery::Verify(const std::filesystem::path& assets, const std::fi
               "Actual Windows surface reports native title-bar integration");
     }
 #endif
+    if (probe->IsHeadless())
+    {
+        probe->Maximize();
+        probe->RenderFrame(ui.GetTime());
+        auto& semantics = ui.Semantics();
+        const auto& children = shell.TitleBar().GetChildren();
+        const auto maximize = semantics.GetId(*children[children.size() - 2]);
+        Check(semantics.GetNode(maximize)->m_Info.m_Name == "Restore window",
+              "The retained maximize presentation follows the containing window's maximized state");
+        gpu.SavePpm(output / "workspace-titlebar-restore.ppm");
+        probe->Restore();
+        probe->RenderFrame(ui.GetTime());
+        Check(semantics.GetNode(maximize)->m_Info.m_Name == "Maximize window",
+              "Restoring the containing window restores its caption command presentation");
+    }
+    s_Checks += VerifyGpuProbeChrome(*probe, assets, output);
     docks.Float(*properties);
     auto* finalHost = docks.GetFloatingWindow(*properties);
     probe->Close();

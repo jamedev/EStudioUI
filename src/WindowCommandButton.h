@@ -13,6 +13,9 @@ enum class WindowCommand
     //! Native maximize/restore command.
     Maximize,
 
+    //! Native restore command presentation.
+    Restore,
+
     //! Native or panel close command.
     Close,
 
@@ -30,12 +33,15 @@ class WindowCommandButton final : public ToolButton
     //! Selects a symbol while retaining normal button/action/input semantics.
     explicit WindowCommandButton(WindowCommand command);
 
+    //! Replaces a symbol with paint-only invalidation.
+    void SetCommand(WindowCommand command);
+
   protected:
     //! Appends a bounded symbol to the ordinary CSS background and decorations.
     void Paint(Renderer& renderer, FontFace& font, double time, float opacity) const override;
 
   private:
-    //! Immutable symbol choice.
+    //! Current symbol choice.
     WindowCommand m_Command;
 };
 } // namespace EStudioUI::Detail

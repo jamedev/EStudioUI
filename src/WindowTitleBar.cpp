@@ -10,7 +10,7 @@ WindowTitleBar::WindowTitleBar(Window& window) : Widget("window-titlebar")
 {
     SetLayoutDirection(Axis::Horizontal);
     SetHeight(SizeRule::Fixed(38));
-    SetGap(4);
+    SetGap(0);
     SetWindowDragRegion(true);
     auto& menuViewport = Add<Detail::OverflowStrip>("titlebar-menus");
     menuViewport.SetWidth(SizeRule::Fill(1, 0, 540));
@@ -39,7 +39,7 @@ WindowTitleBar::WindowTitleBar(Window& window) : Widget("window-titlebar")
     }
     m_Close->AddClass("caption-close");
     m_Minimize->SetAccessibleName("Minimize window");
-    m_Maximize->SetAccessibleName("Maximize or restore window");
+    m_Maximize->SetAccessibleName("Maximize window");
     m_Close->SetAccessibleName("Close window");
     const auto target = window.GetHandle();
     m_Minimize->Clicked().Connect([target] { target.Post([](Window& live) { live.Minimize(); }); });
@@ -50,9 +50,13 @@ WindowTitleBar::WindowTitleBar(Window& window) : Widget("window-titlebar")
                 [](Window& live)
                 {
                     if (live.IsMaximized())
+                    {
                         live.Restore();
+                    }
                     else
+                    {
                         live.Maximize();
+                    }
                 });
         });
     m_Close->Clicked().Connect([target] { target.Post([](Window& live) { live.Close(); }); });
@@ -76,22 +80,53 @@ void WindowTitleBar::SetCaption(std::string caption)
     m_Caption->SetText(std::move(caption));
 }
 
+void WindowTitleBar::SynchronizeWindowState(bool maximized)
+{
+    if (m_Maximized == maximized)
+    {
+        return;
+    }
+    m_Maximized = maximized;
+    for (const auto& child : GetChildren())
+    {
+        if (child.get() == m_Maximize)
+        {
+            auto& button = static_cast<Detail::WindowCommandButton&>(*child);
+            button.SetCommand(maximized ? Detail::WindowCommand::Restore : Detail::WindowCommand::Maximize);
+            button.SetAccessibleName(maximized ? "Restore window" : "Maximize window");
+            break;
+        }
+    }
+}
+
 WindowHitRegion WindowTitleBar::HitTest(Point windowPoint) const
 {
     VerifyAccess();
     auto* context = GetContext();
     if (!context || !IsVisible() || !GetBounds().Contains(context->ToLayoutPoint(*this, windowPoint)))
+    {
         return WindowHitRegion::Client;
+    }
     auto* target = context->GetWidgetAt(windowPoint);
     if (target == m_Minimize)
+    {
         return WindowHitRegion::Minimize;
+    }
     if (target == m_Maximize)
+    {
         return WindowHitRegion::Maximize;
+    }
     if (target == m_Close)
+    {
         return WindowHitRegion::Close;
+    }
     for (auto* node = target; node; node = node->GetParent())
+    {
         if (node == this)
+        {
             return target->IsWindowDragRegion() ? WindowHitRegion::Caption : WindowHitRegion::Client;
+        }
+    }
     return WindowHitRegion::Client;
 }
 } // namespace EStudioUI

@@ -109,6 +109,7 @@ window-titlebar .caption-button { padding: 0px; border-width: 0px; border-radius
 window-titlebar .caption-button:hover { background: #495369; }
 window-titlebar .caption-close:hover { background: #c42b3b; color: white; }
 window-titlebar .caption-button:pressed { background: #626e87; }
+window-titlebar .caption-close:pressed { background: #a92330; color: white; }
 toolbar-strip { padding: 0px; gap: 6px; border-width: 0px; background: transparent; }
 toolbar .toolbar-scroll { padding: 0px; border-width: 0px; background: #24334b; border-radius: 3px; }
 toolbar .toolbar-scroll:hover { background: #48698e; }
