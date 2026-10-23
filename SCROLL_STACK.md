@@ -100,6 +100,9 @@ lengths are respected. CSS may set a fixed thumb length instead of the natural
 proportion. Hover geometry resolves from the neutral thumb once, avoiding cyclic
 hover/measurement feedback. Root and part fills, borders, gradients, shadows,
 opacity and decorative transforms use the existing compiled GPU style pipeline.
+As with collection scrollbars, track/thumb states use shared compiled palettes;
+they do not run independent CSS transition/keyframe timelines. Root widget CSS
+animation continues through the normal animation system.
 
 Style `stackedwidget`, `stackedwidget > .stack-page` and descendants with ordinary
 selectors. Explicit page Fixed/Content/Fill rules retain precedence over themes;

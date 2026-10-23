@@ -177,7 +177,7 @@ void ScrollStackGallery::Verify(const std::filesystem::path& assets, const std::
                            "scrollbar::scroll-track { background:#202d40; padding:2px; border-radius:8px; } "
                            "scrollbar::scroll-track:horizontal { height:20px; } "
                            "scrollbar::scroll-thumb { background:#30c090; border-radius:6px; min-width:24px; } "
-                           "scrollbar::scroll-thumb:hover { background:#e8b030; } "
+                           "scrollbar::scroll-thumb:hover { background:#e8b030; width:30px; } "
                            "scrollbar::scroll-thumb:pressed { background:#e030a0; }",
                            error),
           "Probe CSS compiles");
@@ -205,10 +205,18 @@ void ScrollStackGallery::Verify(const std::filesystem::path& assets, const std::
     probe.RenderFrame(ui.GetTime());
     Check(moved == Pixels(), "Moved thumb retained pixels exactly match a full redraw");
     gpu.SetPartialRedrawEnabled(true);
-    thumb = Center(bar.GetThumbBounds());
-    ui.PointerMove(thumb);
+    const auto normalThumb = bar.GetThumbBounds();
+    ui.PointerMove({bar.GetTrackBounds().m_X + 4, Center(normalThumb).m_Y});
     probe.RenderFrame(ui.GetTime());
-    Check(gpu.ReadPixel(thumb).m_R > .8f && gpu.ReadPixel(thumb).m_G > .5f, "Local thumb hover paints its CSS variant");
+    Check(std::abs(bar.GetThumbBounds().m_Width - normalThumb.m_Width) < .01f &&
+              gpu.ReadPixel(Center(normalThumb)).m_R < .3f,
+          "Track hover leaves the thumb's proportional geometry and neutral color intact");
+    thumb = Center(normalThumb);
+    ui.PointerMove({normalThumb.m_X + 2, thumb.m_Y});
+    probe.RenderFrame(ui.GetTime());
+    Check(std::abs(bar.GetThumbBounds().m_Width - 30) < .01f && gpu.ReadPixel(thumb).m_R > .8f &&
+              gpu.ReadPixel(thumb).m_G > .5f,
+          "Local thumb hover paints its CSS variant");
     ui.PointerDown(thumb);
     probe.RenderFrame(ui.GetTime());
     Check(gpu.ReadPixel(thumb).m_R > .8f && gpu.ReadPixel(thumb).m_B > .5f,

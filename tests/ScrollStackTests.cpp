@@ -100,6 +100,28 @@ void GeometryAndRange(FontFace& font)
           "Vertical values increase downward with the same geometry");
 }
 
+void LocalHover(FontFace& font)
+{
+    UiContext ui(font);
+    auto& bar = ui.Root().Add<ScrollBar>(Axis::Horizontal);
+    bar.SetFloatingBounds({20, 20, 304, 20});
+    bar.SetRange(0, 1000);
+    bar.SetPageStep(250);
+    bar.SetValue(500);
+    Style(ui, "scrollbar::scroll-thumb:hover { width:30px; }");
+    ui.Prepare(500, 300);
+    ui.PointerMove({24, 30});
+    ui.Prepare(500, 300);
+    Check(Near(bar.GetThumbBounds().m_Width, 60), "Hovering the track does not select the thumb's hover dimensions");
+    const auto neutral = bar.GetThumbBounds();
+    ui.PointerMove({neutral.m_X + 2, Center(neutral).m_Y});
+    ui.Prepare(500, 300);
+    Check(Near(bar.GetThumbBounds().m_Width, 30), "Thumb hover dimensions resolve once from neutral hit geometry");
+    ui.PointerMove({24, 30});
+    ui.Prepare(500, 300);
+    Check(Near(bar.GetThumbBounds().m_Width, 60), "Leaving the thumb restores its proportional length");
+}
+
 void Input(FontFace& font)
 {
     UiContext ui(font);
@@ -368,6 +390,7 @@ int main()
     {
         FontFace font(ESTUDIOUI_FONT_PATH);
         GeometryAndRange(font);
+        LocalHover(font);
         Input(font);
         BindingSemanticsAndLifetime(font);
         Pages(font);

@@ -38,10 +38,10 @@ type and exercises its RangeValue write/read path on the owning dispatcher.
 
 ## Validation status
 
-- Initial focused GNU 13 Release behavior run: **69 checks passed**.
-- Final formatted GNU 13 Release: **41/41 passed**, 20.71 seconds, including
+- Final focused GNU 13 Release behavior run: **73 checks passed**.
+- Final formatted GNU 13 Release: **41/41 passed**, 18.97 seconds, including
   software-GL GPU integration and rendering-profile smoke checks. The earlier
-  complete development run also passed 41/41 in 19.39 seconds.
+  complete development run also passed 41/41 in 19.39 and 20.71 seconds.
 - No C++ compiler warnings observed. The existing libunibreak CMake developer
   scope warnings remain unchanged.
 - ASan/UBSan and Windows CI: pending at this source/evidence checkpoint.
@@ -55,3 +55,15 @@ checklist. F10b document editing and F14 extraction remain deferred.
 directly from the C++ probe PPM (760 x 520), showing the selected blue page and
 its moved scrollbar; this is a contract fixture, not the interactive gallery.
 PNG SHA-256: `4c0c706594c72feba5a3e3777f2ce0e9e132328a60629ba763dd5c28c637b853`.
+
+## Local thumb hover follow-up
+
+An isolated production-UiContext probe reproduced track hover incorrectly
+selecting the thumb hover dimensions (60 -> 30 pixels while the pointer remained
+on the track). Track/thumb parts now use the same explicit shared palettes as
+collection scrollbars, and paint/hit geometry resolve thumb hover once from the
+neutral thumb. Regression checks verify track isolation, shrinking hover geometry
+and restoration; real pixels verify neutral track hover and the correct hover
+fill even when the pointer lies outside the shrunken thumb. No unrelated engine
+state/animation policy was changed. Root widget CSS animation remains supported;
+shared scrollbar palettes do not run independent part timelines.

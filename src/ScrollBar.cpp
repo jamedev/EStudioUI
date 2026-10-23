@@ -28,7 +28,7 @@ ScrollBar::ScrollBar(Axis orientation) : Widget("scrollbar"), m_Orientation(orie
                 style.m_Width = {Length::Unit::Pixels, 14};
             return style;
         },
-        true);
+        false);
     RegisterStylePart(
         "scroll-thumb", Horizontal | Vertical | Hover | Pressed,
         [](const Style& owner, unsigned state)
@@ -42,7 +42,7 @@ ScrollBar::ScrollBar(Axis orientation) : Widget("scrollbar"), m_Orientation(orie
                 style.m_MinHeight = 20;
             return style;
         },
-        true);
+        false);
     UpdateOrientation();
 }
 
@@ -184,15 +184,26 @@ Axis ScrollBar::GetOrientation() const
 
 unsigned ScrollBar::PartState(bool thumb) const
 {
-    unsigned state = m_Orientation == Axis::Horizontal ? Horizontal : Vertical;
-    if (m_Dragging)
-        state |= Pressed;
+    const bool horizontal = m_Orientation == Axis::Horizontal;
+    unsigned state = (horizontal ? Horizontal : Vertical) | (m_Dragging ? Pressed : 0u);
     if (IsHovered() && GetContext())
         if (const auto pointer = GetContext()->GetPointerPosition())
         {
             const auto point = GetContext()->ToLayoutPoint(*this, *pointer);
-            if (!thumb || GetThumbBounds().Contains(point))
-                state |= Hover;
+            if (!thumb)
+            {
+                if (GetContentBounds().Contains(point))
+                    state |= Hover;
+            }
+            else
+            {
+                // Resolve hover from neutral geometry once, including hover-dependent dimensions in the result.
+                const auto neutral =
+                    Detail::ScrollThumb(TrackContent(), GetPartStyle("scroll-thumb", state), horizontal,
+                                        VisibleFraction(), Detail::ScrollFraction(m_Value, m_Minimum, m_Maximum));
+                if (neutral.Contains(point))
+                    state |= Hover;
+            }
         }
     return state;
 }
@@ -200,9 +211,7 @@ unsigned ScrollBar::PartState(bool thumb) const
 Rect ScrollBar::GetTrackBounds() const
 {
     VerifyAccess();
-    return GetPartStyle("scroll-track", m_Orientation == Axis::Horizontal ? Horizontal : Vertical).m_Displayed
-               ? GetContentBounds()
-               : Rect{};
+    return GetPartStyle("scroll-track", PartState(false)).m_Displayed ? GetContentBounds() : Rect{};
 }
 
 Rect ScrollBar::TrackContent() const
@@ -222,18 +231,9 @@ double ScrollBar::VisibleFraction() const
 Rect ScrollBar::GetThumbBounds() const
 {
     VerifyAccess();
-    const bool horizontal = m_Orientation == Axis::Horizontal;
-    unsigned state = (horizontal ? Horizontal : Vertical) | (m_Dragging ? Pressed : 0u);
-    const auto track = TrackContent();
-    const auto fraction = Detail::ScrollFraction(m_Value, m_Minimum, m_Maximum);
-    const auto neutral =
-        Detail::ScrollThumb(track, GetPartStyle("scroll-thumb", state), horizontal, VisibleFraction(), fraction);
-    // Resolve hover from the neutral geometry once; hover dimensions cannot recursively select themselves.
-    if (IsHovered() && GetContext())
-        if (const auto pointer = GetContext()->GetPointerPosition();
-            pointer && neutral.Contains(GetContext()->ToLayoutPoint(*this, *pointer)))
-            state |= Hover;
-    return Detail::ScrollThumb(track, GetPartStyle("scroll-thumb", state), horizontal, VisibleFraction(), fraction);
+    return Detail::ScrollThumb(TrackContent(), GetPartStyle("scroll-thumb", PartState(true)),
+                               m_Orientation == Axis::Horizontal, VisibleFraction(),
+                               Detail::ScrollFraction(m_Value, m_Minimum, m_Maximum));
 }
 
 Signal<double>& ScrollBar::ValueChanged()
