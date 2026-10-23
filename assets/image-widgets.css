@@ -1,0 +1,9 @@
+/* Shared image pixels; CSS controls presentation without reparsing during paint. */
+imageview { background: #122237; border: 1px solid #415a75; border-radius: 12px; object-fit: contain; object-position: center; }
+button::image-icon, toolbutton::image-icon { width: 18px; height: 18px; gap: 8px; }
+button:disabled::image-icon, toolbutton:disabled::image-icon { opacity: .4; }
+.image-gallery .image-heading { font-size: 25px; }
+.image-gallery .image-preview { padding: 8px; border-radius: 18px; background: linear-gradient(130deg,#18334a,#152137); box-shadow: 0 5px 14px #0004; }
+.image-gallery .image-preview:hover { border-color: #79c3e9; }
+.image-gallery toolbar { height: 40px; }
+.image-gallery .image-tools { align-items: center; }

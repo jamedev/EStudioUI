@@ -179,6 +179,31 @@ Only left-to-right runs are currently supported.
 
 ## GPU representation
 
+Managed `Image` resources (0.20) are shared immutable top-down RGBA8 CPU values,
+independent of UI/native/GL initialization. PNG/JPEG decoding has bounded input,
+output, dimensions and per-thread temporary allocation. `Icon` holds at most
+sixteen densities with matching logical dimensions. `ImageView` uses source
+density for intrinsic sizing and resolves object-fit/position during painting.
+The image semantic role maps to Windows UIA Image without an extra focus stop.
+
+Image recording retains source pixels until EndFrame. Before texture creation,
+the renderer validates the complete visible unique-resource working set against
+its GPU dimension, byte and 1,024-image limits. Required sources are pinned while
+unused textures retire by least recent frame. Cache entries observe CPU lifetime
+weakly; retirement and final deletion run on the context owner. Residency is
+independent per renderer/context. New pixels upload inside the GPU upload scope,
+with caller unpack PBO/pixel-store state restored. Premultiplied texture storage
+avoids linear-filtering fringes, and the shader converts to the existing blending
+contract. Existing external OpenGLWidget textures retain their own representation.
+
+Repeated sources reuse residency and stable source revisions; unchanged frames
+upload/draw no image data. Cache retirement/reload remains visible to retained
+damage through texture/source identities. Explicit cache clears invalidate history.
+Stats expose recorded images, resident count/bytes and per-frame upload bytes.
+`Painter::DrawImage/DrawIcon` and Button's direction-aware image-icon slot use the
+same recording path. [IMAGE_RESOURCES.md](IMAGE_RESOURCES.md) records public APIs,
+budgets, extension boundaries and loading examples.
+
 Each instance holds a logical rectangle, auxiliary parameters, colors, clip,
 band transform, and integer kind/address data. Six vertices are generated from
 `gl_VertexID`, with no individual widget meshes. Shape instances use a rounded-box

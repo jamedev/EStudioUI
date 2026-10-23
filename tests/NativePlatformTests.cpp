@@ -6,6 +6,7 @@
 #include <EStudioUI/CheckBox.h>
 #include <EStudioUI/MenuBar.h>
 #include <EStudioUI/InputDialog.h>
+#include <EStudioUI/ImageView.h>
 #include <EStudioUI/ComboBox.h>
 #include <EStudioUI/ProgressBar.h>
 #include <EStudioUI/RadioButton.h>
@@ -836,6 +837,10 @@ void Accessibility(UiContext& ui, HWND window)
     auto& lockTable = ui.Root().Add<Button>("Lock table");
     lockTable.SetId("lock-table");
     lockTable.Clicked().Connect([&table] { table.SetEditable(false); });
+    auto& image = ui.Root().Add<ImageView>();
+    image.SetId("native-image");
+    image.SetAccessibleName("Sketch preview");
+    image.SetFloatingBounds({600, 20, 32, 32});
     ui.Prepare(800, 600);
     int invocations = 0;
     const ScopedConnection invocationConnection(button.Clicked().Connect([&] { ++invocations; }));
@@ -879,6 +884,13 @@ void Accessibility(UiContext& ui, HWND window)
                 CONTROLTYPEID controlType = 0;
                 Require(barElement->get_CurrentControlType(&controlType), "Read native menu-bar control type");
                 Check(controlType == UIA_MenuBarControlTypeId, "Native provider exposes a menu-bar role");
+                auto imageElement = Find(*automation.Get(), *root.Get(), L"native-image");
+                Require(imageElement->get_CurrentControlType(&controlType), "Read native image control type");
+                Check(controlType == UIA_ImageControlTypeId, "Native provider exposes an image role");
+                BOOL keyboardFocusable = TRUE;
+                Require(imageElement->get_CurrentIsKeyboardFocusable(&keyboardFocusable),
+                        "Read native image keyboard focus policy");
+                Check(!keyboardFocusable, "Image presentation adds no native keyboard focus stop");
                 auto triggerElement = Find(*automation.Get(), *barElement.Get(), L"native-menu-trigger");
                 ComPtr<IUIAutomationExpandCollapsePattern> menuExpansion;
                 Require(triggerElement->GetCurrentPatternAs(UIA_ExpandCollapsePatternId, IID_PPV_ARGS(&menuExpansion)),

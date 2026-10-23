@@ -3,7 +3,7 @@
 A C++20 application framework prototype, currently centered on GLFW windows,
 analytic GPU shapes and text, typed signals, and CSS styling. Controls include
 buttons, checkboxes/radio groups, read-only/editable combos, scrolling forms, splitters,
-progress/help controls, single-line UTF-8 text boxes, tabs, lists, trees,
+progress/help controls, shared image views/icons, single-line UTF-8 text boxes, tabs, lists, trees,
 editable tables, toolbars/tool buttons, menu bars, nested command menus, asynchronous dialogs/popovers, and embedded 3D surfaces. Dependencies are managed with a pinned vcpkg
 manifest; no Qt or commercial SDK is required.
 
@@ -15,15 +15,30 @@ The [developer experience principles](DEVELOPER_EXPERIENCE.md) make simple,
 safe application code an acceptance requirement for every foundation change.
 
 F09 input/actions/focus, F11 platform contracts, and F10a essential control text
-are implemented. The first common-control batch is delivered in 0.18; command/dialog controls follow in 0.19. Remaining widget families
+are implemented. The first common-control batch is delivered in 0.18, command/dialog controls in 0.19,
+and image/icon resources in 0.20. Remaining widget families
 and application workspaces continue through the roadmap. F10b document editing is a later track. F14 module extraction and SDK
 packaging are deferred until that use informs reusable boundaries, including
 services for applications without a UI. Standalone modules are planned, not
 current package capabilities; see the roadmaps for acceptance criteria.
 
+## Shared images and command icons (0.20)
+
+The demo opens **Images & icons**. `Image` loads PNG/JPEG or application-owned
+RGBA8 pixels without a UI/GPU context; copies share immutable storage.
+`ImageView` supplies aspect fit/fill, alignment and rounded clipping through CSS.
+`Icon` selects source density for the actual framebuffer and transform. Buttons,
+tool buttons, checkbox/radio choices, menu items and custom Painter code can reuse
+the same source values. Static image controls do not animate or reupload pixels.
+
+Textures have per-context byte/count limits, safe expiry and bounded eviction.
+The compiled example shows background loading through the existing typed task API.
+See [IMAGE_RESOURCES.md](IMAGE_RESOURCES.md), [image-widgets.css](assets/image-widgets.css)
+and [verification](verification/IMAGES_0_20.md).
+
 ## Commands, dialogs and rich CSS (0.19)
 
-The demo opens **Menus & dialogs**. MenuBar reuses shared commands and nested
+The **Menus & dialogs** tab demonstrates shared commands and nested
 ContextMenu presentations with GPU glyph icons, checked actions and shortcut
 hints. Popup supplies anchored interactive content; Dialog, MessageBox,
 InputDialog and DialogButtonBox return asynchronous results without nested event
@@ -388,11 +403,16 @@ replaced with a fresh vcpkg checkout.
 | FreeType | 2.13.3 | Core |
 | HarfBuzz | 10.2.0#3 | Core |
 | utf8proc | 2.10.0 | Core |
+| Kiwi | 1.4.8, project overlay | Header-only linear constraints |
+| SheenBidi | 3.0.0, project overlay | Unicode direction/script analysis |
+| libunibreak | 6.1#1 | Line/word boundaries |
+| stb_image | stb 2024-07-29#1 | Header-only PNG/JPEG decoding |
 
 Tooling is bootstrapped from `a2f9862da6d88040a8537fb9b8cb24deaa9a196b`;
 this keeps Windows build-tool downloads current without changing library versions.
 All default features are explicitly disabled. There is no optional GLib, ICU,
-Cairo, PNG, Brotli, bzip2, or external zlib dependency. The small generated GLAD
+Cairo, libpng, Brotli, bzip2, or external zlib dependency. stb_image supplies
+PNG/JPEG decoding internally. The small generated GLAD
 loader, Noto Sans font, and original Slug reference shaders remain in the
 repository. Licenses permit commercial use; see
 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) and `licenses/` for notices and

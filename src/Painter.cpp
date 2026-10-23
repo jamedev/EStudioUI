@@ -283,6 +283,20 @@ void Painter::DrawText(std::string_view text, Point baseline, float fontSize)
     DrawText(m_TextStyle ? m_Font.Shape(text, fontSize, *m_TextStyle) : m_Font.Shape(text, fontSize), baseline);
 }
 
+void Painter::DrawImage(Rect bounds, const Image& image, Rect source)
+{
+    m_Affinity.VerifyAccess("Painter::DrawImage");
+    Validate(bounds);
+    m_Renderer.DrawImage(bounds, image, DrawingClip(), m_State.m_Opacity * m_InheritedOpacity, source);
+}
+
+void Painter::DrawIcon(Rect bounds, const Icon& icon)
+{
+    m_Affinity.VerifyAccess("Painter::DrawIcon");
+    Validate(bounds);
+    m_Renderer.DrawIcon(bounds, icon, DrawingClip(), m_State.m_Opacity * m_InheritedOpacity);
+}
+
 FontFace& Painter::GetFont() const
 {
     m_Affinity.VerifyAccess("Painter::GetFont");

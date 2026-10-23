@@ -139,6 +139,7 @@ available through the shared engine. No CSS parsing is added to painting.
 
 Checkbox marks use analytic line color/stroke width; radio dots use box paint.
 These are short single-line choices, with display text supplied by the registered
-font set. Full mirrored UI layouts, image/icon resources, document editing and
-other roadmap families remain separate work. Native human IME/assistive-technology/
+font set. Shared image/icon resources follow in [0.20](IMAGE_RESOURCES.md), including
+the inherited image-icon slot on checkbox/radio choices. Full mirrored UI layouts,
+document editing and other roadmap families remain separate work. Native human IME/assistive-technology/
 mixed-monitor acceptance remains tracked in the platform checklist.

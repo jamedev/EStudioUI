@@ -286,8 +286,9 @@ class Demo
         std::ifstream textStyles(m_Assets / "text-controls.css", std::ios::binary);
         std::ifstream essentialStyles(m_Assets / "essential-widgets.css", std::ios::binary);
         std::ifstream commandStyles(m_Assets / "command-dialogs.css", std::ios::binary);
+        std::ifstream imageStyles(m_Assets / "image-widgets.css", std::ios::binary);
         bool loaded = false;
-        if (theme && animation && rich && widgets && textStyles && essentialStyles && commandStyles)
+        if (theme && animation && rich && widgets && textStyles && essentialStyles && commandStyles && imageStyles)
             loaded =
                 m_Window.Ui().SetStyleSheet(std::string(std::istreambuf_iterator<char>(theme), {}) + "\n" +
                                                 std::string(std::istreambuf_iterator<char>(animation), {}) + "\n" +
@@ -295,7 +296,8 @@ class Demo
                                                 std::string(std::istreambuf_iterator<char>(widgets), {}) + "\n" +
                                                 std::string(std::istreambuf_iterator<char>(textStyles), {}) + "\n" +
                                                 std::string(std::istreambuf_iterator<char>(essentialStyles), {}) +
-                                                "\n" + std::string(std::istreambuf_iterator<char>(commandStyles), {}),
+                                                "\n" + std::string(std::istreambuf_iterator<char>(commandStyles), {}) +
+                                                "\n" + std::string(std::istreambuf_iterator<char>(imageStyles), {}),
                                             error);
         else
         {
@@ -307,7 +309,8 @@ class Demo
                                                         {bool(widgets), m_Assets / "rich-widgets.css"},
                                                         {bool(textStyles), m_Assets / "text-controls.css"},
                                                         {bool(essentialStyles), m_Assets / "essential-widgets.css"},
-                                                        {bool(commandStyles), m_Assets / "command-dialogs.css"}})
+                                                        {bool(commandStyles), m_Assets / "command-dialogs.css"},
+                                                        {bool(imageStyles), m_Assets / "image-widgets.css"}})
                 if (!opened)
                     error += "\n  " + (file.empty() ? std::string("<empty path>") : file.string());
         }

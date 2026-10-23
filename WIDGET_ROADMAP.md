@@ -33,7 +33,8 @@ single-line `TextBox`, `NumericInput`, `Slider`, `SplitToolButton`, `TabWidget`,
 `SketchWidget`, `OpenGLWidget`, `CheckBox`, `RadioButton`/`RadioGroup`, `ComboBox`,
 `ScrollArea`, `Splitter`, `GroupBox`, `Frame`, `Separator`, `ProgressBar`,
 `BusyIndicator`, `ToolTip`, `MenuBar`, `MenuItem`, `Popup`, `Dialog`,
-`DialogButtonBox`, `MessageBox`, `InputDialog`, and custom painting through `PaintWidget`/`Painter`.
+`DialogButtonBox`, `MessageBox`, `InputDialog`, `ImageView`, shared `Image`/`Icon` resources,
+and custom painting through `PaintWidget`/`Painter`.
 
 Existing collections render viewport model entries rather than creating a widget
 per row. Table sorting, column resizing, and basic editing already work. The
@@ -42,7 +43,7 @@ scrolling container. The custom dial in the demo is not a public library `Dial`.
 
 Priority means: **Essential** for ordinary applications, **High** for a powerful
 engineering/CAD workspace, **Later** after the shared foundations and common
-controls. Entries marked **0.18** or **0.19** are delivered; the other catalog entries remain planned.
+controls. Entries marked **0.18**, **0.19** or **0.20** are delivered; the other catalog entries remain planned.
 
 F09 adds shared action presentations to the existing buttons, toolbars, split
 choosers, and context menus. Nested command menus are implemented through
@@ -58,7 +59,7 @@ No other planned widget family is marked delivered by the input milestone.
 | W03 | ComboBox | Read-only/editable modes, virtualized popup, keyboard search, completion hooks | Essential — **0.18 delivered** |
 | W04 | PlainTextEditor | Multiline text, wrapping, cross-line selection, scrolling, history, search/replace | Later document track; essential there |
 | W05 | RichTextEditor / RichTextView | Editable/read-only presentations of one structured document model | Later document track; essential there |
-| W06 | ImageView / image and icon display | Aspect fit/fill, alignment, scaling, DPI-aware resources | Essential |
+| W06 | ImageView / image and icon display | Aspect fit/fill, alignment, PNG/JPEG/RGBA resources, shared command icons, DPI source choice and bounded context residency | Essential — **0.20 delivered** |
 | W07 | ProgressBar / BusyIndicator | Determinate/indeterminate progress; hidden indicators stop requesting frames | Essential — **0.18 delivered** |
 | W08 | SearchBox / CompletionPopup | Search/clear actions, reusable suggestions, cancellable asynchronous results | High |
 | W09 | Switch / SegmentedControl | Boolean/exclusive selection presentations sharing normal control semantics | High |
@@ -176,7 +177,7 @@ canvas/sketcher layer rather than becoming mandatory core form controls.
    Build the shared popup/scroll/grouping mechanisms once.
 3. Command/dialog batch (0.19): W24, W26, W27 and W28. See
    [contracts](COMMAND_DIALOGS.md) and [evidence](verification/COMMAND_DIALOGS_0_19.md).
-   Continue image/icon resources, standalone ScrollBar/StackedWidget and
+   Image/icon resources follow in 0.20; continue standalone ScrollBar/StackedWidget and
    native-service widgets, then main windows, docking, property editing and stronger data views.
    Develop F16 history/workspace services with their application consumers.
 4. After broad widget/workspace use establishes the boundaries, revisit F14 to
@@ -205,8 +206,10 @@ visual variation.
 
 The 0.18 and 0.19 batches add no new runtime dependency. Next catalog work can build on
 these controls; document storage/editor families remain F10b and module extraction
-remains deferred. Image/icon resources, standalone scrolling/stacked containers
-and broader workspace controls retain their separate entries.
+remains deferred. [Image/icon resources](IMAGE_RESOURCES.md) ship in 0.20 with
+per-feature F12 resource budgets and actual framebuffer checks. Standalone
+ScrollBar/StackedWidget are next, followed by native-service widgets and broader
+workspace controls.
 
 
 The 0.19 command/dialog batch is verified at `77ae3ac`: Windows 40/40 Release and

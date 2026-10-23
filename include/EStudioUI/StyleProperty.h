@@ -57,6 +57,9 @@ enum class StyleProperty
     FontStyle,
     TextDirection,
     Language,
+    ObjectFit,
+    ObjectPositionX,
+    ObjectPositionY,
     Count
 };
 

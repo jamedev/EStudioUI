@@ -148,7 +148,7 @@ std::optional<SemanticNode> SemanticTree::GetNode(SemanticId id) const
     if (!child && widget->m_AccessibleRole)
         node.m_Info.m_Role = *widget->m_AccessibleRole;
     auto& info = node.m_Info;
-    if (info.m_Role < SemanticRole::Group || info.m_Role > SemanticRole::Dialog ||
+    if (info.m_Role < SemanticRole::Group || info.m_Role > SemanticRole::Image ||
         (static_cast<unsigned>(info.m_Actions) & ~2047U))
         throw std::invalid_argument("A semantic hook returned an invalid role or action mask.");
     for (const auto* text : {&info.m_Name, &info.m_Description, &info.m_Value})

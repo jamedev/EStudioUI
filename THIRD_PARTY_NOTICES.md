@@ -24,16 +24,22 @@ its vcpkg copyright file includes both authoritative upstream texts.
 | SheenBidi | 3.0.0 (project overlay) | Apache-2.0 | Unicode bidirectional and script analysis |
 | libunibreak | 6.1#1 | zlib and Unicode data notice | Unicode line and word boundaries |
 | utf8proc | 2.10.0 | MIT and permissive Unicode data notice | Grapheme boundaries |
+| stb_image | stb 2024-07-29#1, upstream `f75e8d1cad7d90d72ef7a4661f1b994ef78b4e31` | MIT alternative | Bounded PNG/JPEG decoding; compiled into EStudioUI |
 | Generated GLAD loader | glad2 2.0.8, generated GL 3.3 core | CC0-1.0 alternative and Apache-2.0 API definitions | GL entry points |
 | Slug reference shader | EricLengyel/Slug, retrieved 2026-10-21 | MIT alternative | Analytic outline coverage |
 | Noto Sans | google/fonts/ofl/notosans, retrieved 2026-10-21 | SIL OFL 1.1 | Primary demo font |
 | Noto Sans Arabic, Hebrew, Devanagari; Noto Sans Italic | google/fonts commit `45e3d5269e4a17d823f6d84470bc084dc5ae46f6` | SIL OFL 1.1 | Demo fallback and actual italic faces |
 
-All seven vcpkg dependencies disable default features. HarfBuzz does not enable
+All eight vcpkg dependencies disable default features. HarfBuzz does not enable
 GLib, ICU, Cairo, Graphite, or platform shapers; FreeType does not enable external
 image/compression libraries. The Windows triplet builds static dependencies with
 the dynamic MSVC runtime. vcpkg may download build-only tools such as Meson,
 Python, CMake, and Ninja; these are not linked into EStudioUI.
+
+Only stb_image's PNG and JPEG decoders are enabled. It adds no binary dependency;
+its authoritative dual license is copied from the pinned port with demo builds.
+The artwork in `assets/images/` is original procedural EStudioUI demonstration
+and pixel-test data, distributed under the repository's MIT license.
 
 The fragment shader in `src/Renderer.cpp` is adapted from Eric Lengyel's Slug
 reference pixel shader, copyright (c) 2017 Eric Lengyel. Changes include GLSL

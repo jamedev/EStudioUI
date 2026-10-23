@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.24)
-project(EStudioUI VERSION 0.19.0 LANGUAGES C CXX)
+project(EStudioUI VERSION 0.20.0 LANGUAGES C CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -68,6 +68,7 @@ find_package(harfbuzz CONFIG REQUIRED)
 find_package(SheenBidi CONFIG REQUIRED)
 find_package(libunibreak CONFIG REQUIRED)
 find_path(ESTUDIOUI_KIWI_INCLUDE_DIR kiwi/kiwi.h REQUIRED)
+find_path(ESTUDIOUI_STB_INCLUDE_DIR stb_image.h REQUIRED)
 
 # The pinned utf8proc 2.10 port exports the unnamespaced target. Also accept the
 # newer upstream package name for users integrating with a newer registry.
@@ -83,6 +84,7 @@ add_library(EStudioUIGl STATIC third_party/glad/src/gl.c)
 target_include_directories(EStudioUIGl PUBLIC third_party/glad/include)
 
 add_library(EStudioUI STATIC
+    src/Image.cpp src/ImageDecoder.cpp src/Icon.cpp src/ImageView.cpp
     src/Style.cpp src/TextBuffer.cpp src/FontFace.cpp src/FontResource.cpp src/TextLayout.cpp src/TextShaper.cpp src/Renderer.cpp
     src/Widget.cpp src/UiContext.cpp src/Label.cpp src/Button.cpp src/TextBox.cpp src/Window.cpp
     src/CheckBox.cpp src/RadioButton.cpp src/RadioGroup.cpp src/ComboBox.cpp
@@ -113,6 +115,7 @@ add_library(EStudioUI::EStudioUI ALIAS EStudioUI)
 target_compile_features(EStudioUI PUBLIC cxx_std_20)
 target_include_directories(EStudioUI PUBLIC include)
 target_include_directories(EStudioUI SYSTEM PRIVATE "${ESTUDIOUI_KIWI_INCLUDE_DIR}")
+target_include_directories(EStudioUI SYSTEM PRIVATE "${ESTUDIOUI_STB_INCLUDE_DIR}")
 if(WIN32)
     target_link_libraries(EStudioUI PRIVATE comctl32 ole32 oleaut32 shell32 uuid uiautomationcore imm32)
 endif()
@@ -140,7 +143,7 @@ if(ESTUDIOUI_BUILD_DEMO)
         demo/WidgetStylesGallery.cpp demo/WidgetStylesProbe.cpp demo/ApplicationProbe.cpp demo/FoundationGallery.cpp
         demo/StateGallery.cpp demo/ModelGallery.cpp demo/LayoutGallery.cpp demo/ConstraintGallery.cpp demo/InputGallery.cpp demo/PlatformGallery.cpp
         demo/PlatformSemanticProbe.cpp demo/TextGallery.cpp demo/EssentialGallery.cpp demo/CommandGallery.cpp
-        demo/GpuProbeWindow.cpp demo/RenderingProfile.cpp)
+        demo/GpuProbeWindow.cpp demo/RenderingProfile.cpp demo/ImageGallery.cpp)
     target_link_libraries(EStudioUIDemo PRIVATE EStudioUI::EStudioUI EStudioUIGl glfw)
     target_compile_definitions(EStudioUIDemo PRIVATE ESTUDIOUI_DEMO_BUILD_CONFIGURATION="$<CONFIG>")
     add_executable(EStudioUIConstraintExample examples/ConstraintLayout.cpp)
@@ -151,6 +154,8 @@ if(ESTUDIOUI_BUILD_DEMO)
     target_link_libraries(EStudioUICommandExample PRIVATE EStudioUI::EStudioUI)
     add_executable(EStudioUIControlsExample examples/CommonControls.cpp)
     target_link_libraries(EStudioUIControlsExample PRIVATE EStudioUI::EStudioUI)
+    add_executable(EStudioUIImageExample examples/ImageResources.cpp)
+    target_link_libraries(EStudioUIImageExample PRIVATE EStudioUI::EStudioUI)
     add_executable(EStudioUITextExample examples/ControlText.cpp)
     target_link_libraries(EStudioUITextExample PRIVATE EStudioUI::EStudioUI)
     if(MSVC)
@@ -177,7 +182,7 @@ if(ESTUDIOUI_BUILD_DEMO)
         VERBATIM
     )
     if(DEFINED VCPKG_INSTALLED_DIR AND DEFINED VCPKG_TARGET_TRIPLET)
-        foreach(port glfw3 freetype harfbuzz utf8proc kiwi sheenbidi libunibreak)
+        foreach(port glfw3 freetype harfbuzz utf8proc kiwi sheenbidi libunibreak stb)
             set(copyright "${VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}/share/${port}/copyright")
             if(EXISTS "${copyright}")
                 add_custom_command(TARGET EStudioUIDemo POST_BUILD
@@ -230,7 +235,7 @@ if(ESTUDIOUI_BUILD_TESTS)
     foreach(suite CanvasScene CanvasGeometry SketchDocument CanvasWidget InputControls SplitToolButton Painter
                   StyleParts StyledCollections StyledScroll CompositeStyle
                   Dispatch ThreadAffinity Task QueuedSignal ControlAffinity ServiceAffinity
-                  State Binding Invalidation ControlUpdate Model ModelView Layout ConstraintLayout InputFoundation ActionDomain Platform Semantic TextInput FontText EssentialWidgets CommandDialogs)
+                  State Binding Invalidation ControlUpdate Model ModelView Layout ConstraintLayout InputFoundation ActionDomain Platform Semantic TextInput FontText EssentialWidgets CommandDialogs Image)
         add_executable(EStudioUI${suite}Tests tests/${suite}Tests.cpp)
         target_link_libraries(EStudioUI${suite}Tests PRIVATE EStudioUI::EStudioUI)
         target_compile_definitions(EStudioUI${suite}Tests PRIVATE
@@ -240,6 +245,8 @@ if(ESTUDIOUI_BUILD_TESTS)
         endif()
         add_test(NAME ${suite} COMMAND EStudioUI${suite}Tests)
     endforeach()
+
+    target_compile_definitions(EStudioUIImageTests PRIVATE ESTUDIOUI_IMAGE_DIR="${CMAKE_CURRENT_SOURCE_DIR}/assets/images")
 
     target_link_libraries(EStudioUIFontTextTests PRIVATE harfbuzz::harfbuzz)
     target_compile_definitions(EStudioUIFontTextTests PRIVATE ESTUDIOUI_TEST_FONT_DIR="${ESTUDIOUI_CONTROL_FONT_DIR}")

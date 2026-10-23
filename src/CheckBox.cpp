@@ -213,8 +213,9 @@ Point CheckBox::Measure(FontFace& font) const
 {
     const auto& caption = Caption(font);
     const auto& indicator = GetPartStyle("indicator");
-    return {indicator.m_Width.Resolve(20, 20) + 10 + caption.m_Width,
-            std::max(indicator.m_Height.Resolve(20, 20), caption.m_Ascender + caption.m_Descender)};
+    return {indicator.m_Width.Resolve(20, 20) + 10 + caption.m_Width + ImageIconExtent(),
+            std::max({indicator.m_Height.Resolve(20, 20), caption.m_Ascender + caption.m_Descender,
+                      GetImageIcon().IsEmpty() ? 0 : GetImageIconSize().m_Y})};
 }
 
 MeasureResult CheckBox::MeasureConstrained(FontFace& font, const MeasureConstraints&) const
@@ -263,8 +264,17 @@ void CheckBox::Paint(Renderer& renderer, FontFace& font, double, float opacity) 
     const auto& label = GetPartStyle("label");
     auto color = label.m_Color;
     color.m_A *= opacity * label.m_Opacity;
-    const Rect text{content.m_X + (rtl ? 0 : width + 10), content.m_Y, std::max(0.0f, content.m_Width - width - 10),
-                    content.m_Height};
+    const float extent = ImageIconExtent();
+    const Rect text{content.m_X + (rtl ? 0 : width + 10 + extent), content.m_Y,
+                    std::max(0.0f, content.m_Width - width - 10 - extent), content.m_Height};
+    if (!GetImageIcon().IsEmpty())
+    {
+        const auto size = GetImageIconSize();
+        PaintImageIcon(renderer,
+                       {rtl ? content.m_X + content.m_Width - width - 10 - size.m_X : content.m_X + width + 10,
+                        content.m_Y, size.m_X, content.m_Height},
+                       opacity);
+    }
     renderer.PushState(label.m_Transform.Resolve(text));
     renderer.DrawText(
         caption,

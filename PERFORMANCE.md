@@ -2,6 +2,15 @@
 
 ## Paced interaction capture (0.19)
 
+The 2026-10-23 native GTX 960 capture achieved about 32.1 Hz despite requesting
+60 Hz. Every measured GPU timing was matched, and no retained case fell back to
+full redraw. Its approximately 31 ms cadence is consistent with coarse Windows
+sleep timing in the scripted runner; actual waits/event-poll latency were not
+recorded. Treat it as a per-frame/work-counter observation, not a verified
+60 Hz load experiment or proof of the ordinary application's cadence. A future
+profiling increment should verify native wait precision and record wake lateness.
+Framework development continues with that diagnostic limitation explicit.
+
 Run on the target GPU in Release to investigate Rich CSS peaks, repeated slider
 input and text-editing workloads:
 

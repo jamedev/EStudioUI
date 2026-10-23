@@ -1,6 +1,7 @@
 #pragma once
 
 #include "FontFace.h"
+#include "Icon.h"
 #include "Style.h"
 #include "ThreadAffinity.h"
 
@@ -53,6 +54,18 @@ struct RenderStats
 
     //! Bytes of outline and band data currently cached on the GPU.
     std::size_t m_FontBytes = 0;
+
+    //! Number of managed image instances recorded in the frame.
+    std::size_t m_Images = 0;
+
+    //! Number of resident managed image textures in this renderer's context.
+    std::size_t m_CachedImages = 0;
+
+    //! Managed RGBA8 texture storage currently resident in this context.
+    std::size_t m_ImageBytes = 0;
+
+    //! Managed pixel bytes uploaded in this frame; unchanged images upload nothing.
+    std::size_t m_ImageUploadBytes = 0;
 
     //! Bytes submitted in the ordered instance stream.
     std::size_t m_InstanceBytes = 0;
@@ -146,6 +159,12 @@ class Renderer
     //! Sets a hard GPU outline/band budget, retiring existing cached glyphs.
     void SetFontCacheLimit(std::size_t bytes);
 
+    //! Deletes managed image textures between frames and invalidates retained history.
+    void ClearImageCache();
+
+    //! Sets the per-context managed texture budget in [4 bytes,512 MiB], clearing old residency.
+    void SetImageCacheLimit(std::size_t bytes);
+
     //! Starts recording a logical-pixel frame for retained rendering.
     void BeginFrame(float width, float height, int framebufferWidth, int framebufferHeight, Color clear);
 
@@ -185,6 +204,12 @@ class Renderer
 
     //! Composites a shared texture; revision zero conservatively treats its contents as changed.
     void DrawTexture(Rect bounds, std::uint32_t texture, Rect clip, float opacity = 1, std::uint64_t revision = 0);
+
+    //! Records immutable pixels with top-left normalized source coordinates and deferred upload.
+    void DrawImage(Rect bounds, const Image& image, Rect clip, float opacity = 1, Rect source = {0, 0, 1, 1});
+
+    //! Chooses an icon density for the actual framebuffer/transform scale and records its image.
+    void DrawIcon(Rect bounds, const Icon& icon, Rect clip, float opacity = 1);
 
     //! Uploads changed buffers and submits batches in painting order.
     void EndFrame();

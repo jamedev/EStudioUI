@@ -83,6 +83,12 @@ class Painter
     //! Shapes and draws UTF-8 text; reuse a TextLayout for frequently repainted content.
     void DrawText(std::string_view text, Point baseline, float fontSize = 16);
 
+    //! Draws shared image pixels with the current transform, clip and opacity.
+    void DrawImage(Rect bounds, const Image& image, Rect source = {0, 0, 1, 1});
+
+    //! Draws an automatically selected icon density with the current transform, clip and opacity.
+    void DrawIcon(Rect bounds, const Icon& icon);
+
     //! Returns the font service for application-owned shaping caches.
     FontFace& GetFont() const;
 

@@ -267,6 +267,12 @@ struct Style
     //! Text alignment: left, center, right.
     std::string m_TextAlign = "left";
 
+    //! Image scaling within its content box: contain, cover, fill, none, or scale-down.
+    std::string m_ObjectFit = "contain";
+
+    //! Image alignment within remaining space, expressed as fractions in [0,1].
+    float m_ObjectPositionX = .5f, m_ObjectPositionY = .5f;
+
     //! Wraps label text at spaces/hyphens with a grapheme-safe fallback.
     bool m_WordWrap = false;
 

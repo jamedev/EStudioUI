@@ -85,7 +85,8 @@ enum class SemanticRole
     Separator,
     ToolTip,
     MenuBar,
-    Dialog
+    Dialog,
+    Image
 };
 
 //! Supported interactions; advertised only when implemented by a semantic control.

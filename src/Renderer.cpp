@@ -12,6 +12,7 @@
 #include <limits>
 #include <stdexcept>
 #include <unordered_map>
+#include <unordered_set>
 #include <vector>
 
 namespace EStudioUI
@@ -179,7 +180,9 @@ void main()
     }
     if(vData.w==2)
     {
-        result=texture(uImage,vEm)*vColor;
+        vec4 image=texture(uImage,vEm);
+        if(vData.x==1) image=straight(image);
+        result=image*vColor;
         result.a*=clipCoverage;
         return;
     }
@@ -456,12 +459,159 @@ struct Renderer::Impl
         m_Instances.push_back(instance);
     }
 
-    struct Image
+    struct TextureRecord
     {
         std::size_t m_Instance;
         GLuint m_Texture;
         std::uint64_t m_Revision;
     };
+
+    struct ManagedImage
+    {
+        std::size_t m_Instance = 0;
+        EStudioUI::Image m_Image;
+        std::weak_ptr<const void> m_Source;
+    };
+
+    struct CachedImage
+    {
+        std::weak_ptr<const void> m_Source;
+        GLuint m_Texture = 0;
+        std::size_t m_Bytes = 0;
+        std::uint64_t m_LastFrame = 0;
+        bool m_Upload = true;
+    };
+
+    std::vector<ManagedImage> m_ManagedImages;
+    std::unordered_map<std::uint64_t, CachedImage> m_ImageCache;
+    std::size_t m_ImageCacheLimit = 64 * 1024 * 1024, m_ImageBytes = 0, m_ImageUploadBytes = 0;
+
+    void RetireImage(std::unordered_map<std::uint64_t, CachedImage>::iterator entry)
+    {
+        glDeleteTextures(1, &entry->second.m_Texture);
+        m_ImageBytes -= entry->second.m_Bytes;
+        m_ImageCache.erase(entry);
+    }
+
+    void PrepareImages()
+    {
+        std::unordered_set<std::uint64_t> required;
+        std::size_t bytes = 0, missingBytes = 0, missingCount = 0;
+        for (const auto& record : m_ManagedImages)
+        {
+            const auto& image = record.m_Image;
+            if (!required.insert(image.GetIdentity()).second)
+                continue;
+            if (required.size() > 1024)
+                throw std::length_error("A frame supports at most 1,024 distinct visible images.");
+            if (image.GetWidth() > m_MaxTextureSize || image.GetHeight() > m_MaxTextureSize)
+                throw std::length_error("Image dimensions exceed this GPU's GL_MAX_TEXTURE_SIZE.");
+            if (image.GetPixels().size() > m_ImageCacheLimit - bytes)
+                throw std::length_error("Visible images exceed the renderer's configured texture working budget.");
+            bytes += image.GetPixels().size();
+            if (!m_ImageCache.contains(image.GetIdentity()))
+            {
+                missingBytes += image.GetPixels().size();
+                ++missingCount;
+            }
+        }
+        if (bytes > m_ImageCacheLimit || required.size() > 1024)
+            throw std::length_error("Visible images exceed the renderer's texture budget or 1,024-image limit.");
+        for (auto it = m_ImageCache.begin(); it != m_ImageCache.end();)
+        {
+            const auto entry = it++;
+            if (entry->second.m_Source.expired() && !required.contains(entry->first))
+                RetireImage(entry);
+        }
+        while (m_ImageBytes + missingBytes > m_ImageCacheLimit || m_ImageCache.size() + missingCount > 1024)
+        {
+            auto oldest = m_ImageCache.end();
+            for (auto it = m_ImageCache.begin(); it != m_ImageCache.end(); ++it)
+                if (!required.contains(it->first) &&
+                    (oldest == m_ImageCache.end() || it->second.m_LastFrame < oldest->second.m_LastFrame))
+                    oldest = it;
+            if (oldest == m_ImageCache.end())
+                throw std::length_error("No unused image texture can be retired within the configured budget.");
+            RetireImage(oldest);
+        }
+        for (const auto& record : m_ManagedImages)
+        {
+            const auto id = record.m_Image.GetIdentity();
+            auto [it, inserted] = m_ImageCache.try_emplace(id);
+            auto& cached = it->second;
+            if (inserted)
+            {
+                cached.m_Source = record.m_Source;
+                glGenTextures(1, &cached.m_Texture);
+                cached.m_Bytes = record.m_Image.GetPixels().size();
+                m_ImageBytes += cached.m_Bytes;
+            }
+            cached.m_LastFrame = m_FrameSerial + 1;
+            m_Images.push_back({record.m_Instance, cached.m_Texture, id});
+        }
+    }
+
+    void UploadImages()
+    {
+        m_ImageUploadBytes = 0;
+        if (std::none_of(m_ManagedImages.begin(), m_ManagedImages.end(),
+                         [&](const auto& record) { return m_ImageCache.at(record.m_Image.GetIdentity()).m_Upload; }))
+            return;
+        GLint unpackBuffer = 0, alignment = 0, rowLength = 0, skipRows = 0, skipPixels = 0;
+        glGetIntegerv(GL_PIXEL_UNPACK_BUFFER_BINDING, &unpackBuffer);
+        glGetIntegerv(GL_UNPACK_ALIGNMENT, &alignment);
+        glGetIntegerv(GL_UNPACK_ROW_LENGTH, &rowLength);
+        glGetIntegerv(GL_UNPACK_SKIP_ROWS, &skipRows);
+        glGetIntegerv(GL_UNPACK_SKIP_PIXELS, &skipPixels);
+
+        struct RestoreUnpack
+        {
+            GLint m_Buffer, m_Alignment, m_RowLength, m_SkipRows, m_SkipPixels;
+
+            ~RestoreUnpack()
+            {
+                glBindBuffer(GL_PIXEL_UNPACK_BUFFER, static_cast<GLuint>(m_Buffer));
+                glPixelStorei(GL_UNPACK_ALIGNMENT, m_Alignment);
+                glPixelStorei(GL_UNPACK_ROW_LENGTH, m_RowLength);
+                glPixelStorei(GL_UNPACK_SKIP_ROWS, m_SkipRows);
+                glPixelStorei(GL_UNPACK_SKIP_PIXELS, m_SkipPixels);
+            }
+        } restore{unpackBuffer, alignment, rowLength, skipRows, skipPixels};
+
+        glBindBuffer(GL_PIXEL_UNPACK_BUFFER, 0);
+        glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
+        glPixelStorei(GL_UNPACK_ROW_LENGTH, 0);
+        glPixelStorei(GL_UNPACK_SKIP_ROWS, 0);
+        glPixelStorei(GL_UNPACK_SKIP_PIXELS, 0);
+        glActiveTexture(GL_TEXTURE2);
+        for (const auto& record : m_ManagedImages)
+        {
+            auto& cached = m_ImageCache.at(record.m_Image.GetIdentity());
+            if (!cached.m_Upload)
+                continue;
+            auto pixels =
+                std::vector<std::uint8_t>(record.m_Image.GetPixels().begin(), record.m_Image.GetPixels().end());
+            for (std::size_t i = 0; i < pixels.size(); i += 4)
+                for (std::size_t channel = 0; channel < 3; ++channel)
+                    pixels[i + channel] = static_cast<std::uint8_t>(
+                        (static_cast<unsigned>(pixels[i + channel]) * pixels[i + 3] + 127) / 255);
+            glBindTexture(GL_TEXTURE_2D, cached.m_Texture);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+            glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, record.m_Image.GetWidth(), record.m_Image.GetHeight(), 0, GL_RGBA,
+                         GL_UNSIGNED_BYTE, pixels.data());
+            const auto error = glGetError();
+            if (error != GL_NO_ERROR)
+            {
+                m_HistoryValid = false;
+                throw std::runtime_error("OpenGL image upload failed: " + std::to_string(error));
+            }
+            m_ImageUploadBytes += pixels.size();
+            cached.m_Upload = false;
+        }
+    }
 
     struct TextureState
     {
@@ -968,7 +1118,7 @@ struct Renderer::Impl
     int m_FramebufferHeight = 1;
     bool m_FontDirty = true;
     std::vector<Instance> m_Instances;
-    std::vector<Image> m_Images;
+    std::vector<TextureRecord> m_Images;
     GLint m_MaxTextureSize = 0, m_MaxBufferSize = 0;
     std::size_t m_ShapeCount = 0;
     std::size_t m_GlyphCount = 0;
@@ -1003,6 +1153,11 @@ struct Renderer::Impl
 
     ~Impl()
     {
+        for (const auto& [identity, image] : m_ImageCache)
+        {
+            (void)identity;
+            glDeleteTextures(1, &image.m_Texture);
+        }
         if (m_Program)
             glDeleteProgram(m_Program);
         glDeleteFramebuffers(1, &m_RetainedFramebuffer);
@@ -1186,6 +1341,26 @@ void Renderer::SetFontCacheLimit(std::size_t bytes)
     m_Impl->m_FontCacheLimit = bytes;
 }
 
+void Renderer::ClearImageCache()
+{
+    m_Affinity.VerifyAccess("Renderer::ClearImageCache");
+    auto& self = *m_Impl;
+    if (self.m_Recording)
+        throw std::logic_error("Image cache retirement requires a frame boundary.");
+    while (!self.m_ImageCache.empty())
+        self.RetireImage(self.m_ImageCache.begin());
+    self.m_HistoryValid = false;
+}
+
+void Renderer::SetImageCacheLimit(std::size_t bytes)
+{
+    m_Affinity.VerifyAccess("Renderer::SetImageCacheLimit");
+    if (bytes < 4 || bytes > 512 * 1024 * 1024)
+        throw std::invalid_argument("GPU image cache limits must be between 4 bytes and 512 MiB.");
+    ClearImageCache();
+    m_Impl->m_ImageCacheLimit = bytes;
+}
+
 void Renderer::BeginFrame(float width, float height, int framebufferWidth, int framebufferHeight, Color clear)
 {
     m_Affinity.VerifyAccess("Renderer::BeginFrame");
@@ -1207,6 +1382,7 @@ void Renderer::BeginFrame(float width, float height, int framebufferWidth, int f
     self.m_PaintKeys.clear();
     self.m_OwnerCounters.clear();
     self.m_Images.clear();
+    self.m_ManagedImages.clear();
     self.m_Effects = {{1, 0, 0, 0}, {0, 1, 0, 0}};
     self.m_States.clear();
     Impl::State state;
@@ -1502,6 +1678,45 @@ void Renderer::DrawTexture(Rect bounds, std::uint32_t texture, Rect clip, float 
     self.Record({Values(bounds), {0, 1, 1, -1}, {1, 1, 1, opacity}, {}, Values(scissor), {}, {0, 0, 0, 2}, effects});
 }
 
+void Renderer::DrawImage(Rect bounds, const Image& image, Rect clip, float opacity, Rect source)
+{
+    m_Affinity.VerifyAccess("Renderer::DrawImage");
+    if (!std::isfinite(bounds.m_X) || !std::isfinite(bounds.m_Y) || !std::isfinite(bounds.m_Width) ||
+        !std::isfinite(bounds.m_Height) || !std::isfinite(bounds.m_X + bounds.m_Width) ||
+        !std::isfinite(bounds.m_Y + bounds.m_Height) || !std::isfinite(clip.m_X) || !std::isfinite(clip.m_Y) ||
+        !std::isfinite(clip.m_Width) || !std::isfinite(clip.m_Height) || !std::isfinite(clip.m_X + clip.m_Width) ||
+        !std::isfinite(clip.m_Y + clip.m_Height) || !std::isfinite(opacity) || opacity < 0 || opacity > 1 ||
+        !std::isfinite(source.m_X) || !std::isfinite(source.m_Y) || !std::isfinite(source.m_Width) ||
+        !std::isfinite(source.m_Height) || source.m_X < 0 || source.m_Y < 0 || source.m_Width <= 0 ||
+        source.m_Height <= 0 || source.m_X + source.m_Width > 1.000001f || source.m_Y + source.m_Height > 1.000001f)
+        throw std::invalid_argument("Images require finite bounds/opacity and a positive normalized source rectangle.");
+    if (image.IsEmpty() || bounds.m_Width <= 0 || bounds.m_Height <= 0 || opacity == 0)
+        return;
+    auto& self = *m_Impl;
+    if (!self.m_Recording)
+        throw std::logic_error("Images must be recorded between BeginFrame and EndFrame.");
+    const auto [scissor, effects] = self.DrawingState(clip);
+    if (effects[1] < 0 || !self.Visible(bounds, scissor))
+        return;
+    self.m_ManagedImages.push_back({self.m_Instances.size(), image, image.m_Data});
+    self.Record({Values(bounds), Values(source), {1, 1, 1, opacity}, {}, Values(scissor), {}, {1, 0, 0, 2}, effects});
+}
+
+void Renderer::DrawIcon(Rect bounds, const Icon& icon, Rect clip, float opacity)
+{
+    m_Affinity.VerifyAccess("Renderer::DrawIcon");
+    if (icon.IsEmpty() || bounds.m_Width <= 0 || bounds.m_Height <= 0)
+        return;
+    const auto& self = *m_Impl;
+    const auto& transform = self.m_States.back().m_Transform;
+    const float sx = static_cast<float>(self.m_FramebufferWidth) / self.m_Width;
+    const float sy = static_cast<float>(self.m_FramebufferHeight) / self.m_Height;
+    const auto size = icon.GetSize();
+    const float scale = std::max(std::hypot(transform.m_A * sx, transform.m_B * sy) * bounds.m_Width / size.m_X,
+                                 std::hypot(transform.m_C * sx, transform.m_D * sy) * bounds.m_Height / size.m_Y);
+    DrawImage(bounds, icon.Select(std::max(scale, .000001f)), clip, opacity);
+}
+
 void Renderer::SetPartialRedrawEnabled(bool enabled)
 {
     m_Affinity.VerifyAccess("Renderer::SetPartialRedrawEnabled");
@@ -1542,6 +1757,7 @@ void Renderer::EndFrame()
     self.m_FrameReady = false;
     self.m_Recording = false;
     self.EnsureRetainedTarget();
+    self.PrepareImages();
     self.BuildDamage();
     self.BuildBatches();
     const bool submitted = !self.m_Submitted.empty();
@@ -1555,6 +1771,7 @@ void Renderer::EndFrame()
         throw std::runtime_error("Frame exceeds the GL instance limit.");
     ++self.m_FrameSerial;
     self.StartTimer();
+    self.UploadImages();
     glBindVertexArray(self.m_Vao);
     if (submitted && self.m_FontDirty)
     {
@@ -1643,6 +1860,10 @@ void Renderer::EndFrame()
     stats.m_Glyphs = self.m_GlyphCount;
     stats.m_CachedGlyphs = self.m_GlyphCache.size();
     stats.m_FontBytes = self.m_Curves.size() * sizeof(Float4) + self.m_Bands.size() * sizeof(UInt2);
+    stats.m_Images = self.m_ManagedImages.size();
+    stats.m_CachedImages = self.m_ImageCache.size();
+    stats.m_ImageBytes = self.m_ImageBytes;
+    stats.m_ImageUploadBytes = self.m_ImageUploadBytes;
     stats.m_InstanceBytes = self.m_Submitted.size() * sizeof(Impl::Instance);
     stats.m_EffectBytes = submitted ? self.m_Effects.size() * sizeof(Float4) : 0;
     stats.m_Gradients = self.m_GradientCount;
@@ -1680,6 +1901,7 @@ void Renderer::EndFrame()
         throw std::runtime_error("OpenGL error after rendering: " + std::to_string(error));
     }
     self.m_FrameReady = true;
+    self.m_ManagedImages.clear();
 }
 
 Color Renderer::ReadPixel(Point point) const

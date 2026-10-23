@@ -35,7 +35,7 @@ command history, geometry, and persistence; these are not promised modules or
 current standalone SDKs. Public API usability and supported extension points
 remain acceptance criteria throughout.
 
-## Implementation status: 0.18, common controls on verified foundations
+## Implementation status: 0.20, image resources on verified foundations
 
 The 0.14.1 maintenance increment fixes retained native window closure, stable
 GPU capture after presentation, and MSVC conversion warnings before the initial F11 increment.
@@ -68,6 +68,7 @@ and its remaining platform limits.
 | F09 | Implemented in 0.14: owning input payloads, rich native metadata, transactional shared actions and worker handles, scoped/ambiguity-safe shortcuts, local focus scopes, nested popup/modal sessions, menu nesting and phase/lifetime guards |
 | F11 | 0.16 implementation extends 0.15 native services with shared composition, Windows IMM, GPU preedit, stable virtual list/tree/table/canvas semantics and native collection/text/event patterns; automated Windows Release/Debug/native repetitions pass; interactive IME/AT/mixed-DPI acceptance remains open |
 | F10a | Implemented in 0.17: actual font identity/selection/fallback, script and bidi shaping, visual caret affinity and disjoint selection, Unicode wrapping, shared composition and bounded CPU/GPU text caches; see TEXT.md and verification/TEXT_0_17.md |
+| F12 image slice | 0.20: immutable worker-friendly images, bounded decoding, DPI icon sources and byte/count-bounded per-context texture residency with safe retirement; broader resource services remain feature-driven |
 | F10b, F12, F16 | Planned: later document editing, feature-driven resource hardening, and reusable history/workspace services |
 | F14 | Deferred until broad widget/workspace use informs reusable module extraction and SDK packaging; not a Gate B prerequisite |
 
@@ -601,3 +602,19 @@ help from unrelated keyboard focus. [Verification](verification/RENDERING_PROFIL
 records measured work and platform checks. Hardware capture is the next input for
 choosing rendering optimizations; this increment does not introduce a new backend
 or claim rich-document editor performance. F10b and F14 remain deferred.
+
+## Image/icon resource integration (0.20)
+
+W06 supplies shared immutable Image values, PNG/JPEG decoding and RGBA creation,
+ImageView fitting/alignment/clipping, multi-density Icon values, command images
+and custom Painter image drawing. It reuses owner/phase guards, text/caption
+layout, computed CSS/animation, lazy semantics and retained GPU composition.
+Per-feature F12 work bounds encoded/decoded/temporary memory, source dimensions,
+icon densities and per-context texture bytes/count; current-frame sources remain
+pinned during eviction. CPU image teardown performs no OpenGL work.
+See [IMAGE_RESOURCES.md](IMAGE_RESOURCES.md) and
+[verification](verification/IMAGES_0_20.md). Continue W15/W17 scrolling/stacked
+containers, then native-service widgets and application workspaces. F10b document
+editing and F14 extraction remain deferred. GPU optimization is paused at the
+user's request; the Windows profiler's unachieved 60 Hz pacing remains a recorded
+diagnostic limitation rather than evidence of an interactive renderer limit.

@@ -123,9 +123,10 @@ Point MenuItem::Measure(FontFace& font) const
     const auto& caption = Text(font, 0);
     const auto& icon = Text(font, 1);
     const auto& hint = Text(font, 2);
-    return {32 + caption.m_Width + (m_Hint.empty() ? 0 : hint.m_Width + 18) + 18,
+    const float leading = GetImageIcon().IsEmpty() ? 32 : std::max(32.0f, GetImageIconSize().m_X + 8);
+    return {leading + caption.m_Width + (m_Hint.empty() ? 0 : hint.m_Width + 18) + 18,
             std::max({20.0f, caption.m_Ascender + caption.m_Descender, icon.m_Ascender + icon.m_Descender,
-                      hint.m_Ascender + hint.m_Descender})};
+                      hint.m_Ascender + hint.m_Descender, GetImageIcon().IsEmpty() ? 0 : GetImageIconSize().m_Y})};
 }
 
 MeasureResult MenuItem::MeasureConstrained(FontFace& font, const MeasureConstraints&) const
@@ -141,11 +142,12 @@ void MenuItem::Paint(Renderer& renderer, FontFace& font, double, float opacity) 
     const auto b = GetContentBounds();
     const auto& caption = Text(font, 0);
     const bool rtl = caption.m_RightToLeft;
+    const float leadingWidth = GetImageIcon().IsEmpty() ? 32 : std::max(32.0f, GetImageIconSize().m_X + 8);
     const float hintWidth = m_Hint.empty() ? 0 : Text(font, 2).m_Width + 18;
-    const Rect leading{rtl ? b.m_X + b.m_Width - 24 : b.m_X, b.m_Y, 24, b.m_Height};
+    const Rect leading{rtl ? b.m_X + b.m_Width - leadingWidth + 8 : b.m_X, b.m_Y, leadingWidth - 8, b.m_Height};
     const Rect trailing{rtl ? b.m_X : b.m_X + b.m_Width - 14, b.m_Y, 14, b.m_Height};
-    const Rect label{b.m_X + (rtl ? 18 + hintWidth : 32), b.m_Y, std::max(0.0f, b.m_Width - 50 - hintWidth),
-                     b.m_Height};
+    const Rect label{b.m_X + (rtl ? 18 + hintWidth : leadingWidth), b.m_Y,
+                     std::max(0.0f, b.m_Width - leadingWidth - 18 - hintWidth), b.m_Height};
     const Rect hint{rtl ? b.m_X + 18 : b.m_X + b.m_Width - 18 - hintWidth, b.m_Y, std::max(0.0f, hintWidth - 18),
                     b.m_Height};
     const auto text = [&](std::size_t part, Rect rect)
@@ -163,8 +165,13 @@ void MenuItem::Paint(Renderer& renderer, FontFace& font, double, float opacity) 
         renderer.PopState();
     };
     text(0, label);
-    if (!m_Icon.empty() && !(IsCheckable() && IsChecked()))
-        text(1, leading);
+    if (!(IsCheckable() && IsChecked()))
+    {
+        if (!GetImageIcon().IsEmpty())
+            PaintImageIcon(renderer, leading, opacity);
+        else if (!m_Icon.empty())
+            text(1, leading);
+    }
     if (!m_Hint.empty())
         text(2, hint);
     const auto line = [&](const char* part, Rect rect, bool arrow)

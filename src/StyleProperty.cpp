@@ -66,7 +66,10 @@ const auto s_Properties = std::to_array<PropertyInfo>({{"background-color", &Sty
                                                        {"font-weight", &Style::m_FontWeight},
                                                        {"font-style", &Style::m_FontStyle},
                                                        {"direction", &Style::m_TextDirection},
-                                                       {"language", &Style::m_Language}});
+                                                       {"language", &Style::m_Language},
+                                                       {"object-fit", &Style::m_ObjectFit},
+                                                       {"object-position-x", &Style::m_ObjectPositionX},
+                                                       {"object-position-y", &Style::m_ObjectPositionY}});
 static_assert(s_Properties.size() == static_cast<std::size_t>(StyleProperty::Count));
 
 const PropertyInfo& Info(StyleProperty property)
@@ -215,6 +218,9 @@ bool IsPaintOnlyProperty(StyleProperty property)
     case StyleProperty::AlternateBackground:
     case StyleProperty::HoverBackground:
     case StyleProperty::GridColor:
+    case StyleProperty::ObjectFit:
+    case StyleProperty::ObjectPositionX:
+    case StyleProperty::ObjectPositionY:
         return true;
     default:
         return false;
@@ -243,7 +249,10 @@ void SetStyleValue(Style& style, StyleProperty property, const StyleValue& value
                                           ? -1000000.0f
                                           : 0.0f;
                 const float maximum = property == StyleProperty::FontWeight ? 1000.0f
-                                      : property == StyleProperty::Opacity  ? 1.0f
+                                      : property == StyleProperty::Opacity ||
+                                              property == StyleProperty::ObjectPositionX ||
+                                              property == StyleProperty::ObjectPositionY
+                                          ? 1.0f
                                       : property == StyleProperty::FontSize ? 512.0f
                                                                             : 1000000.0f;
                 style.*member = Finite(*typed, minimum, maximum);
@@ -264,6 +273,9 @@ void SetStyleValue(Style& style, StyleProperty property, const StyleValue& value
                                            return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') ||
                                                   (c >= '0' && c <= '9') || c == '-';
                                        }))
+                    : property == StyleProperty::ObjectFit
+                        ? (*typed == "contain" || *typed == "cover" || *typed == "fill" || *typed == "none" ||
+                           *typed == "scale-down")
                     : property == StyleProperty::Align ? (*typed == "stretch" || *typed == "start" ||
                                                           *typed == "center" || *typed == "end" || *typed == "baseline")
                     : property == StyleProperty::Justify
@@ -297,6 +309,8 @@ std::vector<StyleProperty> FindStyleProperties(std::string_view name)
         result = {StyleProperty::Background, StyleProperty::BackgroundImage};
     else if (name == "box-shadow")
         result = {StyleProperty::BoxShadow, StyleProperty::ShadowLayers};
+    else if (name == "object-position")
+        result = {StyleProperty::ObjectPositionX, StyleProperty::ObjectPositionY};
     else if (name == "border")
         result = {StyleProperty::BorderWidth, StyleProperty::BorderColor};
     else if (name == "transform-origin")

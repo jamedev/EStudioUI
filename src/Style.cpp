@@ -965,6 +965,46 @@ void StyleSheet::Apply(Style& style, const Declaration& declaration)
         SetStyleValue(style, StyleProperty::Language, value);
     else if (name == "font-size")
         style.m_FontSize = std::clamp(Number(value), 0.0f, 512.0f);
+    else if (name == "object-fit")
+        SetStyleValue(style, StyleProperty::ObjectFit, value);
+    else if (name == "object-position" || name == "object-position-x" || name == "object-position-y")
+    {
+        const auto words = Words(value);
+        if (words.empty() || words.size() > (name == "object-position" ? 2u : 1u))
+            throw std::runtime_error("object-position supports one or two keywords/percentages.");
+        const auto position = [](const std::string& word, bool vertical)
+        {
+            if (word == "center")
+                return .5f;
+            if (word == (vertical ? "top" : "left"))
+                return 0.0f;
+            if (word == (vertical ? "bottom" : "right"))
+                return 1.0f;
+            if (word.empty() || word.back() != '%')
+                throw std::runtime_error("Image positions require axis keywords or percentages in [0%,100%].");
+            const float result = Number(word.substr(0, word.size() - 1), true) / 100;
+            if (result < 0 || result > 1)
+                throw std::runtime_error("Image positions require percentages in [0%,100%].");
+            return result;
+        };
+        if (name == "object-position-x")
+            style.m_ObjectPositionX = position(words[0], false);
+        else if (name == "object-position-y")
+            style.m_ObjectPositionY = position(words[0], true);
+        else if (words.size() == 1)
+        {
+            const bool vertical = words[0] == "top" || words[0] == "bottom";
+            style.m_ObjectPositionX = vertical ? .5f : position(words[0], false);
+            style.m_ObjectPositionY = vertical ? position(words[0], true) : .5f;
+        }
+        else
+        {
+            const bool reversed =
+                words[0] == "top" || words[0] == "bottom" || words[1] == "left" || words[1] == "right";
+            style.m_ObjectPositionX = position(words[reversed ? 1 : 0], false);
+            style.m_ObjectPositionY = position(words[reversed ? 0 : 1], true);
+        }
+    }
     else if (name == "opacity")
         style.m_Opacity = std::clamp(Number(value), 0.0f, 1.0f);
     else if (name == "translate-x")

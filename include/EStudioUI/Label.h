@@ -37,12 +37,15 @@ class Label : public Widget
     //! Draws the background and aligned text lines.
     void Paint(Renderer& renderer, FontFace& font, double time, float opacity) const override;
 
-  private:
-    //! Refreshes shaping only after text or font size changes.
-    void EnsureLayout(FontFace& font) const;
+    //! Draws cached text in a supplied content rectangle for composed label-derived controls.
+    void PaintText(Renderer& renderer, FontFace& font, Rect content, float opacity) const;
 
     //! Returns natural or width-specific shaped lines from a bounded cache.
     const std::vector<TextLayout>& Lines(FontFace& font, std::optional<float> width) const;
+
+  private:
+    //! Refreshes shaping only after text or font size changes.
+    void EnsureLayout(FontFace& font) const;
 
     //! Stores the label's UTF-8 text.
     std::string m_Text;

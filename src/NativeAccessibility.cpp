@@ -55,6 +55,8 @@ CONTROLTYPEID ControlType(SemanticRole role)
         return UIA_WindowControlTypeId;
     case SemanticRole::Text:
         return UIA_TextControlTypeId;
+    case SemanticRole::Image:
+        return UIA_ImageControlTypeId;
     case SemanticRole::Button:
         return UIA_ButtonControlTypeId;
     case SemanticRole::RadioButton:

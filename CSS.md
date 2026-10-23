@@ -59,6 +59,8 @@ sizes include padding and borders: the model is **border-box**.
 | `direction`, `language` | auto/ltr/rtl; shaping language tag; inherited with typography |
 | `font-size` | Pixel size clamped to 0..512; zero hides text |
 | `text-align` | `left`, `center`, `right` |
+| `object-fit` | ImageView scaling: `contain`, `cover`, `fill`, `none`, `scale-down` |
+| `object-position`, `object-position-x/y` | ImageView alignment: axis keywords or percentages in [0%,100%]; defaults to center |
 | `opacity` | Nonnegative number, clamped to 0..1 |
 | `translate-x`, `translate-y` | Signed logical-pixel offsets after layout; descendants in flow and input geometry follow |
 | `padding`, `margin` | One to four nonnegative pixel lengths in CSS edge order |
@@ -270,16 +272,25 @@ The **Widget styles** tab extends this to the existing controls using
 ## Explicit omissions
 
 This is a documented CSS subset, not a browser. No arbitrary at-rules, custom
-properties/`var`, `calc`, sibling/attribute selectors, `:not`, font family/weight/
-style selection, raster/SVG background images, conic/repeating gradients, filters/
+properties/`var`, `calc`, sibling/attribute selectors, `:not`, raster/SVG CSS
+background images, conic/repeating gradients, filters/
 backdrop blur, 3D/projective transforms, textual generated content, z-index,
 percentage padding, CSS grid, negative margins, browser box formatting, or Qt
 `qproperty-*` or browser pseudo-element compatibility beyond the named parts
-listed here. Use the font passed to `Window`. Text alignment affects captions,
+listed here. Typography uses fonts registered with the shared font service. Text alignment affects captions,
 collection parts, and editable lines; overflowing editors scroll around the caret.
 Widget `position`/edge offsets do not replace the layout API; those declarations
 are intended for decorative layers. Unsupported declarations fail during parsing
 rather than being silently interpreted as full browser CSS.
+
+Image resources are supplied through C++ `Image`/`Icon` values. `ImageView` uses
+the root's background/border/shadow/transform/opacity and content clipping;
+object-fit/position affect only image presentation. Position fractions interpolate
+through CSS/property animations without layout; fit values switch discretely.
+Command controls expose `::image-icon` with width/height, gap, padding, borders,
+rounded clipping, opacity and transforms. SetImageIconSize remains authoritative
+over CSS dimensions. [IMAGE_RESOURCES.md](IMAGE_RESOURCES.md) describes supported
+position syntax, DPI source selection and image-icon behavior.
 
 ## Canvas items
 

@@ -381,7 +381,7 @@ void ProfileRenderingWorkload(Window& window, TabWidget& tabs, const std::filesy
     } restore{window, tabs, originalPage, originalPartial};
     std::string css = Read(theme);
     for (const char* file : {"animation-start.css", "rich-buttons.css", "rich-widgets.css", "text-controls.css",
-                             "essential-widgets.css", "command-dialogs.css"})
+                             "essential-widgets.css", "command-dialogs.css", "image-widgets.css"})
         css += '\n' + Read(assets / file);
     css += R"CSS(
         #profile-isolated { gap: 12px; }

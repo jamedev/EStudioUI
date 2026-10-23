@@ -162,7 +162,11 @@ MeasureResult Label::MeasureConstrained(FontFace& font, const MeasureConstraints
 void Label::Paint(Renderer& renderer, FontFace& font, double time, float opacity) const
 {
     Widget::Paint(renderer, font, time, opacity);
-    const auto content = GetContentBounds();
+    PaintText(renderer, font, GetContentBounds(), opacity);
+}
+
+void Label::PaintText(Renderer& renderer, FontFace& font, Rect content, float opacity) const
+{
     const auto& lines = Lines(font, content.m_Width);
     const auto clip = GetClip().Intersect(content);
     const float height = LineSize(lines).m_Y;

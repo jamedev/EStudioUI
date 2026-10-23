@@ -59,7 +59,9 @@ several presentations is deduplicated by the existing shortcut resolver. Action
 enabled/visible/checked changes remain canonical. `MenuItem` displays the first
 formatted shortcut automatically; `SetShortcutHint` supplies a display-only hint
 for a standalone item. `SetIcon` accepts short UTF-8 glyphs using registered
-fonts. Raster/vector image resources remain the separate W06 track.
+fonts. Since 0.20, `SetImageIcon(Icon)` supplies shared raster resources through
+the existing leading slot; see [IMAGE_RESOURCES.md](IMAGE_RESOURCES.md). SVG
+resources remain a future adapter.
 
 There are at most 128 top-level menus per bar and 4,096 presentations per menu. Menus are intended for bounded
 command sets and own one ordinary item presentation per action; they are not a
