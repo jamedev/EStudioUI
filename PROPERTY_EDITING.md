@@ -69,7 +69,8 @@ alpha, sliders, numeric values and a small palette. Canonical values are always
 finite normalized RGBA. Hexadecimal input accepts `#RGB`, `#RGBA`, `#RRGGBB` and
 `#RRGGBBAA`; invalid intermediate text preserves the last committed color. Hex
 formatting quantizes display to eight bits; programmatic RGBA values retain their
-float precision. Picker changes are live edits, and Escape dismisses the popover.
+float precision. Leaving an unedited hex field preserves that precision and emits
+no color change. Picker changes are live edits, and Escape dismisses the popover.
 
 `UnitEditor` stores a finite canonical scalar. Display conversion is
 `canonical = displayed * scale + offset`; switching units does not emit a value

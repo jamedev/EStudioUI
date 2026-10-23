@@ -35,7 +35,7 @@ command history, geometry, and persistence; these are not promised modules or
 current standalone SDKs. Public API usability and supported extension points
 remain acceptance criteria throughout.
 
-## Implementation status: 0.21, scrolling and page composition on verified foundations
+## Implementation status: 0.23, property editing and the first Creator application
 
 The 0.14.1 maintenance increment fixes retained native window closure, stable
 GPU capture after presentation, and MSVC conversion warnings before the initial F11 increment.
