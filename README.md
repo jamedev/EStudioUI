@@ -36,6 +36,8 @@ See [COMMAND_DIALOGS.md](COMMAND_DIALOGS.md), the compiled
 [verification](verification/COMMAND_DIALOGS_0_19.md). `.\Build.ps1 -Run` still
 installs the pinned dependencies, compiles, tests and launches in one shot.
 
+![Menus and input rendered by EStudioUI](verification/commands-input-0-19.png)
+
 ## Essential widgets and rich CSS (0.18)
 
 The **Essential widgets** tab contains working three-state checkboxes, exclusive

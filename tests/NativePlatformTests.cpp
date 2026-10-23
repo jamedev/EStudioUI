@@ -913,7 +913,12 @@ void Accessibility(UiContext& ui, HWND window)
                 ComPtr<IUIAutomationValuePattern> promptValue;
                 Require(promptValueElement->GetCurrentPatternAs(UIA_ValuePatternId, IID_PPV_ARGS(&promptValue)),
                         "Obtain native prompt value");
-                Require(promptValue->SetValue(L"Accepted prompt"), "Set canonical native prompt text");
+                BSTR promptText = SysAllocString(L"Accepted prompt");
+                if (!promptText)
+                    throw std::bad_alloc();
+                const auto promptEdit = promptValue->SetValue(promptText);
+                SysFreeString(promptText);
+                Require(promptEdit, "Set canonical native prompt text");
                 VARIANT promptOkId{};
                 promptOkId.vt = VT_BSTR;
                 promptOkId.bstrVal = SysAllocString(L"native-prompt-ok");

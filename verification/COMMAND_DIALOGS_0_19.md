@@ -29,9 +29,25 @@ requested animation frames. Bounds and an actual visible anchor are checked.
 Driver: Mesa llvmpipe software GL. This proves pixels and bounded work, not
 hardware GPU utilization or 60 FPS.
 
-ASan/UBSan and Windows CI results will be recorded after the code build completes.
+ASan/UBSan: **38/38** suites pass, including the real GPU probe (86.06 seconds
+total; GPU 32.85 seconds). Leak detection is disabled under host tracing; native
+third-party libraries/Mesa are uninstrumented. Tested code: `d1faaa8`.
+A confirmed zero-byte generated Style object was rebuilt before sanitizer checks.
+Linux CI also passes **38/38** Release/software-GL suites and **6/6** isolated
+ThreadSanitizer suites. Windows compiled the library without warnings; its new
+native test required an explicit owned BSTR for the UI Automation value setter.
+That Windows-only test correction is being reverified in CI.
+[CI run](https://github.com/jamedev/EStudioUI/actions/runs/39902816587).
+
 NativePlatform includes actual Windows UI Automation menu-bar/expansion,
 dialog-role/modal availability and input-value/acceptance probes. Hosted Windows
 CI explicitly skips GPU; Build.ps1 defaults to a native GPU check on developer
 machines. Human installed-language IME, Narrator and mixed-monitor acceptance
 remain in [PLATFORM_ACCEPTANCE.md](PLATFORM_ACCEPTANCE.md).
+
+
+![Actual command gallery](commands-gallery-0-19.png)
+
+![GPU command menu](commands-menu-0-19.png)
+
+![Validated input prompt](commands-input-0-19.png)
