@@ -63,6 +63,22 @@ verify scenarios, accounting and profiling output; their elapsed times describe 
 CPU renderer and do not predict hardware GPU utilization. Keep build, physical
 resolution, DPI, workload and requested rate equal for before/after comparisons.
 
+Use the counters to choose the next experiment:
+
+| Observation | Follow-up |
+| --- | --- |
+| Small dirty-tile area, full repaint and `damage-rectangles` | Investigate bounded region merging and its extra-pixel/draw-call tradeoff |
+| Drawing time grows with replayed text | Compare analytic text with a bounded glyph-coverage cache at the same text quality |
+| Drawing time grows with effect layers | Investigate overlapping pixel work and caching stable expensive layers |
+| Presentation copy dominates the static retained baseline | Investigate physical resolution and platform presentation bandwidth |
+| Upload scope is large | Inspect CPU submission and buffer streaming; the elapsed scope can include command-delivery gaps |
+| Fresh shaping during pointer selection | Treat as a text-cache regression; the selection workload checks this invariant |
+
+CPU and GPU work can overlap; adding their elapsed values does not establish
+end-to-end latency. GPU utilization, power state and driver captures remain
+separate hardware observations. A backend change should follow the measured
+bottleneck rather than serve as a substitute for reducing unnecessary work.
+
 ## Retained rendering foundation (0.5.1)
 
 The renderer retains unchanged pixels instead of shading the entire window

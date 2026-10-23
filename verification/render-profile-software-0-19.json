@@ -1,0 +1,22 @@
+{
+  "schema": 1,
+  "driver": "llvmpipe (LLVM 17.0.6, 256 bits) | 4.5 (Core Profile) Mesa 24.0.5-1ubuntu1",
+  "build_configuration": "Release",
+  "headless": true,
+  "software_renderer_detected": true,
+  "logical_width": 1280,
+  "logical_height": 820,
+  "framebuffer_width": 1280,
+  "framebuffer_height": 820,
+  "pixel_scale_x": 1,
+  "pixel_scale_y": 1,
+  "requested_scripted_fps": 60,
+  "gpu_timestamp_bits": 64,
+  "warmup_frames_per_run": 30,
+  "measured_frames_per_run": 180,
+  "case_filter": "all",
+  "gpu_sample_association": "exact originating frame serial",
+  "swap_interval_request": 0,
+  "synchronous_readbacks": false,
+  "workload_mode": "paced forced-frame benchmark, not normal idle scheduling"
+}

@@ -592,3 +592,12 @@ regressions and corrections. Windows CI now also executes native Win32/WGL
 framebuffer integration with an isolated pinned software driver; the prior
 Windows core/native CPU results did not cover that rendering path. Hardware and
 human native acceptance remain separate gates.
+
+The rendering-profile follow-up adds readback-free, paced actual-gallery and
+text-control workloads with exact asynchronous frame/timing association, damage
+fallback diagnostics and a one-shot native Windows runner. It also corrects tab
+focus reveal, adds independent arrow/wheel strip navigation and isolates hover
+help from unrelated keyboard focus. [Verification](verification/RENDERING_PROFILE_0_19.md)
+records measured work and platform checks. Hardware capture is the next input for
+choosing rendering optimizations; this increment does not introduce a new backend
+or claim rich-document editor performance. F10b and F14 remain deferred.
