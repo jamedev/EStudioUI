@@ -85,7 +85,9 @@ WidgetGallery::WidgetGallery(Window& window, TabWidget& tabs, const std::filesys
     m_Essential = std::make_unique<EssentialGallery>(window, essentialPage);
     auto& commandPage = tabs.AddTab("Menus & dialogs");
     m_Commands = std::make_unique<CommandGallery>(window, commandPage);
+    m_ImageIndex = tabs.GetTabCount();
     m_Images = std::make_unique<ImageGallery>(window, tabs.AddTab("Images & icons"), assets);
+    m_ScrollStack = std::make_unique<ScrollStackGallery>(window, tabs.AddTab("Scrolling & pages"));
 }
 
 void WidgetGallery::BuildCollections(Widget& page)
@@ -467,11 +469,15 @@ void WidgetGallery::Verify(const std::filesystem::path& assets, const std::files
     m_Text->Verify(assets, output);
     m_Essential->Verify(assets, output);
     m_Commands->Verify(assets, output);
-    m_Tabs.SetCurrentIndex(m_Tabs.GetTabCount() - 1);
+    m_Tabs.SetCurrentIndex(m_ImageIndex);
     m_Window.SetSize(1280, 820);
     m_Window.RenderFrame(ui.GetTime());
     gpu.SavePpm(output / "image-gallery.ppm");
     m_Images->Verify(assets, output);
+    m_Tabs.SetCurrentIndex(m_Tabs.GetTabCount() - 1);
+    m_Window.RenderFrame(ui.GetTime());
+    gpu.SavePpm(output / "scroll-stack-gallery.ppm");
+    m_ScrollStack->Verify(assets, output);
     m_Window.RenderFrame(ui.GetTime());
     std::ofstream report(output / "widgets-report.txt");
     report << "EStudioUI 0.3 widget integration: PASS\n"

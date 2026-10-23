@@ -607,3 +607,20 @@ are enabled by the explicit native-test environment flag. This replaces
 IFileDialog::Close calls from timer/helper callbacks, which could acknowledge
 success without unwinding Show. Arbitrary unresponsive extensions still require
 a future isolation policy rather than unsafe in-process preemption.
+
+## Standalone scrolling and persistent pages (0.21)
+
+ScrollBar owns a finite canonical scalar range and visible extent. ScrollGeometry
+is private, shared by standalone and collection scrollbar inset/proportion/drag
+paths; no content widget or per-row presentation is introduced. Value bindings
+reuse State validation and rollback; semantics use the existing numeric action
+and Windows RangeValue adapter with the ScrollBar control type. Value/page changes
+retain CSS and measurement/layout caches. No new timer or runtime dependency is added.
+
+StackedWidget owns ordinary pages through Widget and observes lifetime-safe page
+identities. It applies visibility before bounded CurrentChanged notifications.
+Only the active page reaches the existing width-first allocator, input/paint and
+animation traversal. Hidden focus/capture/popup/composition retirement stays in
+UiContext; the container creates no event loop or duplicate input system. Custom
+page adoption preserves explicit sizing, composition and paint overrides.
+[SCROLL_STACK.md](SCROLL_STACK.md) records APIs, costs and ownership boundaries.

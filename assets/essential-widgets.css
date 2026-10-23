@@ -72,3 +72,20 @@ tooltip { width: 280px; max-width: 360px; height: auto; padding: 10px 13px; font
 #essential-page .essential-row { flex-direction: row; gap: 14px; height: auto; }
 #essential-page .essential-column { gap: 8px; }
 #essential-page .essential-pane-title { font-size: 17px; font-weight: 700; height: auto; }
+
+/* Standalone scrollbars share collection part names and proportional geometry. */
+scrollbar { padding: 0px; border-width: 0px; background: transparent; }
+scrollbar::scroll-track { background: linear-gradient(90deg, #18263b, #243750); padding: 3px; border-radius: 8px; }
+scrollbar::scroll-track:horizontal { height: 18px; }
+scrollbar::scroll-track:vertical { width: 18px; }
+scrollbar::scroll-thumb { background: linear-gradient(135deg, #5ca8dc, #6464c7); border: 1px solid #8eb7ec; border-radius: 6px; }
+scrollbar::scroll-thumb:horizontal { min-width: 24px; }
+scrollbar::scroll-thumb:vertical { min-height: 24px; }
+scrollbar::scroll-thumb:hover { background: linear-gradient(135deg, #7cc7ee, #8585eb); }
+scrollbar::scroll-thumb:pressed { background: linear-gradient(135deg, #a4daff, #9b96ff); border-color: #d1eaff; }
+scrollbar:focus { box-shadow: 0px 0px 5px rgba(115, 170, 255, .35); }
+scrollbar:disabled { opacity: .4; }
+stackedwidget { padding: 12px; border: 1px solid #3b5276; border-radius: 14px; background: linear-gradient(135deg, #1a2943, #111c31); }
+stackedwidget > .stack-page { padding: 0px; background: transparent; }
+.scroll-stack-gallery .stack-heading { font-size: 25px; }
+.scroll-stack-gallery drawing-preview { background: #0e192c; border: 1px solid #3b5276; border-radius: 10px; }

@@ -43,7 +43,7 @@ scrolling container. The custom dial in the demo is not a public library `Dial`.
 
 Priority means: **Essential** for ordinary applications, **High** for a powerful
 engineering/CAD workspace, **Later** after the shared foundations and common
-controls. Entries marked **0.18**, **0.19** or **0.20** are delivered; the other catalog entries remain planned.
+controls. Entries marked **0.18**, **0.19**, **0.20** or **0.21** are delivered; the other catalog entries remain planned.
 
 F09 adds shared action presentations to the existing buttons, toolbars, split
 choosers, and context menus. Nested command menus are implemented through
@@ -77,9 +77,9 @@ only change appearance should share implementations and semantic roles.
 | ID | Widget/family | Scope | Priority |
 | --- | --- | --- | --- |
 | W14 | ScrollArea | Scroll arbitrary child controls/forms with consistent clipping and focus reveal | Essential — **0.18 delivered** |
-| W15 | ScrollBar | Standalone reusable horizontal/vertical control sharing collection scrollbar logic | Essential |
+| W15 | ScrollBar | Standalone reusable horizontal/vertical control sharing collection scrollbar logic | Essential — **0.21 delivered** |
 | W16 | Splitter | Nested user-resizable panes, hard minima, saved positions | Essential — **0.18 delivered** |
-| W17 | StackedWidget | Persistent pages without requiring a visible tab strip | Essential |
+| W17 | StackedWidget | Persistent pages without requiring a visible tab strip | Essential — **0.21 delivered** |
 | W18 | GroupBox / Frame / Separator | Titled/checkable groups and reusable visual structure | Essential — **0.18 delivered** |
 | W19 | CollapsiblePanel / Accordion / ToolBox | Expandable inspector sections and categorized tools | High |
 | W20 | MainWindow | Central workspace plus menus, toolbars, status area, owned windows | High |
@@ -177,8 +177,8 @@ canvas/sketcher layer rather than becoming mandatory core form controls.
    Build the shared popup/scroll/grouping mechanisms once.
 3. Command/dialog batch (0.19): W24, W26, W27 and W28. See
    [contracts](COMMAND_DIALOGS.md) and [evidence](verification/COMMAND_DIALOGS_0_19.md).
-   Image/icon resources follow in 0.20; continue standalone ScrollBar/StackedWidget and
-   native-service widgets, then main windows, docking, property editing and stronger data views.
+   Image/icon resources follow in 0.20; standalone ScrollBar/StackedWidget in 0.21.
+   Continue native-service widgets, then main windows, docking, property editing and stronger data views.
    Develop F16 history/workspace services with their application consumers.
 4. After broad widget/workspace use establishes the boundaries, revisit F14 to
    extract reusable framework modules and prove installed UI/headless consumers.
@@ -208,8 +208,8 @@ The 0.18 and 0.19 batches add no new runtime dependency. Next catalog work can b
 these controls; document storage/editor families remain F10b and module extraction
 remains deferred. [Image/icon resources](IMAGE_RESOURCES.md) ship in 0.20 with
 per-feature F12 resource budgets and actual framebuffer checks. Standalone
-ScrollBar/StackedWidget are next, followed by native-service widgets and broader
-workspace controls.
+ScrollBar/StackedWidget ship in [0.21](SCROLL_STACK.md). Native-service widgets and
+broader workspace controls follow; document editing and module extraction remain deferred.
 
 The 0.20 image/icon increment is verified at `fbdf62d`: Windows Release/Debug
 41/41 each, native Win32/WGL framebuffer checks and five extra native Debug runs

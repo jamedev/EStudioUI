@@ -7,6 +7,7 @@
 #include <EStudioUI/MenuBar.h>
 #include <EStudioUI/InputDialog.h>
 #include <EStudioUI/ImageView.h>
+#include <EStudioUI/ScrollBar.h>
 #include <EStudioUI/ComboBox.h>
 #include <EStudioUI/ProgressBar.h>
 #include <EStudioUI/RadioButton.h>
@@ -841,6 +842,12 @@ void Accessibility(UiContext& ui, HWND window)
     image.SetId("native-image");
     image.SetAccessibleName("Sketch preview");
     image.SetFloatingBounds({600, 20, 32, 32});
+    auto& scrollbar = ui.Root().Add<ScrollBar>();
+    scrollbar.SetId("native-scrollbar");
+    scrollbar.SetAccessibleName("Drawing vertical position");
+    scrollbar.SetRange(0, 900);
+    scrollbar.SetPageStep(100);
+    scrollbar.SetFloatingBounds({650, 20, 18, 220});
     ui.Prepare(800, 600);
     int invocations = 0;
     const ScopedConnection invocationConnection(button.Clicked().Connect([&] { ++invocations; }));
@@ -891,6 +898,16 @@ void Accessibility(UiContext& ui, HWND window)
                 Require(imageElement->get_CurrentIsKeyboardFocusable(&keyboardFocusable),
                         "Read native image keyboard focus policy");
                 Check(!keyboardFocusable, "Image presentation adds no native keyboard focus stop");
+                auto scrollElement = Find(*automation.Get(), *root.Get(), L"native-scrollbar");
+                Require(scrollElement->get_CurrentControlType(&controlType), "Read native scrollbar control type");
+                Check(controlType == UIA_ScrollBarControlTypeId, "Native provider exposes a scrollbar role");
+                ComPtr<IUIAutomationRangeValuePattern> scrollRange;
+                Require(scrollElement->GetCurrentPatternAs(UIA_RangeValuePatternId, IID_PPV_ARGS(&scrollRange)),
+                        "Obtain native scrollbar numeric range");
+                Require(scrollRange->SetValue(120), "Set native scrollbar value");
+                double scrollValue = 0;
+                Require(scrollRange->get_CurrentValue(&scrollValue), "Read native scrollbar value");
+                Check(scrollValue == 120, "Native scrollbar range requests update canonical state");
                 auto triggerElement = Find(*automation.Get(), *barElement.Get(), L"native-menu-trigger");
                 ComPtr<IUIAutomationExpandCollapsePattern> menuExpansion;
                 Require(triggerElement->GetCurrentPatternAs(UIA_ExpandCollapsePatternId, IID_PPV_ARGS(&menuExpansion)),

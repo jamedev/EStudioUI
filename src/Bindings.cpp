@@ -3,6 +3,7 @@
 #include <EStudioUI/Label.h>
 #include <EStudioUI/NumericInput.h>
 #include <EStudioUI/Slider.h>
+#include <EStudioUI/ScrollBar.h>
 #include <EStudioUI/ToolButton.h>
 
 #include <cmath>
@@ -213,6 +214,22 @@ Binding BindValue(Slider& target, State<double>& state, BindingMode mode)
     if (mode == BindingMode::TwoWay && data->IsConnected())
         Detail::AddBindingWriter(data, target, state, target.ValueChanged(), setter,
                                  [](const Slider& live) { return live.GetValue(); });
+    return binding;
+}
+
+Binding BindValue(ScrollBar& target, State<double>& state, BindingMode mode)
+{
+    const auto setter = [](ScrollBar& live, double value) { live.SetValue(value); };
+    auto [binding, data] =
+        Detail::MakeBinding(target, state, setter,
+                            [](ScrollBar& live, double value)
+                            {
+                                if (!std::isfinite(value) || value < live.GetMinimum() || value > live.GetMaximum())
+                                    throw std::out_of_range("Scrollbar cannot represent the canonical state value.");
+                            });
+    if (mode == BindingMode::TwoWay && data->IsConnected())
+        Detail::AddBindingWriter(data, target, state, target.ValueChanged(), setter,
+                                 [](const ScrollBar& live) { return live.GetValue(); });
     return binding;
 }
 

@@ -20,6 +20,7 @@ class Label;
 class TextBox;
 class NumericInput;
 class Slider;
+class ScrollBar;
 class ToolButton;
 class CheckBox;
 
@@ -337,6 +338,9 @@ Binding BindValue(NumericInput& target, State<double>& state, BindingMode mode =
 
 //! Binds scalar slider values with exact range validation before state commits.
 Binding BindValue(Slider& target, State<double>& state, BindingMode mode = BindingMode::TwoWay);
+
+//! Binds a scrollbar value through the same validation and rollback boundary as scalar inputs.
+Binding BindValue(ScrollBar& target, State<double>& state, BindingMode mode = BindingMode::TwoWay);
 
 //! Binds persistent checked state; configure ToolButton::SetCheckable for user activation.
 Binding BindChecked(ToolButton& target, State<bool>& state, BindingMode mode = BindingMode::TwoWay);

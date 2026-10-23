@@ -396,3 +396,13 @@ Dialog/Popover nodes use `dialog`/`popup`. Dialog composition exposes
 trigger caption. Both bundled themes provide base styling; rich examples are in
 [command-dialogs.css](assets/command-dialogs.css). Existing gradients, shadows,
 decorations and bounded CSS motion apply without extra paint-time selectors.
+
+## Standalone scrollbar and stack parts (0.21)
+
+ScrollBar reuses `::scroll-track` / `::scroll-thumb`, orientation, hover/pressed
+variants and owner focus/disabled styling. Track thickness supplies natural size;
+padding/border and CSS thumb limits use shared collection geometry. A value/page
+change is paint-only. StackedWidget pages expose `.stack-page` on both ordinary
+and custom page types; inactive pages leave layout and rendering. Root gradients,
+borders, shadows and compiled effects use the existing GPU pipeline.
+See [SCROLL_STACK.md](SCROLL_STACK.md) and [essential-widgets.css](assets/essential-widgets.css).

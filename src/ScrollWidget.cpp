@@ -2,6 +2,8 @@
 #include <EStudioUI/Renderer.h>
 #include <EStudioUI/UiContext.h>
 
+#include "ScrollGeometry.h"
+
 #include <cmath>
 #include <stdexcept>
 
@@ -317,7 +319,8 @@ Rect ScrollWidget::GetScrollTrackBounds(bool horizontal) const
 
 Rect ScrollWidget::ScrollTrackContent(bool horizontal) const
 {
-    return Inset(GetScrollTrackBounds(horizontal), GetPartStyle("scroll-track", ScrollPartState(horizontal, false)));
+    return Detail::ScrollTrackContent(GetScrollTrackBounds(horizontal),
+                                      GetPartStyle("scroll-track", ScrollPartState(horizontal, false)));
 }
 
 Rect ScrollWidget::GetScrollThumbBounds(bool horizontal) const
@@ -331,20 +334,11 @@ Rect ScrollWidget::GetScrollThumbBounds(bool horizontal) const
     const auto size = GetVirtualSize();
     const auto offset = GetScrollOffset();
     const float visible = horizontal ? viewport.m_Width : viewport.m_Height;
-    const float length = horizontal ? track.m_Width : track.m_Height;
     const float total = horizontal ? size.m_X : size.m_Y;
     if (visible <= 0 || total <= visible)
         return {};
-    const float idealLength = length * visible / total;
-    const float thumbLength =
-        horizontal ? Dimension(style.m_Width, length, idealLength, style.m_MinWidth, style.m_MaxWidth)
-                   : Dimension(style.m_Height, length, idealLength, style.m_MinHeight, style.m_MaxHeight);
-    const float cross =
-        horizontal ? Dimension(style.m_Height, track.m_Height, track.m_Height, style.m_MinHeight, style.m_MaxHeight)
-                   : Dimension(style.m_Width, track.m_Width, track.m_Width, style.m_MinWidth, style.m_MaxWidth);
-    const float position = (horizontal ? offset.m_X : offset.m_Y) * (length - thumbLength) / (total - visible);
-    return horizontal ? Rect{track.m_X + position, track.m_Y + (track.m_Height - cross) * 0.5f, thumbLength, cross}
-                      : Rect{track.m_X + (track.m_Width - cross) * 0.5f, track.m_Y + position, cross, thumbLength};
+    return Detail::ScrollThumb(track, style, horizontal, static_cast<double>(visible) / total,
+                               Detail::ScrollFraction(horizontal ? offset.m_X : offset.m_Y, 0, total - visible));
 }
 
 void ScrollWidget::PaintScrollBars(Renderer& renderer, float opacity) const
@@ -475,8 +469,10 @@ void ScrollWidget::OnPointerMove(const PointerEvent& event)
         RequestRepaint();
         return;
     }
-    const float distance = (horizontal ? event.m_Position.m_X : event.m_Position.m_Y) - m_DragOrigin;
-    const float value = m_OffsetOrigin + distance * (total - visible) / (length - thumbLength);
+    const double fraction = Detail::ScrollDragFraction(
+        Detail::ScrollFraction(m_OffsetOrigin, 0, total - visible), m_DragOrigin,
+        horizontal ? event.m_Position.m_X : event.m_Position.m_Y, interior, thumb, horizontal);
+    const float value = static_cast<float>(fraction * (total - visible));
     auto offset = GetScrollOffset();
     if (horizontal)
         offset.m_X = value;

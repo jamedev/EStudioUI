@@ -3,7 +3,7 @@
 A C++20 application framework prototype, currently centered on GLFW windows,
 analytic GPU shapes and text, typed signals, and CSS styling. Controls include
 buttons, checkboxes/radio groups, read-only/editable combos, scrolling forms, splitters,
-progress/help controls, shared image views/icons, single-line UTF-8 text boxes, tabs, lists, trees,
+progress/help controls, standalone scrollbars and persistent page stacks, shared image views/icons, single-line UTF-8 text boxes, tabs, lists, trees,
 editable tables, toolbars/tool buttons, menu bars, nested command menus, asynchronous dialogs/popovers, and embedded 3D surfaces. Dependencies are managed with a pinned vcpkg
 manifest; no Qt or commercial SDK is required.
 
@@ -16,15 +16,24 @@ safe application code an acceptance requirement for every foundation change.
 
 F09 input/actions/focus, F11 platform contracts, and F10a essential control text
 are implemented. The first common-control batch is delivered in 0.18, command/dialog controls in 0.19,
-and image/icon resources in 0.20. Remaining widget families
+image/icon resources in 0.20, and standalone scrollbars/page stacks in 0.21. Remaining widget families
 and application workspaces continue through the roadmap. F10b document editing is a later track. F14 module extraction and SDK
 packaging are deferred until that use informs reusable boundaries, including
 services for applications without a UI. Standalone modules are planned, not
 current package capabilities; see the roadmaps for acceptance criteria.
 
+## Scrolling and persistent pages (0.21)
+
+The demo opens **Scrolling & pages**. `ScrollBar` provides proportional horizontal/vertical
+thumbs, keyboard/wheel/track/drag input, canonical State bindings and range accessibility.
+`StackedWidget` owns persistent pages without a tab strip; inactive pages contribute
+no layout, input, paint or continuous animation work. Both use existing rich CSS and
+add no runtime dependencies. See [SCROLL_STACK.md](SCROLL_STACK.md), the
+[compiled example](examples/ScrollStack.cpp) and [verification](verification/SCROLL_STACK_0_21.md).
+
 ## Shared images and command icons (0.20)
 
-The demo opens **Images & icons**. `Image` loads PNG/JPEG or application-owned
+The **Images & icons** tab demonstrates shared resources. `Image` loads PNG/JPEG or application-owned
 RGBA8 pixels without a UI/GPU context; copies share immutable storage.
 `ImageView` supplies aspect fit/fill, alignment and rounded clipping through CSS.
 `Icon` selects source density for the actual framebuffer and transform. Buttons,

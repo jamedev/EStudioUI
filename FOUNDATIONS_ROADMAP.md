@@ -35,7 +35,7 @@ command history, geometry, and persistence; these are not promised modules or
 current standalone SDKs. Public API usability and supported extension points
 remain acceptance criteria throughout.
 
-## Implementation status: 0.20, image resources on verified foundations
+## Implementation status: 0.21, scrolling and page composition on verified foundations
 
 The 0.14.1 maintenance increment fixes retained native window closure, stable
 GPU capture after presentation, and MSVC conversion warnings before the initial F11 increment.
@@ -625,3 +625,13 @@ GL 40/40 plus TSan 6/6, and local ASan/UBSan 40/40. The CPU-only image-resource
 probe independently passes 800 concurrent decodes under ThreadSanitizer.
 [Verification](verification/IMAGES_0_20.md) records the source/evidence boundary;
 manual native acceptance retains its existing scope.
+
+## Scrolling/page composition increment (0.21)
+
+W15 ScrollBar and W17 StackedWidget reuse the existing F08/F09/F10a/F11 shared
+contracts. Scroll geometry is shared with collections, scalar State bindings retain
+validation/rollback, UIA reuses numeric range actions, and inactive pages retire
+through the ordinary visibility/input boundary. No new dependency, timer or
+foundation gate is introduced. See [contracts](SCROLL_STACK.md) and
+[verification](verification/SCROLL_STACK_0_21.md). Continue native-service widgets
+and application workspace controls; F10b/F14 remain deferred.

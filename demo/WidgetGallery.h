@@ -17,6 +17,7 @@
 #include "EssentialGallery.h"
 #include "CommandGallery.h"
 #include "ImageGallery.h"
+#include "ScrollStackGallery.h"
 
 #include <EStudioUI/ContextMenu.h>
 #include <EStudioUI/ListWidget.h>
@@ -163,6 +164,12 @@ class WidgetGallery
     std::unique_ptr<CommandGallery> m_Commands;
     //! Owns the shared image/icon gallery and its actual framebuffer probes.
     std::unique_ptr<ImageGallery> m_Images;
+
+    //! Observes the image gallery's persistent tab index.
+    int m_ImageIndex = -1;
+
+    //! Owns the standalone scrolling and page composition gallery.
+    std::unique_ptr<ScrollStackGallery> m_ScrollStack;
     //! Observes the visible shortcut to a tab beyond a narrow tab strip.
     WidgetRef m_ConstraintShortcut;
 };

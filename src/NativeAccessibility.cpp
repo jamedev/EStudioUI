@@ -75,6 +75,8 @@ CONTROLTYPEID ControlType(SemanticRole role)
         return UIA_CheckBoxControlTypeId;
     case SemanticRole::TextBox:
         return UIA_EditControlTypeId;
+    case SemanticRole::ScrollBar:
+        return UIA_ScrollBarControlTypeId;
     case SemanticRole::Slider:
         return UIA_SliderControlTypeId;
     case SemanticRole::SpinBox:

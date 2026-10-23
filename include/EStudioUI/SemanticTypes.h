@@ -86,7 +86,8 @@ enum class SemanticRole
     ToolTip,
     MenuBar,
     Dialog,
-    Image
+    Image,
+    ScrollBar
 };
 
 //! Supported interactions; advertised only when implemented by a semantic control.
