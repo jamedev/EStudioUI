@@ -8,9 +8,10 @@ are recorded below after those runs finish.
 
 ## Behavioral checks
 
-WorkspaceCore runs **59 checks** on actual UI/context/state implementations:
+WorkspaceCore runs **64 checks** on actual UI/context/state implementations:
 exact UTF-8 paths and budgets, two-way canonical bindings and rollback, recent
-path bounds, asynchronous/coalesced browsing, stale result suppression, logical
+path bounds, transformed/repositioned recent-menu anchors, validator-disabled
+choices, asynchronous/coalesced browsing, stale result suppression, logical
 owner cancellation, callback deletion, owned reentrant snapshots, source/destination
 menu and nested-popup migration, shared bindings across contexts, permanent expiry
 of old dispatcher handles, fresh handle delivery, root/cycle/thread rejection,
@@ -68,7 +69,7 @@ screen-reader usability.
 
 ## Validation status
 
-- Final GNU 13 Release build: **42/42 passed**, 14.48 seconds, including actual
+- Final GNU 13 Release build: **42/42 passed**, 13.67 seconds, including actual
   Linux OSMesa GPU integration and rendering-profile smoke; zero C++ compiler
   warnings. The pre-existing libunibreak CMake developer-scope warnings remain.
 - Local AddressSanitizer/UndefinedBehaviorSanitizer: running for this source.

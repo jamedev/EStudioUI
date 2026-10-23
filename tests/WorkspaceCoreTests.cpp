@@ -9,6 +9,7 @@
 #include <EStudioUI/ToolBar.h>
 
 #include <iostream>
+#include <cmath>
 #include <limits>
 #include <stdexcept>
 #include <thread>
@@ -189,6 +190,47 @@ void PickerLifetime(FontFace& font)
           "Logical owner lifetime cancels a facade session");
     FilePathEditor detached;
     Throws([&] { detached.Browse(); }, "Detached path browsing diagnoses missing services");
+}
+
+class TextPathValidator final : public InputValidator
+{
+  public:
+    ValidationState Validate(std::string_view text) const override
+    {
+        return text.empty() || text.ends_with(".txt") ? ValidationState::Acceptable : ValidationState::Invalid;
+    }
+};
+
+void RecentPlacement(FontFace& font)
+{
+    UiContext ui(font);
+    std::string error;
+    Check(ui.SetStyleSheet(
+              "window {padding:0;} filepatheditor {transform:translate(35px,20px);} contextmenu {width:180px;}", error),
+          "Transformed path-field CSS compiles");
+    auto& field = ui.Root().Add<FilePathEditor>();
+    field.SetFloatingBounds({10, 10, 300, 40});
+    field.Editor().SetValidator(std::make_shared<TextPathValidator>());
+    field.SetRecentPaths({Path("one.txt"), Path("old.bin")});
+    ui.Prepare(700, 400);
+    auto& recent = *field.GetChildren().back();
+    const auto point = ui.ToWindowPoint(recent, Center(recent.GetBounds()));
+    ui.PointerDown(point);
+    ui.PointerUp(point);
+    Check(ui.GetPopupCount() == 1, "A transformed recent-path command opens its owned menu");
+    auto* menu = ui.GetPopup();
+    const auto before = menu->GetBounds();
+    const auto anchor =
+        ui.ToWindowPoint(recent, Point{recent.GetBounds().m_X, recent.GetBounds().m_Y + recent.GetBounds().m_Height});
+    Check(std::abs(before.m_X - anchor.m_X) < 1 && before.m_Y >= anchor.m_Y,
+          "Recent choices anchor to transformed window geometry");
+    Check(!menu->GetChildren().back()->IsEnabled(),
+          "Unrepresentable recent choices are disabled instead of throwing during activation");
+    field.SetFloatingBounds({10, 60, 300, 40});
+    ui.Prepare(700, 400);
+    Check(std::abs(menu->GetBounds().m_Y - before.m_Y - 50) < 1,
+          "An open recent menu follows its field during layout changes");
+    ui.CloseAllPopups();
 }
 
 void Notifications(FontFace& font)
@@ -406,6 +448,7 @@ int main()
         Paths(font);
         PickerLifetime(font);
         Notifications(font);
+        RecentPlacement(font);
         Transfer(font, otherFont);
         ToolbarAndTabs(font);
         RetirementCallbacks(font);

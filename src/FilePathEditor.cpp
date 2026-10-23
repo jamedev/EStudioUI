@@ -307,15 +307,17 @@ void FilePathEditor::ShowRecent()
     menu->ClearChildren();
     const WidgetRef self(this);
     for (const auto& path : m_RecentPaths)
-        menu->AddAction(PathText(path))
+        menu->AddAction(PathText(path), CanSetPath(path))
             .Clicked()
             .Connect(
                 [self, path]
                 {
-                    if (auto* live = dynamic_cast<FilePathEditor*>(self.Get()))
+                    if (auto* live = dynamic_cast<FilePathEditor*>(self.Get()); live && live->CanSetPath(path))
                         live->SetPath(path);
                 });
-    const auto bounds = m_Recent->GetBounds();
-    menu->Open({bounds.m_X, bounds.m_Y + bounds.m_Height});
+    PopupOptions options;
+    options.m_AnchorWidget = m_Recent;
+    options.m_Placement = PopupPlacement::Below;
+    GetContext()->ShowPopup(*menu, {}, options);
 }
 } // namespace EStudioUI
