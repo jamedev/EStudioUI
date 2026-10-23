@@ -58,7 +58,9 @@ regions, minimize/maximize/close roles, the HTMAXBUTTON Snap Layout protocol,
 corner resize regions, native window styles/system menu, native maximize/restore,
 caption hover delivery, restored standard chrome and scheduler ticks during a
 real SC_SIZE modal loop. The existing NativeResize and NativePlatform lifecycle/
-STA/UI Automation probes continue to run separately.
+STA/UI Automation probes continue to run separately. Native GPU checks additionally
+verify that a focused floating inspector keeps its unfocused owner presenting
+updates, and that the whole group pauses when all members lose focus.
 
 These are protocol and lifecycle checks. They do not establish the Windows 11
 Snap Layout flyout experience, real snap gestures, mixed-monitor dragging or
@@ -66,7 +68,7 @@ screen-reader usability.
 
 ## Validation status
 
-- Final GNU 13 Release build: **42/42 passed**, 16.23 seconds, including actual
+- Final GNU 13 Release build: **42/42 passed**, 14.48 seconds, including actual
   Linux OSMesa GPU integration and rendering-profile smoke; zero C++ compiler
   warnings. The pre-existing libunibreak CMake developer-scope warnings remain.
 - Local AddressSanitizer/UndefinedBehaviorSanitizer: running for this source.

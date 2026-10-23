@@ -149,6 +149,11 @@ long-lived worker data or obtain the destination's handle for direct delivery.
 Keep application state in a store whose lifetime spans the workspace; a
 floating window's private StateStore naturally expires when that host retires.
 
+Owned windows share a presentation focus group. Editing a focused floating panel
+keeps its unfocused owner and sibling panels eligible for normal capped updates.
+When the whole group loses focus, the existing background-presentation option
+controls rendering; no new timer or permanently active rendering loop is added.
+
 Native floating closure settles on the main owner's next safe queued turn:
 the panel returns to hidden storage rather than losing its contents. Closing
 the main window closes its owned floating surfaces. Retired native hosts are

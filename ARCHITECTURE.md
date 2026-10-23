@@ -646,7 +646,9 @@ before transfer, and owned popup records/widgets migrate together. Font caches
 retire on context changes. Context generations prevent stale UiHandles from
 reactivating after a return; shared bindings follow WidgetRef instead.
 
-CreateOwnedWindow shares the GPU group/fonts/compiled CSS. Floating GL surfaces
+CreateOwnedWindow shares the GPU group/fonts/compiled CSS and a weak presentation
+focus group. Any focused member keeps visible group windows eligible for normal
+capped updates; a wholly unfocused group retains the existing pause policy. Floating GL surfaces
 keep separate scene contexts and producer/consumer synchronization. Incompatible
 GPU groups fail before ownership changes. Retired Window implementations restore
 the prior GL context after cleanup, including retirement at a frame boundary.

@@ -26,6 +26,8 @@
 #endif
 
 #include <fstream>
+#include <chrono>
+#include <thread>
 #include <stdexcept>
 
 namespace EStudioUI
@@ -321,6 +323,43 @@ void WorkspaceGallery::Verify(const std::filesystem::path& assets, const std::fi
     floating->RenderFrame(floating->Ui().GetTime());
     Check(editor.GetText() == "changed while floating" && binding.IsConnected(),
           "Canonical bindings continue across native window transfer");
+#ifdef _WIN32
+    if (!probe->IsHeadless())
+    {
+        const auto setFocus = [](Window& window, bool focused)
+        {
+            auto* native = reinterpret_cast<GLFWwindow*>(window.GetContextIdentity());
+            const auto callback = glfwSetWindowFocusCallback(native, nullptr);
+            glfwSetWindowFocusCallback(native, callback);
+            if (callback)
+                callback(native, focused ? GLFW_TRUE : GLFW_FALSE);
+        };
+        const auto invalidateNative = [](Window& window)
+        {
+            auto* native = reinterpret_cast<GLFWwindow*>(window.GetContextIdentity());
+            RedrawWindow(glfwGetWin32Window(native), nullptr, nullptr, RDW_INVALIDATE | RDW_UPDATENOW);
+        };
+        setFocus(m_Owner, false);
+        setFocus(*probe, false);
+        setFocus(*floating, true);
+        const auto before = gpu.GetStats().m_FrameSerial;
+        value.Set("Floating inspector updates its unfocused owner");
+        shell.Status().SetMessage("Updated while the floating inspector has focus");
+        std::this_thread::sleep_for(std::chrono::milliseconds(25));
+        invalidateNative(*probe);
+        Check(gpu.GetStats().m_FrameSerial > before,
+              "The native scheduler presents an unfocused owner when its floating panel has focus");
+        setFocus(*floating, false);
+        const auto paused = gpu.GetStats().m_FrameSerial;
+        value.Set("Background update waits until group activation");
+        shell.Status().SetMessage("Background presentation is paused");
+        std::this_thread::sleep_for(std::chrono::milliseconds(25));
+        invalidateNative(*probe);
+        Check(gpu.GetStats().m_FrameSerial == paused,
+              "A wholly unfocused owned-window group retains the background presentation pause");
+        setFocus(*floating, true);
+    }
+#endif
     const auto oldSheetRevision = floating->Ui().GetStyleSheetRevision();
     std::string reloadError;
     Check(ui.SetStyleSheet(stylesheet + "\n.path-browse { border-color: #90d8fa; }", reloadError),

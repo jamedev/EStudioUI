@@ -236,6 +236,22 @@ struct Window::Impl : std::enable_shared_from_this<Window::Impl>
     std::exception_ptr m_CallbackError;
     bool m_Initialized = false;
     bool m_Headless = false;
+    struct PresentationGroup
+    {
+        std::vector<std::weak_ptr<Impl>> m_Windows;
+    };
+    std::shared_ptr<PresentationGroup> m_PresentationGroup;
+
+    bool GroupHasFocus() const
+    {
+        return m_PresentationGroup && std::any_of(m_PresentationGroup->m_Windows.begin(), m_PresentationGroup->m_Windows.end(),
+            [](const auto& weak)
+            {
+                const auto window = weak.lock();
+                return window && !window->m_Closed && window->m_Focused;
+            });
+    }
+
     bool m_Focused = true;
     bool m_RenderWhenUnfocused = false;
     bool m_Closed = false;
@@ -676,7 +692,7 @@ struct Window::Impl : std::enable_shared_from_this<Window::Impl>
         const double now = glfwGetTime();
         const bool active =
             m_Headless || (glfwGetWindowAttrib(m_Window, GLFW_VISIBLE) &&
-                           !glfwGetWindowAttrib(m_Window, GLFW_ICONIFIED) && (m_Focused || m_RenderWhenUnfocused));
+                           !glfwGetWindowAttrib(m_Window, GLFW_ICONIFIED) && (GroupHasFocus() || m_RenderWhenUnfocused));
         double wake = dispatcher.HasPending() ? now : -1;
         if (!active)
         {
@@ -913,6 +929,10 @@ Window::Window(const WindowOptions& options, const std::filesystem::path& fontPa
         self.m_Font->AddFont(source);
     self.m_Ui = std::make_unique<UiContext>(*self.m_Font);
     self.m_Ui->SetOwnerLifetime(m_Impl);
+    self.m_PresentationGroup = parent ? parent->m_PresentationGroup : std::make_shared<Impl::PresentationGroup>();
+    std::erase_if(self.m_PresentationGroup->m_Windows, [](const auto& weak) { return weak.expired(); });
+    self.m_PresentationGroup->m_Windows.push_back(m_Impl);
+    self.m_Focused = self.m_Headless || glfwGetWindowAttrib(self.m_Window, GLFW_FOCUSED) != 0;
     self.m_Ui->m_GpuShareGroup =
         parent ? parent->m_Ui->m_GpuShareGroup : reinterpret_cast<std::uintptr_t>(self.m_Window);
     self.m_Ui->Root().SetAccessibleName(options.m_Title);
