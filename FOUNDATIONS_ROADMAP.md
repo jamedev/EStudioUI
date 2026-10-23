@@ -618,3 +618,10 @@ containers, then native-service widgets and application workspaces. F10b documen
 editing and F14 extraction remain deferred. GPU optimization is paused at the
 user's request; the Windows profiler's unachieved 60 Hz pacing remains a recorded
 diagnostic limitation rather than evidence of an interactive renderer limit.
+
+Automated 0.20 integration is verified at `fbdf62d`: Windows Release/Debug
+41/41, native framebuffer and repeated lifecycle checks, Linux Release/software
+GL 40/40 plus TSan 6/6, and local ASan/UBSan 40/40. The CPU-only image-resource
+probe independently passes 800 concurrent decodes under ThreadSanitizer.
+[Verification](verification/IMAGES_0_20.md) records the source/evidence boundary;
+manual native acceptance retains its existing scope.

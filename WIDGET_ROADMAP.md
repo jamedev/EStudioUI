@@ -211,6 +211,13 @@ per-feature F12 resource budgets and actual framebuffer checks. Standalone
 ScrollBar/StackedWidget are next, followed by native-service widgets and broader
 workspace controls.
 
+The 0.20 image/icon increment is verified at `fbdf62d`: Windows Release/Debug
+41/41 each, native Win32/WGL framebuffer checks and five extra native Debug runs
+of 97 checks, Linux/software GL 40/40 and isolated TSan 6/6, local ASan/UBSan
+40/40, and a standalone 800-decode resource ThreadSanitizer probe. See
+[verification](verification/IMAGES_0_20.md) for actual pixels, resource contracts
+and platform limits. No C++ compiler warnings were observed.
+
 
 The 0.19 command/dialog batch is verified at `77ae3ac`: Windows 40/40 Release and
 Debug, five extra native Debug runs of 95 checks, Linux/software GL 38/38, TSan
