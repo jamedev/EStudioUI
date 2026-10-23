@@ -3,6 +3,8 @@
 #include <EStudioUI/Button.h>
 #include <EStudioUI/TextBox.h>
 #include <glad/gl.h>
+#define GLFW_INCLUDE_NONE
+#include <GLFW/glfw3.h>
 
 #include <algorithm>
 #include <fstream>
@@ -48,8 +50,9 @@ TextGallery::TextGallery(Window& window, Widget& page) : m_Window(window)
     page.SetId("text-foundation");
     auto& heading = page.Add<Label>("Typography that follows your application");
     heading.AddClass("text-heading");
-    auto& note = page.Add<Label>("Mix scripts, select across directions, and use the arrow keys. Font families, "
-                                 "weight, style, direction and language are inherited CSS properties.");
+    auto& note = page.Add<Label>("Mix scripts, select across directions, and use the arrow keys. A logical selection "
+                                 "can have separate highlights across left-to-right and right-to-left runs. Font "
+                                 "families, weight, style, direction and language are inherited CSS properties.");
     note.AddClass("text-note");
     page.Add<Label>("Regular / Café / Ελληνικά / Кириллица").AddClass("text-caption");
     auto& bold = page.Add<Label>("Bold uses another actual font instance");
@@ -141,6 +144,38 @@ void TextGallery::Verify(const std::filesystem::path& assets, const std::filesys
           "mixed-script preedit cancels");
     probe.RenderFrame(1);
     Check(Pixels() == before, "composition cancellation restores exact original mixed-text pixels");
+    editor.SetText("abc אבג XYZ / العربية");
+    ui.Prepare(720, 420);
+    const auto dragLayout = font.Shape(editor.GetText(), editor.GetStyle(), true);
+    const auto editorContent = editor.GetContentBounds();
+    const Point dragAnchor{editorContent.m_X + 0.1f, editorContent.m_Y + editorContent.m_Height * 0.5f};
+    auto* native = reinterpret_cast<GLFWwindow*>(probe.GetContextIdentity());
+    const auto motion = glfwSetCursorPosCallback(native, nullptr);
+    glfwSetCursorPosCallback(native, motion);
+    Check(motion != nullptr, "production cursor callback is installed for GPU text dragging");
+    const auto scale = probe.Platform().GetWindowMetrics().m_InputScale;
+    ui.PointerDown(dragAnchor);
+    gpu.SetPartialRedrawEnabled(true);
+    for (const auto index : {4U, 6U, 14U, 17U, 6U, 1U})
+    {
+        const auto& span = dragLayout.m_Spans.at(index);
+        const float x = span.m_Left + (span.m_Right - span.m_Left) * 0.9f;
+        motion(native, static_cast<double>(editorContent.m_X + x) * scale.m_X,
+               static_cast<double>(dragAnchor.m_Y) * scale.m_Y);
+        const auto expected = span.m_RightToLeft ? span.m_First : span.m_Last;
+        Check(editor.GetSelectionAnchor() == 0 && editor.GetSelectionCaret() == expected &&
+                  editor.GetSelectedText() == editor.GetText().substr(0, expected),
+              "native cursor callbacks retain the captured anchor and exact mixed-direction selection");
+        const auto time = ui.GetTime();
+        probe.RenderFrame(time);
+        const auto dragged = Pixels();
+        gpu.SetPartialRedrawEnabled(false);
+        probe.RenderFrame(time);
+        Check(Pixels() == dragged, "every bidi drag step matches the full framebuffer reference exactly");
+        gpu.SetPartialRedrawEnabled(true);
+    }
+    ui.PointerUp(dragAnchor);
+    gpu.SavePpm(output / "text-drag-bidi-0-19.ppm");
     Style regularStyle;
     regularStyle.m_FontSize = 84;
     auto boldStyle = regularStyle;

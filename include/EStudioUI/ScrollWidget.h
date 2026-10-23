@@ -72,6 +72,9 @@ class ScrollWidget : public Widget
     //! Starts a scrollbar interaction and returns whether it consumed the press.
     bool HandleScrollPointerDown(const PointerEvent& event);
 
+    //! Starts the shared thumb/track interaction for containers without their own press handler.
+    void OnPointerDown(const PointerEvent& event) override;
+
     //! Updates an active scrollbar drag.
     void OnPointerMove(const PointerEvent& event) override;
 

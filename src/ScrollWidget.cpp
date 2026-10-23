@@ -408,6 +408,11 @@ bool ScrollWidget::RecomputeScrollHover(Point position) const
     return oldAxis != m_HoverAxis || oldThumb != m_HoverThumb;
 }
 
+void ScrollWidget::OnPointerDown(const PointerEvent& event)
+{
+    HandleScrollPointerDown(event);
+}
+
 bool ScrollWidget::HandleScrollPointerDown(const PointerEvent& event)
 {
     UpdateScrollHover(event);

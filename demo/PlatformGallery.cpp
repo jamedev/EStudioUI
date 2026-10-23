@@ -342,17 +342,42 @@ void PlatformGallery::Verify(const std::filesystem::path& output)
     auto drop = glfwSetDropCallback(native, nullptr);
     glfwSetDropCallback(native, drop);
     Check(drop != nullptr, "production native file-drop callback exists");
-    const auto bounds = Live<Label>(gallery.m_Drop).GetBounds();
-    const auto metrics = probe.Platform().GetWindowMetrics();
     if (probe.IsHeadless())
         glfwShowWindow(native);
+    else
+        glfwSetWindowPos(native, 32, 32);
     glfwFocusWindow(native);
-    glfwSetCursorPos(native, static_cast<double>(bounds.m_X + 20) * metrics.m_InputScale.m_X,
-                     static_cast<double>(bounds.m_Y + 20) * metrics.m_InputScale.m_Y);
-    std::string source = "owned-drop-Ω.txt";
-    const char* paths[] = {source.c_str()};
-    drop(native, 1, paths);
-    source.assign("overwritten native callback buffer");
+    glfwPollEvents();
+    probe.RenderFrame();
+    const auto bounds = Live<Label>(gallery.m_Drop).GetBounds();
+    const auto visible = bounds.Intersect(Live<Label>(gallery.m_Drop).GetClip());
+    Check(visible.m_Width > 2 && visible.m_Height > 2, "native file-drop fixture is inside the client viewport");
+    const auto metrics = probe.Platform().GetWindowMetrics();
+    const Point point{visible.m_X + visible.m_Width * 0.5f, visible.m_Y + visible.m_Height * 0.5f};
+    glfwSetCursorPos(native, static_cast<double>(point.m_X) * metrics.m_InputScale.m_X,
+                     static_cast<double>(point.m_Y) * metrics.m_InputScale.m_Y);
+    double nativeX = 0, nativeY = 0;
+    glfwGetCursorPos(native, &nativeX, &nativeY);
+    const auto actual = metrics.FromNative({static_cast<float>(nativeX), static_cast<float>(nativeY)});
+    if (!visible.Contains(actual))
+    {
+        std::ostringstream diagnostic;
+        diagnostic << "Platform gallery: native cursor did not reach the drop fixture; focus="
+                   << glfwGetWindowAttrib(native, GLFW_FOCUSED) << ", requested=" << point.m_X << ',' << point.m_Y
+                   << ", actual=" << actual.m_X << ',' << actual.m_Y << ", input scale=" << metrics.m_InputScale.m_X
+                   << ',' << metrics.m_InputScale.m_Y;
+        throw std::runtime_error(diagnostic.str());
+    }
+    ui.States().Batch(
+        [&]
+        {
+            std::string source = "owned-drop-Ω.txt";
+            const char* paths[] = {source.c_str()};
+            drop(native, 1, paths);
+            source.assign("overwritten native callback buffer");
+            Check(Live<Label>(gallery.m_Drop).GetText().find("owned-drop-Ω.txt") == std::string::npos,
+                  "native drop delivery is deferred until the active state batch has completed");
+        });
     probe.RenderFrame();
     Check(Live<Label>(gallery.m_Drop).GetText().find("owned-drop-Ω.txt") != std::string::npos,
           "production drop callback owns UTF-8 paths before source storage expires");

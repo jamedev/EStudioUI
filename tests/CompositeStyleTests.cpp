@@ -32,6 +32,16 @@ void Apply(UiContext& ui, std::string_view css)
     ui.Prepare(800, 600);
 }
 
+ToolButton* FindTabButton(Widget& widget, const std::string& text)
+{
+    if (auto* button = dynamic_cast<ToolButton*>(&widget); button && button->GetText() == text)
+        return button;
+    for (const auto& child : widget.GetChildren())
+        if (auto* found = FindTabButton(*child, text))
+            return found;
+    return nullptr;
+}
+
 void CompositeMetrics(FontFace& font)
 {
     UiContext ui(font);
@@ -58,7 +68,7 @@ void CompositeMetrics(FontFace& font)
     Check(Near(chooser.GetChildren()[1]->GetBounds().m_Width, 47), "split-arrow CSS width reaches hit geometry");
     Check(Near(numeric.GetStyle().m_Gap, 9), "numeric input gap is theme controlled");
     Check(Near(numeric.GetChildren()[0]->GetBounds().m_Width, 39), "numeric stepper CSS width reaches layout");
-    Check(Near(tabs.GetChildren()[0]->GetStyle().m_Gap, 19), "tab strip gap is theme controlled");
+    Check(Near(FindTabButton(tabs, "First")->GetParent()->GetStyle().m_Gap, 19), "tab strip gap is theme controlled");
     Check(Near(menu.GetStyle().m_Gap, 11), "popup gap is theme controlled");
     Check(Near(menu.GetChildren()[1]->GetBounds().m_Height, 4), "popup separator CSS height reaches layout");
     chooser.GetChildren()[1]->SetWidth(SizeRule::Fixed(31));
@@ -74,9 +84,8 @@ void TabSelection(FontFace& font)
     auto& tabs = ui.Root().Add<TabWidget>();
     tabs.AddTab("First");
     tabs.AddTab("Second");
-    const auto& selectors = tabs.GetChildren()[0]->GetChildren();
-    auto& first = *selectors[0];
-    auto& second = *selectors[1];
+    auto& first = *FindTabButton(tabs, "First");
+    auto& second = *FindTabButton(tabs, "Second");
     Apply(ui, "tabbar .tab-button { background: blue; } tabbar .tab-button:selected { background: red; }");
     Check(first.GetStyle().m_Background.m_R > 0.9f && second.GetStyle().m_Background.m_B > 0.9f,
           "selected tab exposes a semantic CSS state");

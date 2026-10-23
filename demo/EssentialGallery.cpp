@@ -272,6 +272,25 @@ void EssentialGallery::Verify(const std::filesystem::path& assets, const std::fi
     ui.KeyEvent(Key::Escape, true);
     probe.RenderFrame(3.6);
     Check(Pixels() == beforeHelp, "tooltip dismissal restores exact underlying pixels");
+    area.SetScrollOffset({0, 0});
+    probe.RenderFrame(3.7);
+    const auto scrollMeasurements = ui.GetStats().m_Measurements;
+    const auto thumb = area.GetScrollThumbBounds(false);
+    const Point thumbStart{thumb.m_X + thumb.m_Width * 0.5f, thumb.m_Y + thumb.m_Height * 0.5f};
+    ui.PointerDown(thumbStart);
+    ui.PointerMove({thumbStart.m_X, thumbStart.m_Y + 48});
+    ui.PointerUp({thumbStart.m_X, thumbStart.m_Y + 48});
+    probe.RenderFrame(3.8);
+    Check(area.GetScrollOffset().m_Y > 80 && area.Content().GetBounds().m_Y < area.GetViewport().m_Y - 80,
+          "dragging the production ScrollArea thumb moves the actual clipped form");
+    Check(ui.GetStats().m_Measurements == scrollMeasurements,
+          "production scrollbar dragging retains unrelated intrinsic measurements");
+    const auto dragged = Pixels();
+    gpu.SetPartialRedrawEnabled(false);
+    probe.RenderFrame(3.8);
+    Check(Pixels() == dragged, "dragged ScrollArea retained pixels match a complete redraw");
+    gpu.SetPartialRedrawEnabled(true);
+    gpu.SavePpm(output / "essential-scroll-drag-0-19.ppm");
     ui.SetFocus(last);
     probe.RenderFrame(4);
     Check(last->GetBounds().Intersect(area.GetViewport()).m_Height > 30,

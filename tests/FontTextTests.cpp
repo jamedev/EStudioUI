@@ -110,6 +110,25 @@ void Layouts()
     }
     Check(caret.m_Offset == 8 && rtl.MoveCaret(caret, -1) == caret, "Visual navigation stops at the physical edge");
     const auto selection = fonts.Shape("abc אבג XYZ", style, true);
+    for (const auto& text : {"abc אבג XYZ", "abc אבג XYZ / العربية", "العربية English עברית"})
+    {
+        const auto layout = fonts.Shape(text, style, true);
+        for (const auto& span : layout.m_Spans)
+        {
+            if (span.m_Right - span.m_Left < 0.1f)
+                continue;
+            for (const bool right : {false, true})
+            {
+                const float x = span.m_Left + (span.m_Right - span.m_Left) * (right ? 0.9f : 0.1f);
+                const auto hit = layout.HitTestCaret(x);
+                const auto expected = right != span.m_RightToLeft ? span.m_Last : span.m_First;
+                Check(hit.m_Offset == expected,
+                      "Pointer hits choose the edge of the pointed grapheme, including each side of bidi boundaries");
+                Check(std::abs(layout.CaretPosition(hit) - (right ? span.m_Right : span.m_Left)) < 0.01f,
+                      "Pointer caret affinity stays at the nearest visual edge");
+            }
+        }
+    }
     Check(selection.SelectionRectangles(1, 6).size() == 2,
           "A contiguous logical selection can produce disjoint visual rectangles");
     Check(std::abs(selection.CaretPosition(TextCaret{4, false}) - selection.CaretPosition(TextCaret{4, true})) > 5,
@@ -277,6 +296,21 @@ void ControlsAndInvalidation()
     Check(ui.GetStats().m_StyleResolutions == styles && std::abs(label.IntrinsicWidth() - originalWidth) > 0.1f,
           "Font registration refreshes measurement while retaining unrelated CSS caches");
     ui.SetFocus(&editor);
+    const auto dragLayout = fonts.Shape(editor.GetText(), editor.GetStyle(), true);
+    const auto content = editor.GetContentBounds();
+    const Point anchor{content.m_X + 0.1f, content.m_Y + content.m_Height * 0.5f};
+    ui.PointerDown(anchor);
+    for (const auto& span : dragLayout.m_Spans)
+        for (const bool right : {false, true})
+        {
+            const float x = span.m_Left + (span.m_Right - span.m_Left) * (right ? 0.9f : 0.1f);
+            ui.PointerMove({content.m_X + x, anchor.m_Y});
+            const auto expected = right != span.m_RightToLeft ? span.m_Last : span.m_First;
+            Check(editor.GetSelectionAnchor() == 0 && editor.GetSelectionCaret() == expected &&
+                      editor.GetSelectedText() == editor.GetText().substr(0, expected),
+                  "A captured mixed-direction drag preserves its anchor and the exact logical clipboard range");
+        }
+    ui.PointerUp(anchor);
     editor.SetSelection(1, 6);
     Check(editor.GetTextRangeRectangles(1, 6).size() == 2,
           "TextBox exposes disjoint mixed-direction selection rectangles");

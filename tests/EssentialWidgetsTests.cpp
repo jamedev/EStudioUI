@@ -305,6 +305,25 @@ void Containers()
     area.SetScrollOffset({0, 0});
     ui.Prepare(600, 600);
     Check(ui.GetStats().m_Measurements == measured, "Scrolling retains unrelated intrinsic measurements");
+    const auto thumb = area.GetScrollThumbBounds(false);
+    const Point thumbStart{thumb.m_X + thumb.m_Width * 0.5f, thumb.m_Y + thumb.m_Height * 0.5f};
+    ui.PointerDown(thumbStart);
+    ui.PointerMove({thumbStart.m_X, thumbStart.m_Y + 50});
+    ui.Prepare(600, 600);
+    Check(area.GetScrollOffset().m_Y > 100 && area.Content().GetBounds().m_Y < viewport.m_Y - 100,
+          "Production ScrollArea thumb dragging moves both the scrollbar and the clipped form");
+    const auto duringDrag = area.GetScrollOffset();
+    ui.PointerUp({thumbStart.m_X + 80, thumbStart.m_Y + 50});
+    ui.PointerMove(thumbStart);
+    Check(area.GetScrollOffset() == duringDrag, "Releasing outside a ScrollArea thumb ends its capture");
+    ui.PointerDown(thumbStart);
+    ui.PointerMove({thumbStart.m_X, thumbStart.m_Y + 200});
+    ui.Deactivate();
+    const auto cancelled = area.GetScrollOffset();
+    ui.PointerMove(thumbStart);
+    Check(area.GetScrollOffset() == cancelled, "Window deactivation cancels the production scrollbar drag");
+    area.SetScrollOffset({0, 0});
+    ui.Prepare(600, 600);
     auto sizes = splitter.GetSizes();
     Check(sizes.size() == 2 && sizes[0] >= 80 && sizes[1] > sizes[0],
           "Splitter weights share remaining space above hard minima");

@@ -35,11 +35,6 @@ jobs:
           New-Item -ItemType Directory -Path $env:VCPKG_DEFAULT_BINARY_CACHE -Force | Out-Null
           $checkout = Join-Path $env:RUNNER_TEMP 'estudioui-vcpkg'
           ./Build.ps1 -VcpkgRoot $checkout -Configuration Release -SkipGpuTest
-      - name: Build and test Debug
-        shell: powershell
-        run: |
-          $checkout = Join-Path $env:RUNNER_TEMP 'estudioui-vcpkg'
-          ./Build.ps1 -VcpkgRoot $checkout -Configuration Debug -SkipGpuTest
       - name: Run native Windows framebuffer integration with software OpenGL
         shell: powershell
         timeout-minutes: 5
@@ -62,6 +57,11 @@ jobs:
           $env:LIBGL_ALWAYS_SOFTWARE = '1'
           & (Join-Path $stage 'EStudioUIDemo.exe') --self-test --output 'build/windows-vcpkg/verification/native-software-gl'
           if ($LASTEXITCODE -ne 0) { throw "Native Windows framebuffer self-test failed with exit code $LASTEXITCODE." }
+      - name: Build and test Debug
+        shell: powershell
+        run: |
+          $checkout = Join-Path $env:RUNNER_TEMP 'estudioui-vcpkg'
+          ./Build.ps1 -VcpkgRoot $checkout -Configuration Debug -SkipGpuTest
       - name: Repeat native Debug lifecycle probes
         shell: powershell
         run: |

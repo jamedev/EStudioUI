@@ -11,6 +11,7 @@
 #include <EStudioUI/Button.h>
 #include <EStudioUI/TextBox.h>
 #include <EStudioUI/Window.h>
+#include <glad/gl.h>
 
 #include <algorithm>
 #include <chrono>
@@ -44,6 +45,26 @@ void Click(UiContext& ui, Widget& widget)
 {
     ui.PointerDown(Center(widget));
     ui.PointerUp(Center(widget));
+}
+
+ToolButton* FindTabChooser(Widget& widget)
+{
+    if (auto* button = dynamic_cast<ToolButton*>(&widget); button && button->GetText() == "...")
+        return button;
+    for (const auto& child : widget.GetChildren())
+        if (auto* found = FindTabChooser(*child))
+            return found;
+    return nullptr;
+}
+
+std::vector<unsigned char> FramebufferPixels()
+{
+    GLint viewport[4]{};
+    glGetIntegerv(GL_VIEWPORT, viewport);
+    std::vector<unsigned char> pixels(static_cast<std::size_t>(viewport[2]) * static_cast<std::size_t>(viewport[3]) *
+                                      4);
+    glReadPixels(0, 0, viewport[2], viewport[3], GL_RGBA, GL_UNSIGNED_BYTE, pixels.data());
+    return pixels;
 }
 
 //! Measures the rendering backend with a fixed, visible stress scene.
@@ -247,7 +268,7 @@ class Demo
         ProfileUiWorkload(m_Window, *m_Tabs, m_Assets, output);
     }
 
-    bool LoadCss(const fs::path& path)
+    bool LoadCss(const fs::path& path, bool reportFailure = true)
     {
         std::string error;
         std::ifstream theme(path, std::ios::binary);
@@ -259,21 +280,35 @@ class Demo
         std::ifstream commandStyles(m_Assets / "command-dialogs.css", std::ios::binary);
         bool loaded = false;
         if (theme && animation && rich && widgets && textStyles && essentialStyles && commandStyles)
-            loaded = m_Window.Ui().SetStyleSheet(std::string(std::istreambuf_iterator<char>(theme), {}) + "\n" +
-                                                     std::string(std::istreambuf_iterator<char>(animation), {}) + "\n" +
-                                                     std::string(std::istreambuf_iterator<char>(rich), {}) + "\n" +
-                                                     std::string(std::istreambuf_iterator<char>(widgets), {}) + "\n" +
-                                                     std::string(std::istreambuf_iterator<char>(textStyles), {}) + "\n" +
-                                                     std::string(std::istreambuf_iterator<char>(essentialStyles), {}) + "\n" +
-                                                     std::string(std::istreambuf_iterator<char>(commandStyles), {}),
-                                                 error);
+            loaded =
+                m_Window.Ui().SetStyleSheet(std::string(std::istreambuf_iterator<char>(theme), {}) + "\n" +
+                                                std::string(std::istreambuf_iterator<char>(animation), {}) + "\n" +
+                                                std::string(std::istreambuf_iterator<char>(rich), {}) + "\n" +
+                                                std::string(std::istreambuf_iterator<char>(widgets), {}) + "\n" +
+                                                std::string(std::istreambuf_iterator<char>(textStyles), {}) + "\n" +
+                                                std::string(std::istreambuf_iterator<char>(essentialStyles), {}) +
+                                                "\n" + std::string(std::istreambuf_iterator<char>(commandStyles), {}),
+                                            error);
         else
-            error = "Cannot read theme, animation-start.css, rich-buttons.css, rich-widgets.css, text-controls.css, essential-widgets.css, or command-dialogs.css.";
+        {
+            error = "Cannot read stylesheet(s):";
+            for (const auto& [opened, file] :
+                 std::vector<std::pair<bool, fs::path>>{{bool(theme), path},
+                                                        {bool(animation), m_Assets / "animation-start.css"},
+                                                        {bool(rich), m_Assets / "rich-buttons.css"},
+                                                        {bool(widgets), m_Assets / "rich-widgets.css"},
+                                                        {bool(textStyles), m_Assets / "text-controls.css"},
+                                                        {bool(essentialStyles), m_Assets / "essential-widgets.css"},
+                                                        {bool(commandStyles), m_Assets / "command-dialogs.css"}})
+                if (!opened)
+                    error += "\n  " + (file.empty() ? std::string("<empty path>") : file.string());
+        }
         if (!loaded)
         {
             m_Message->AddClass("error");
             m_Message->SetText("CSS reload failed; previous theme retained.\n" + error);
-            std::cerr << error << '\n';
+            if (reportFailure)
+                std::cerr << error << '\n';
             return false;
         }
         m_CurrentCss = path;
@@ -300,6 +335,28 @@ class Demo
         m_Window.RenderFrame();
         Check(gpu.GetStats().m_FontBytes == cachedBytes, "stable glyph cache across frames");
         Check(gpu.ReadPixel({4, 4}).m_R < 0.1f, "dark CSS reaches framebuffer");
+        Check(ui.Root().FindById("themes")->GetChildren().size() == 3,
+              "demo header contains only theme controls without duplicated page shortcuts");
+        m_Tabs->SetCurrentIndex(m_Tabs->GetTabCount() - 1);
+        m_Window.RenderFrame();
+        auto* tabChooser = FindTabChooser(*m_Tabs);
+        Check(tabChooser != nullptr, "real gallery provides an overflow tab chooser");
+        Click(ui, *tabChooser);
+        m_Window.RenderFrame();
+        auto* tabList = dynamic_cast<ListWidget*>(ui.GetPopup());
+        Check(tabList && tabList->GetItemCount() == m_Tabs->GetTabCount() && tabList->GetChildren().empty(),
+              "actual tab overflow popup exposes every page without materializing row widgets");
+        const auto tabPixels = FramebufferPixels();
+        gpu.SetPartialRedrawEnabled(false);
+        m_Window.RenderFrame(ui.GetTime());
+        Check(FramebufferPixels() == tabPixels, "tab overflow retained pixels equal the full redraw reference");
+        gpu.SetPartialRedrawEnabled(true);
+        gpu.SavePpm(output / "tab-overflow-0-19.ppm");
+        ui.KeyEvent(Key::Home, true);
+        ui.KeyEvent(Key::Enter, true);
+        Check(!ui.GetPopup() && m_Tabs->GetCurrentIndex() == 0,
+              "real tab chooser keyboard selection returns to the inputs page");
+        m_Window.RenderFrame();
         const auto point = Center(*m_Increment);
         const Point probe{m_Increment->GetBounds().m_X + 12, m_Increment->GetBounds().m_Y + 12};
         const auto normal = gpu.ReadPixel(probe);
@@ -355,7 +412,8 @@ class Demo
         std::string error;
         Check(!ui.SetStyleSheet("textbox { unsupported-property: 5px; }", error) && !error.empty(),
               "invalid CSS is rejected atomically");
-        Check(!LoadCss({}) && m_Message->GetText().starts_with("CSS reload failed;"), "CSS file error is visible");
+        Check(!LoadCss({}, false) && m_Message->GetText().starts_with("CSS reload failed;"),
+              "CSS file error is visible");
         Check(LoadCss(m_Assets / "light.css"), "light theme loads");
         Check(m_Message->GetText().starts_with("CSS reloaded successfully."),
               "successful reload clears the error message");
@@ -367,7 +425,13 @@ class Demo
         gpu.SavePpm(output / "light.ppm");
         m_Window.SetSize(1320, 900);
         m_Window.RenderFrame();
-        Check(ui.Root().GetBounds().m_Width == 1320, "resize propagates through CSS layout");
+        const auto resized = m_Window.Platform().GetWindowMetrics();
+        Check(ui.Root().GetBounds().m_Width == 1320,
+              "resize propagates through CSS layout: requested 1320x900; logical " +
+                  std::to_string(resized.m_LogicalSize.m_X) + "x" + std::to_string(resized.m_LogicalSize.m_Y) +
+                  "; framebuffer " + std::to_string(resized.m_FramebufferSize.m_X) + "x" +
+                  std::to_string(resized.m_FramebufferSize.m_Y) + "; input scale " +
+                  std::to_string(resized.m_InputScale.m_X) + "," + std::to_string(resized.m_InputScale.m_Y));
         gpu.SavePpm(output / "resized.ppm");
         VerifyPrimitives(output);
         m_Gallery->Verify(m_Assets, output);

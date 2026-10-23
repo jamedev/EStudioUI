@@ -1,5 +1,7 @@
 #include <EStudioUI/TabWidget.h>
 #include <EStudioUI/UiContext.h>
+#include <EStudioUI/BoxLayout.h>
+#include <EStudioUI/ListWidget.h>
 
 #include <stdexcept>
 
@@ -7,6 +9,70 @@ namespace EStudioUI
 {
 namespace
 {
+struct TabStripState
+{
+    std::uint64_t m_Selected = 0;
+};
+
+//! Measures natural captions and clips their row around the selected tab.
+class TabStripLayout final : public LayoutStrategy
+{
+  public:
+    explicit TabStripLayout(std::shared_ptr<TabStripState> state) : m_State(std::move(state))
+    {
+    }
+
+    std::string_view GetName() const override
+    {
+        return "Scrollable tab strip";
+    }
+
+    LayoutPlan Compute(const LayoutContext& context) const override
+    {
+        auto natural = context;
+        natural.m_Constraints.m_Width.reset();
+        natural.m_DefiniteWidth = false;
+        natural.m_Justification = LayoutJustification::Start;
+        auto plan = BoxLayout(Axis::Horizontal).Compute(natural);
+        const float width = context.m_Constraints.m_Width.value_or(plan.m_Measure.m_Preferred.m_X);
+        float offset = 0;
+        for (const auto& slot : plan.m_Slots)
+            if (context.m_Children[slot.m_Index].m_Target == m_State->m_Selected)
+                offset = std::max(0.0f, slot.m_Bounds.m_X + slot.m_Bounds.m_Width - width);
+        offset = std::min(offset, std::max(0.0f, plan.m_Measure.m_Preferred.m_X - width));
+        for (auto& slot : plan.m_Slots)
+            slot.m_Bounds.m_X -= offset;
+        plan.m_Measure.m_Minimum.m_X = 0;
+        return plan;
+    }
+
+  private:
+    std::shared_ptr<TabStripState> m_State;
+};
+
+//! Invalidates its own arrangement when selection moves inside an unchanged viewport.
+class TabStrip final : public Widget
+{
+  public:
+    TabStrip() : Widget("tabbar"), m_State(std::make_shared<TabStripState>())
+    {
+        SetWidth(SizeRule::Fill());
+        SetHeight(SizeRule::Content());
+        SetLayout(TabStripLayout(m_State));
+    }
+
+    void Reveal(std::uint64_t selected)
+    {
+        if (m_State->m_Selected == selected)
+            return;
+        m_State->m_Selected = selected;
+        Invalidate(Invalidation::Arrange | Invalidation::HitTest | Invalidation::Paint);
+    }
+
+  private:
+    std::shared_ptr<TabStripState> m_State;
+};
+
 //! A tab command publishes selection without an independent toggle action.
 class TabButton final : public ToolButton
 {
@@ -55,9 +121,23 @@ class TabButton final : public ToolButton
 
 TabWidget::TabWidget() : Widget("tabwidget")
 {
-    m_Strip = &Add<Widget>("tabbar");
-    m_Strip->SetLayoutDirection(Axis::Horizontal);
-    m_Strip->SetHeight(SizeRule::Content());
+    auto& navigation = Add<Widget>("tab-navigation");
+    navigation.SetLayoutDirection(Axis::Horizontal);
+    navigation.SetHeight(SizeRule::Content());
+    navigation.SetGap(4);
+    m_Strip = &navigation.Add<TabStrip>();
+    m_ChooserButton = &navigation.Add<ToolButton>("...");
+    m_ChooserButton->AddClass("tab-overflow");
+    m_ChooserButton->SetAccessibleName("Choose a tab");
+    m_ChooserButton->SetWidth(SizeRule::Fixed(40));
+    m_ChooserButton->SetHeight(SizeRule::Fill());
+    const WidgetRef self(this);
+    m_ChooserButton->Clicked().Connect(
+        [self]
+        {
+            if (auto* live = dynamic_cast<TabWidget*>(self.Get()))
+                live->ShowTabChooser();
+        });
     m_Pages = &Add<Widget>("tabpages");
     m_Pages->SetHeight(SizeRule::Fill());
 }
@@ -141,6 +221,7 @@ void TabWidget::SetCurrentIndex(int index)
     if (m_Current == index)
         return;
     m_Current = index;
+    static_cast<TabStrip*>(m_Strip)->Reveal(m_Tabs[static_cast<std::size_t>(index)].m_Button.Get()->m_TargetKey);
     for (std::size_t i = 0; i < m_Tabs.size(); ++i)
     {
         if (auto* page = m_Tabs[i].m_Page.Get())
@@ -176,6 +257,79 @@ Signal<int>& TabWidget::CurrentChanged()
 {
     VerifyAccess();
     return m_CurrentChanged;
+}
+
+void TabWidget::OnDescendantFocused(Widget& descendant)
+{
+    for (const auto& tab : m_Tabs)
+        if (tab.m_Button.Get() == &descendant)
+        {
+            static_cast<TabStrip*>(m_Strip)->Reveal(descendant.m_TargetKey);
+            break;
+        }
+}
+
+void TabWidget::ShowTabChooser()
+{
+    VerifyStructuralMutation();
+    if (!GetContext() || m_Tabs.empty())
+        return;
+    const auto lease = RetainOwner();
+    auto* list = dynamic_cast<ListWidget*>(m_Chooser.Get());
+    if (!list)
+    {
+        auto popup = std::make_unique<ListWidget>();
+        popup->AddClass("tab-chooser");
+        popup->SetAccessibleName("Choose a tab");
+        popup->SetWidth(SizeRule::Content(0, 360));
+        list = &static_cast<ListWidget&>(GetContext()->AddOwnedPopup(std::move(popup), *this));
+        m_Chooser = WidgetRef(list);
+        const WidgetRef self(this);
+        const auto choose = [self](int index)
+        {
+            if (auto* live = dynamic_cast<TabWidget*>(self.Get()))
+                live->ChooseTab(index);
+        };
+        list->ItemClicked().Connect(choose);
+        list->Activated().Connect(choose);
+    }
+    std::vector<std::string> captions;
+    captions.reserve(m_Tabs.size());
+    m_ChooserPages.clear();
+    m_ChooserPages.reserve(m_Tabs.size());
+    for (const auto& tab : m_Tabs)
+    {
+        captions.push_back(static_cast<ToolButton*>(tab.m_Button.Get())->GetText());
+        m_ChooserPages.push_back(tab.m_Page);
+    }
+    list->SetItems(std::move(captions));
+    list->SetCurrentIndex(m_Current);
+    PopupOptions options;
+    options.m_AnchorWidget = m_ChooserButton;
+    options.m_Placement = PopupPlacement::Below;
+    GetContext()->ShowPopup(*list, {}, options);
+}
+
+void TabWidget::ChooseTab(int index)
+{
+    const auto lease = RetainOwner();
+    if (index < 0 || static_cast<std::size_t>(index) >= m_ChooserPages.size())
+        return;
+    const WidgetRef self(this);
+    const auto page = m_ChooserPages[static_cast<std::size_t>(index)];
+    if (auto* chooser = m_Chooser.Get())
+        GetContext()->ClosePopup(*chooser, {PopupCloseReason::Accepted, index});
+    if (!self.Get())
+        return;
+    const auto found = std::find_if(m_Tabs.begin(), m_Tabs.end(),
+                                    [&](const Tab& tab) { return page.Get() && tab.m_Page.Get() == page.Get(); });
+    if (found == m_Tabs.end())
+        return;
+    const auto button = found->m_Button;
+    SetCurrentIndex(static_cast<int>(found - m_Tabs.begin()));
+    if (self.Get())
+        if (auto* live = button.Get())
+            GetContext()->SetFocus(live);
 }
 
 bool TabWidget::OnKeyPreview(Key key, bool down, bool, Modifiers modifiers)

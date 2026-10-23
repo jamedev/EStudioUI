@@ -251,6 +251,7 @@ class Widget
     friend class ConstraintItem;
     friend class RadioGroup;
     friend class Splitter;
+    friend class TabWidget;
     friend class Detail::BindingAccess;
 
     //! Rejects tree mutation during style, measurement, layout, surfaces, or painting.

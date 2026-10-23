@@ -135,6 +135,66 @@ void Sizing(FontFace& font)
           "complete light stylesheet parses: " + error);
 }
 
+ToolButton* FindTabCommand(Widget& widget, const std::string& text)
+{
+    if (auto* button = dynamic_cast<ToolButton*>(&widget); button && button->GetText() == text)
+        return button;
+    for (const auto& child : widget.GetChildren())
+        if (auto* found = FindTabCommand(*child, text))
+            return found;
+    return nullptr;
+}
+
+void TabOverflow(FontFace& font)
+{
+    UiContext ui(font);
+    auto& tabs = ui.Root().Add<TabWidget>();
+    tabs.SetHeight(SizeRule::Fill());
+    for (int i = 0; i < 30; ++i)
+        tabs.AddTab("Workspace " + std::to_string(i));
+    tabs.SetCurrentIndex(29);
+    ui.Prepare(360, 260);
+    auto* chooser = FindTabCommand(tabs, "...");
+    auto* last = FindTabCommand(tabs, "Workspace 29");
+    Check(chooser && last && chooser->GetBounds().m_X + chooser->GetBounds().m_Width <= 360.01f,
+          "A narrow tab strip reserves an on-screen overflow chooser");
+    Check(last->GetBounds().m_X >= last->GetClip().m_X && last->GetBounds().m_X + last->GetBounds().m_Width <=
+                                                              last->GetClip().m_X + last->GetClip().m_Width + 0.01f,
+          "Programmatic selection reveals the last tab without shrinking its caption");
+    Click(ui, Center(*chooser));
+    auto* list = dynamic_cast<ListWidget*>(ui.GetPopup());
+    Check(list && list->GetItemCount() == 30 && list->GetCurrentIndex() == 29,
+          "The bounded virtual overflow list exposes every tab and its current selection");
+    ui.Prepare(360, 260);
+    ui.KeyEvent(Key::Home, true);
+    ui.KeyEvent(Key::Enter, true);
+    Check(!ui.GetPopup() && tabs.GetCurrentIndex() == 0,
+          "Keyboard activation in the overflow chooser selects and dismisses through shared popup handling");
+    ui.Prepare(360, 260);
+    auto* first = FindTabCommand(tabs, "Workspace 0");
+    Check(first->GetBounds().m_X >= first->GetClip().m_X, "The first tab is revealed after choosing it");
+    Click(ui, Center(*chooser));
+    list = dynamic_cast<ListWidget*>(ui.GetPopup());
+    const WidgetRef selectedPage(&tabs.GetPage(29));
+    tabs.RemoveTab(0);
+    list->SetCurrentIndex(29);
+    ui.KeyEvent(Key::Enter, true);
+    Check(tabs.GetCurrentIndex() == 28 && &tabs.GetPage(28) == selectedPage.Get(),
+          "An open chooser keeps persistent page identities when preceding tabs are removed");
+    ui.Prepare(240, 260);
+    Check(last->GetBounds().m_X + last->GetBounds().m_Width <= last->GetClip().m_X + last->GetClip().m_Width + 0.01f,
+          "Live narrowing keeps the selected tab inside its viewport");
+    ui.Prepare(5000, 260);
+    Check(FindTabCommand(tabs, "Workspace 1")->GetBounds().m_X >= 0 && last->GetBounds().m_X >= 0,
+          "Widening restores the natural tab row after overflow");
+    tabs.SetTabText(28, "Renamed workspace");
+    Click(ui, Center(*chooser));
+    list = dynamic_cast<ListWidget*>(ui.GetPopup());
+    Check(list && list->GetItem(28) == "Renamed workspace", "Reopening refreshes tab chooser captions");
+    ui.KeyEvent(Key::Escape, true);
+    Check(!ui.GetPopup(), "Escape dismisses the chooser without changing pages");
+}
+
 void TabsAndCommands(FontFace& font)
 {
     UiContext ui(font);
@@ -380,6 +440,7 @@ int main()
         Allocation();
         Sizing(font);
         TabsAndCommands(font);
+        TabOverflow(font);
         Popups(font);
         Collections(font);
         CallbackLifetimes(font);

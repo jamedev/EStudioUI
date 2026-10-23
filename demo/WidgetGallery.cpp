@@ -85,32 +85,6 @@ WidgetGallery::WidgetGallery(Window& window, TabWidget& tabs, const std::filesys
     m_Essential = std::make_unique<EssentialGallery>(window, essentialPage);
     auto& commandPage = tabs.AddTab("Menus & dialogs");
     m_Commands = std::make_unique<CommandGallery>(window, commandPage);
-    if (auto* header = window.Ui().Root().FindById("themes"))
-        header->Add<Button>("Platform services")
-            .Clicked()
-            .Connect(
-                [this, page = WidgetRef(&platformPage)]
-                {
-                    for (int index = 0; index < m_Tabs.GetTabCount(); ++index)
-                        if (&m_Tabs.GetPage(index) == page.Get())
-                        {
-                            m_Tabs.SetCurrentIndex(index);
-                            break;
-                        }
-                });
-    if (auto* header = window.Ui().Root().FindById("themes"))
-        header->Add<Button>("Menus & dialogs")
-            .Clicked()
-            .Connect(
-                [this, page = WidgetRef(&commandPage)]
-                {
-                    for (int index = 0; index < m_Tabs.GetTabCount(); ++index)
-                        if (&m_Tabs.GetPage(index) == page.Get())
-                        {
-                            m_Tabs.SetCurrentIndex(index);
-                            break;
-                        }
-                });
 }
 
 void WidgetGallery::BuildCollections(Widget& page)

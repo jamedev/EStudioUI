@@ -23,16 +23,28 @@ TextCaret TextLayout::HitTestCaret(float x) const
     auto next = std::lower_bound(m_VisualCarets.begin(), m_VisualCarets.end(), x,
                                  [](const VisualCaret& stop, float value) { return stop.m_X < value; });
     if (next == m_VisualCarets.end())
-        return m_VisualCarets.back().m_Caret;
-    if (next != m_VisualCarets.begin() && x - std::prev(next)->m_X < next->m_X - x)
+        next = std::prev(m_VisualCarets.end());
+    else if (next != m_VisualCarets.begin() && x - std::prev(next)->m_X < next->m_X - x)
         --next;
+    const float edge = next->m_X;
+    next = std::lower_bound(m_VisualCarets.begin(), next, edge,
+                            [](const VisualCaret& stop, float value) { return stop.m_X < value; });
+    const bool fromRight = edge == m_VisualCarets.front().m_X || (edge != m_VisualCarets.back().m_X && x > edge);
     const auto limit = std::min<std::size_t>(8, static_cast<std::size_t>(m_VisualCarets.end() - next));
     for (std::size_t i = 0; i < limit; ++i)
     {
         const auto& stop = next[static_cast<std::ptrdiff_t>(i)];
         if (stop.m_X != next->m_X)
             break;
-        if (!stop.m_Caret.m_Trailing)
+        const auto span =
+            stop.m_Caret.m_Trailing
+                ? std::lower_bound(m_Spans.begin(), m_Spans.end(), stop.m_Caret.m_Offset,
+                                   [](const TextSpan& value, std::size_t offset) { return value.m_Last < offset; })
+                : std::lower_bound(m_Spans.begin(), m_Spans.end(), stop.m_Caret.m_Offset,
+                                   [](const TextSpan& value, std::size_t offset) { return value.m_First < offset; });
+        if (span != m_Spans.end() && span->m_Right > span->m_Left &&
+            (stop.m_Caret.m_Trailing ? span->m_Last : span->m_First) == stop.m_Caret.m_Offset &&
+            (span->m_RightToLeft == stop.m_Caret.m_Trailing) == fromRight)
             return stop.m_Caret;
     }
     return next->m_Caret;
