@@ -34,11 +34,23 @@ introduced.
 Frame changes preserve client dimensions. Custom-frame `SetSize()` uses actual
 client/outer differences instead of GLFW's standard caption-height calculation.
 Maximized client calculation preserves auto-hidden taskbar reveal edges.
+Client insets are bounded by the proposed native rectangle, including empty
+and tiny minimize-transition frames, so these transitions cannot publish
+negative client or framebuffer dimensions. Invalid native metric diagnostics
+include the raw client/framebuffer dimensions and content scale.
 
 ## Verification
 
-Local GNU 13 Release passes all 46 suites, including actual retained/full GPU
-framebuffer, workspace and focus/composition checks. A MinGW-w64 C++20
+The final source revision and Windows/Linux CI run will be recorded once the
+native minimize regressions complete on `feature/canvas-sketcher`.
+
+Local GNU 13 Release passes all 46 suites in 19.06 s, including actual
+retained/full GPU framebuffer, workspace and focus/composition checks.
+Focused AddressSanitizer/UndefinedBehaviorSanitizer verification passes
+`CreatorGpuIntegration`, `WorkspaceCore`, `InputFoundation` and `GpuIntegration`
+(4/4, 65.23 s; leak detection disabled for this graphics run).
+
+A MinGW-w64 C++20
 cross-syntax pass compiles the Windows branches of `NativeWindowChrome.cpp`,
 its native tests, the GLFW caption probe, `Window.cpp`, `WindowTitleBar.cpp`
 and `WindowCommandButton.cpp` with `-Wall -Wextra -Wconversion`, without warnings.
@@ -48,7 +60,8 @@ The expanded native test checks actual HWND client origin and dimensions, native
 resize corners/styles, system maximize/restore, caption-paint suppression,
 prepared button hit roles, owning pointer sequences, outside motion/release,
 cancellation, capture loss, callback retirement and receiver expiry. It also
-rechecks scheduler ticks inside a real `SC_SIZE` modal loop.
+checks tiny/empty client calculations, actual minimize/restore dimensions and
+scheduler ticks inside a real `SC_SIZE` modal loop.
 
 Both the gallery and Creator native GPU self-tests now run an isolated owned
 GLFW/MainWindow probe. It checks the original application's client origin and
@@ -62,8 +75,8 @@ separately against the actual HWND outer/client origins, not inferred from a
 headless image. Native probes use the window's normal monotonic clock so native
 callbacks cannot invalidate a separate manual test clock.
 
-Windows Release/Debug CI and sanitizer results will be recorded after they
-complete. Windows 11 Snap flyout appearance, physical snap gestures and actual
+Windows CI with the final minimize regressions is pending.
+Windows 11 Snap flyout appearance, physical snap gestures and actual
 mixed-monitor DPI transitions remain interactive acceptance checks; the native
 hit-test contract alone does not establish those experiences.
 

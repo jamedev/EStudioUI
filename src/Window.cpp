@@ -326,7 +326,17 @@ struct Window::Impl : std::enable_shared_from_this<Window::Impl>
             m_Metrics.m_ScreenOrigin = m_HeadlessPosition;
             m_Metrics.m_HasScreenCoordinates = true;
         }
-        m_Metrics.Validate();
+        try
+        {
+            m_Metrics.Validate();
+        }
+        catch (const std::invalid_argument& error)
+        {
+            throw std::invalid_argument(std::string(error.what()) + " Native client=" + std::to_string(width) + "x" +
+                                        std::to_string(height) + ", framebuffer=" + std::to_string(framebufferWidth) +
+                                        "x" + std::to_string(framebufferHeight) + ", content scale=" +
+                                        std::to_string(scaleX) + "," + std::to_string(scaleY));
+        }
     }
 
     PlatformResult SelectCursor(CursorShape shape)

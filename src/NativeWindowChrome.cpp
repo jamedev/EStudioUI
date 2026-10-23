@@ -142,6 +142,11 @@ struct NativeWindowChrome::Impl : std::enable_shared_from_this<Impl>
                 }
             }
         }
+        // Minimize and very small native frames can be smaller than their non-client insets.
+        rectangle.left = std::clamp(rectangle.left, proposed.left, proposed.right);
+        rectangle.right = std::clamp(rectangle.right, rectangle.left, proposed.right);
+        rectangle.bottom = std::clamp(rectangle.bottom, proposed.top, proposed.bottom);
+        rectangle.top = std::clamp(rectangle.top, proposed.top, rectangle.bottom);
     }
 
     LRESULT HitTest(LPARAM position) const

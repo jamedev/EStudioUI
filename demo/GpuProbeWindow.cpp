@@ -199,6 +199,8 @@ int VerifyGpuProbeChrome(Window& owner, const std::filesystem::path& assets, con
     check(!window->IsClosed() && !close.IsPressed(), "Native cancellation does not activate close");
     click(WindowHitRegion::Minimize, HTMINBUTTON);
     check(IsIconic(native), "A single click on the painted minimize button minimizes the actual HWND");
+    window->Platform().GetWindowMetrics().Validate();
+    check(!window->IsClosed(), "Minimize retains a live window with valid native metrics");
     window->Restore();
     render();
     window->Ui().SetFocus(&search);

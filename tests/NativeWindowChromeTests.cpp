@@ -130,6 +130,20 @@ int main()
         Check(SendMessageW(window, WM_NCCALCSIZE, TRUE, reinterpret_cast<LPARAM>(&calculation)) == 0 &&
                   calculation.rgrc[0].top == 81,
               "Extended client calculation returns no stale native caption preservation flags");
+        for (const LONG size : {0L, 1L, 4L, 16L})
+        {
+            RECT small{80, 80, 80 + size, 80 + size};
+            SendMessageW(window, WM_NCCALCSIZE, FALSE, reinterpret_cast<LPARAM>(&small));
+            Check(small.left >= 80 && small.right >= small.left && small.right <= 80 + size &&
+                      small.top >= 80 && small.bottom >= small.top && small.bottom <= 80 + size,
+                  "Simple client calculation stays nonnegative inside tiny and empty native frames");
+            calculation.rgrc[0] = {80, 80, 80 + size, 80 + size};
+            SendMessageW(window, WM_NCCALCSIZE, TRUE, reinterpret_cast<LPARAM>(&calculation));
+            const auto& result = calculation.rgrc[0];
+            Check(result.left >= 80 && result.right >= result.left && result.right <= 80 + size &&
+                      result.top >= 80 && result.bottom >= result.top && result.bottom <= 80 + size,
+                  "Extended client calculation stays nonnegative inside tiny and empty native frames");
+        }
         POINT origin{};
         ClientToScreen(window, &origin);
         RECT frame{};
@@ -167,6 +181,18 @@ int main()
         Check(IsZoomed(window), "The system maximize command follows native behavior");
         SendMessageW(window, WM_SYSCOMMAND, SC_RESTORE, 0);
         Check(!IsZoomed(window), "The system restore command returns from maximized state");
+        SendMessageW(window, WM_SYSCOMMAND, SC_MINIMIZE, 0);
+        RECT minimized{};
+        GetClientRect(window, &minimized);
+        Check(IsIconic(window) && minimized.right >= minimized.left && minimized.bottom >= minimized.top,
+              "A real minimized custom frame retains a valid nonnegative client rectangle");
+        SendMessageW(window, WM_SYSCOMMAND, SC_RESTORE, 0);
+        GetClientRect(window, &minimized);
+        ClientToScreen(window, &origin);
+        GetWindowRect(window, &frame);
+        Check(!IsIconic(window) && minimized.right == extended.right && minimized.bottom == extended.bottom &&
+                  origin.y - frame.top == 1,
+              "Restoring from minimize preserves client dimensions and the single custom caption");
         Check(GetSystemMenu(window, FALSE) != nullptr, "The native system menu remains available");
         const int previousHover = hoverEvents;
         POINT hover{270, 25};
