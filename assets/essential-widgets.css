@@ -89,3 +89,43 @@ stackedwidget { padding: 12px; border: 1px solid #3b5276; border-radius: 14px; b
 stackedwidget > .stack-page { padding: 0px; background: transparent; }
 .scroll-stack-gallery .stack-heading { font-size: 25px; }
 .scroll-stack-gallery drawing-preview { background: #0e192c; border: 1px solid #3b5276; border-radius: 10px; }
+
+/* Application shell and file controls. Decorative effects stay in compiled GPU paint records. */
+filepatheditor, folderpicker { height: 38px; gap: 4px; padding: 0px; border-width: 0px; background: transparent; }
+filepatheditor textbox.path-editor, folderpicker textbox.path-editor { border-radius: 6px; background: #172238; border: 1px solid #405573; padding: 6px 10px; }
+filepatheditor textbox.path-editor:focus, folderpicker textbox.path-editor:focus { border-color: #91b5f4; background: #1d2c46; }
+.path-browse, .path-recent { border-radius: 6px; border: 1px solid #52678d; background: linear-gradient(135deg, #3d587f, #344267); padding: 0px; }
+.path-browse:hover, .path-recent:hover { background: #5274a1; border-color: #b5d4ff; }
+.path-browse:pressed, .path-recent:pressed { background: #294266; }
+.path-recent:disabled { opacity: .4; }
+mainwindow, mainwindow-toolbars, dockmanager, .workspace-splitter, .dock-tabs, dockwidget, dock-content, workspace-central { padding: 0px; gap: 0px; border-width: 0px; border-radius: 0px; background: #172132; }
+window-titlebar { padding: 0px; border-width: 0px; border-radius: 0px; background: linear-gradient(90deg, #273349, #242737); color: #e5eafa; }
+titlebar-menus, titlebar-content { padding: 0px; gap: 6px; border-width: 0px; background: transparent; }
+window-titlebar menubar { padding: 0px; gap: 1px; background: transparent; border-width: 0px; }
+window-titlebar menubar > button { padding: 4px 10px; border-width: 0px; background: transparent; border-radius: 3px; }
+window-titlebar menubar > button:hover { background: #41506d; }
+window-titlebar label { padding: 4px 10px; font-size: 13px; }
+window-titlebar .caption-button { padding: 0px; border-width: 0px; border-radius: 0px; background: transparent; color: #e4ecfa; font-size: 18px; }
+window-titlebar .caption-button:hover { background: #495369; }
+window-titlebar .caption-close:hover { background: #c42b3b; color: white; }
+window-titlebar .caption-button:pressed { background: #626e87; }
+toolbar-strip { padding: 0px; gap: 6px; border-width: 0px; background: transparent; }
+toolbar .toolbar-scroll { padding: 0px; border-width: 0px; background: #24334b; border-radius: 3px; }
+toolbar .toolbar-scroll:hover { background: #48698e; }
+statusbar { padding: 3px 10px; gap: 10px; border-width: 0px; background: linear-gradient(90deg, #254e77, #283d60); color: #e6f1ff; }
+statusbar label, status-permanent { padding: 0px; background: transparent; border-width: 0px; }
+dock-header { padding: 0px 3px; gap: 2px; background: #2b3b53; border-width: 0px; }
+dock-grip { padding: 3px 7px; font-size: 13px; color: #c7d9f5; background: transparent; }
+dock-header toolbutton { padding: 0px; border-width: 0px; border-radius: 3px; background: transparent; }
+dock-header toolbutton:hover { background: #4a6387; }
+dock-content, workspace-central { padding: 8px; gap: 6px; }
+.dock-tabs > tabpages > tabpage { padding: 0px; gap: 0px; border-width: 0px; background: #172132; }
+.dock-tabs tab-navigation { padding: 0px; gap: 1px; }
+.dock-tabs .tab-scroll { width: 18px; padding: 0px; }
+.dock-tabs .tab-overflow { width: 25px; padding: 0px; }
+.dock-tabs .tab-button { padding: 4px 8px; font-size: 12px; border-radius: 0px; }
+.workspace-splitter::handle:horizontal { width: 5px; }
+.workspace-splitter::handle:vertical { height: 5px; }
+.workspace-splitter::handle { background: #344860; border-radius: 0px; box-shadow: none; }
+.workspace-splitter::handle:hover, .workspace-splitter::handle:pressed { background: #7ca9ea; }
+dock-preview { border: 2px solid #9dc8ff; background: rgba(90, 150, 235, .35); border-radius: 4px; }

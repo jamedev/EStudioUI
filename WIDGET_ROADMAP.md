@@ -43,7 +43,7 @@ scrolling container. The custom dial in the demo is not a public library `Dial`.
 
 Priority means: **Essential** for ordinary applications, **High** for a powerful
 engineering/CAD workspace, **Later** after the shared foundations and common
-controls. Entries marked **0.18**, **0.19**, **0.20** or **0.21** are delivered; the other catalog entries remain planned.
+controls. Entries marked **0.18**, **0.19**, **0.20**, **0.21** or **0.22** are delivered; the other catalog entries remain planned.
 
 F09 adds shared action presentations to the existing buttons, toolbars, split
 choosers, and context menus. Nested command menus are implemented through
@@ -82,8 +82,8 @@ only change appearance should share implementations and semantic roles.
 | W17 | StackedWidget | Persistent pages without requiring a visible tab strip | Essential — **0.21 delivered** |
 | W18 | GroupBox / Frame / Separator | Titled/checkable groups and reusable visual structure | Essential — **0.18 delivered** |
 | W19 | CollapsiblePanel / Accordion / ToolBox | Expandable inspector sections and categorized tools | High |
-| W20 | MainWindow | Central workspace plus menus, toolbars, status area, owned windows | High |
-| W21 | DockWidget / DockManager | Dock, float, tabify, rearrange, and restore panels | High |
+| W20 | MainWindow | Central workspace, title-row menus/widgets, toolbars, status, owned windows | High — **0.22 implemented; native/manual acceptance recorded separately** |
+| W21 | DockWidget / DockManager | Four edge tab groups, splitters, dock/float, grip dragging, tabify/reorder and bounded restore | High — **0.22 implemented**; arbitrary nested dock trees remain later |
 | W22 | DocumentWorkspace | Multiple documents, close/reorder/detach tabs, unsaved-state indicators | High |
 | W23 | Overlay / Drawer | Anchored or sliding temporary panels | Later |
 
@@ -96,8 +96,8 @@ only change appearance should share implementations and semantic roles.
 | W26 | Popup / Popover | Shared anchored interactive content and dismissal/focus behavior | Essential — **0.19 delivered** |
 | W27 | Dialog | In-window modal/modeless operation, ownership, default/cancel actions | Essential — **0.19 delivered** |
 | W28 | MessageBox / InputDialog / DialogButtonBox | Reusable confirmation, errors, input requests, standard responses | Essential — **0.19 delivered** |
-| W29 | FileDialog / FolderPicker / FilePathEditor | Open/save/folder selection, filters, recent paths | Essential |
-| W30 | StatusBar | Messages, coordinates, contextual state, progress | High |
+| W29 | FileDialog / FolderPicker / FilePathEditor | Asynchronous open/save/folder selection, filters, recent paths, canonical path bindings | Essential — **0.22 implemented** |
+| W30 | StatusBar | Message and permanent application widget area | High — **0.22 implemented** |
 | W31 | Banner / Toast / ValidationMessage | Nonmodal and field-level feedback with accessible announcements | High |
 | W32 | ColorPicker / ColorEditor | Palette, RGB/HSV, alpha, hexadecimal input | High |
 | W33 | FontPicker / FontEditor | Family, size, style, preview using the shared font service | High |
@@ -178,7 +178,8 @@ canvas/sketcher layer rather than becoming mandatory core form controls.
 3. Command/dialog batch (0.19): W24, W26, W27 and W28. See
    [contracts](COMMAND_DIALOGS.md) and [evidence](verification/COMMAND_DIALOGS_0_19.md).
    Image/icon resources follow in 0.20; standalone ScrollBar/StackedWidget in 0.21.
-   Continue native-service widgets, then main windows, docking, property editing and stronger data views.
+   File/path controls and the initial main-window/docking workspace follow in 0.22.
+   Continue property editing, search/completion, feedback and stronger data views.
    Develop F16 history/workspace services with their application consumers.
 4. After broad widget/workspace use establishes the boundaries, revisit F14 to
    extract reusable framework modules and prove installed UI/headless consumers.
@@ -229,3 +230,11 @@ The 0.19 command/dialog batch is verified at `77ae3ac`: Windows 40/40 Release an
 Debug, five extra native Debug runs of 95 checks, Linux/software GL 38/38, TSan
 6/6 and local ASan/UBSan 38/38. The verification guide records actual captures,
 zero-idle-work checks, native cancellation hardening and remaining manual gates.
+
+
+The 0.22 increment implements W29, W20/W30 and the first W21 workspace topology,
+including Windows title-row menus/widgets with native non-client behavior.
+[WORKSPACES.md](WORKSPACES.md) defines ownership, bounds, cross-context handles,
+CSS and persistence. [Verification](verification/WORKSPACES_0_22.md) distinguishes
+automated checks from Windows 11 snap, mixed-DPI and interactive accessibility acceptance.
+W22 document workspaces, arbitrary nested dock trees, F10b and F14 remain separate work.

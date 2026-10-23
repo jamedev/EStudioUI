@@ -129,7 +129,7 @@ void CommandsAndContainers()
     ToolBar toolbar;
     toolbar.AddButton("Command");
     RejectOffThread([&] { toolbar.AddSeparator(); }, "toolbar composition rejects the wrong thread");
-    Check(toolbar.GetChildren().size() == 1, "rejected toolbar edit preserves children");
+    Check(toolbar.Content().GetChildren().size() == 1, "rejected toolbar edit preserves children");
 
     ContextMenu menu;
     menu.AddAction("Command");

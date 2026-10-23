@@ -68,6 +68,11 @@ void Widget::Attach(UiContext* context, Widget* parent)
         context->VerifyAccess();
     if (parent)
         parent->VerifyAccess();
+    if (m_Context != context)
+    {
+        ++m_ContextGeneration;
+        OnFontsChanged();
+    }
     if (m_Context && !m_Actions.empty())
         m_Context->UnregisterActions(*this);
     if (m_Context && m_Context->m_Semantics)
@@ -116,6 +121,92 @@ bool Widget::RemoveChild(Widget& child)
     Invalidate(Invalidation::Structure);
     removed.reset();
     return true;
+}
+
+void Widget::ReparentTo(Widget& parent)
+{
+    VerifyStructuralMutation();
+    parent.VerifyStructuralMutation();
+    if (!m_Parent || m_Overlay)
+        throw std::invalid_argument("Only an ordinary owned subtree can be reparented.");
+    if (m_Reparenting)
+        throw std::logic_error("A widget cannot recursively transfer during input retirement.");
+    for (auto* ancestor = &parent; ancestor; ancestor = ancestor->m_Parent)
+        if (ancestor == this)
+            throw std::invalid_argument("Widget reparenting cannot create an ownership cycle.");
+    if (m_Parent == &parent)
+        return;
+    const auto sourceLease = RetainOwner();
+    const auto destinationLease = parent.RetainOwner();
+    const WidgetRef self(this), destination(&parent), previous(m_Parent);
+
+    struct ReparentScope
+    {
+        WidgetRef m_Target;
+
+        ~ReparentScope()
+        {
+            if (auto* live = m_Target.Get())
+                live->m_Reparenting = false;
+        }
+    } reparentScope{self};
+
+    m_Reparenting = true;
+    auto* sourceContext = m_Context;
+    auto* destinationContext = parent.m_Context;
+    if (sourceContext && !destinationContext)
+        throw std::invalid_argument("Move attached widgets to another attached parent.");
+    if (sourceContext && destinationContext && sourceContext != destinationContext &&
+        sourceContext->m_GpuShareGroup != destinationContext->m_GpuShareGroup &&
+        (sourceContext->m_GpuShareGroup || destinationContext->m_GpuShareGroup))
+        throw std::invalid_argument(
+            "Cross-window transfer requires compatible GPU groups; use Window::CreateOwnedWindow.");
+    parent.m_Children.reserve(parent.m_Children.size() + 1);
+    if (sourceContext)
+        sourceContext->PrepareReparent(*this);
+    if (!self.Get() || !destination.Get() || !previous.Get())
+        throw std::logic_error("An input retirement callback removed a reparenting endpoint.");
+    if (m_Parent != previous.Get() || m_Context != sourceContext || parent.m_Context != destinationContext)
+        throw std::logic_error("An input retirement callback moved a reparenting endpoint.");
+    for (auto* ancestor = &parent; ancestor; ancestor = ancestor->m_Parent)
+        if (ancestor == this)
+            throw std::logic_error("An input callback created a reparenting cycle.");
+    auto* oldParent = m_Parent;
+    const auto found = std::find_if(oldParent->m_Children.begin(), oldParent->m_Children.end(),
+                                    [this](const auto& child) { return child.get() == this; });
+    if (found == oldParent->m_Children.end())
+        throw std::logic_error("A reparenting source lost its ownership record.");
+    auto owned = std::move(*found);
+    oldParent->m_Children.erase(found);
+    if (oldParent->m_BaselineChild == m_TargetKey)
+        oldParent->m_BaselineChild = 0;
+    try
+    {
+        Attach(destinationContext, &parent);
+    }
+    catch (...)
+    {
+        Attach(sourceContext, oldParent);
+        oldParent->m_Children.push_back(std::move(owned));
+        throw;
+    }
+    parent.m_Children.push_back(std::move(owned));
+    oldParent->Invalidate(Invalidation::Structure);
+    parent.Invalidate(Invalidation::Structure);
+    if (sourceContext && sourceContext != destinationContext)
+        sourceContext->TransferOwnedPopups(*this, *destinationContext);
+}
+
+void Widget::SetWindowDragRegion(bool enabled)
+{
+    VerifyStructuralMutation();
+    m_WindowDragRegion = enabled;
+}
+
+bool Widget::IsWindowDragRegion() const
+{
+    VerifyAccess();
+    return m_WindowDragRegion;
 }
 
 void Widget::ClearChildren()

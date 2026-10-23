@@ -403,9 +403,39 @@ bool UiContext::SetStyleSheet(std::string_view css, std::string& error)
     if (!m_StyleSheet.Parse(css, error))
         return false;
     m_Animations.Stop(m_StyleTransition, AnimationStopMode::ReleaseStyle);
+    ++m_SheetGeneration;
     m_CssMotion->Reset();
     Invalidate();
     return true;
+}
+
+void UiContext::CopyStyleSheetFrom(const UiContext& source)
+{
+    const auto ownerLease = RetainOwner();
+    const auto sourceLease = source.RetainOwner();
+    VerifyDispatchPhase();
+    source.VerifyAccess();
+    if (&source == this)
+        return;
+    m_Animations.Stop(m_StyleTransition, AnimationStopMode::ReleaseStyle);
+    m_StyleSheet = source.m_StyleSheet;
+    ++m_SheetGeneration;
+    m_CssMotion->Reset();
+    Invalidate();
+}
+
+std::uint64_t UiContext::GetStyleSheetRevision() const
+{
+    VerifyAccess();
+    return m_SheetGeneration;
+}
+
+Widget* UiContext::GetWidgetAt(Point point) const
+{
+    VerifyAccess();
+    if (!std::isfinite(point.m_X) || !std::isfinite(point.m_Y))
+        throw std::invalid_argument("Hit-test coordinates must be finite.");
+    return InputHitTest(point);
 }
 
 bool UiContext::LoadStyleSheet(const std::filesystem::path& path, std::string& error)
@@ -416,6 +446,7 @@ bool UiContext::LoadStyleSheet(const std::filesystem::path& path, std::string& e
     if (!m_StyleSheet.LoadFile(path, error))
         return false;
     m_Animations.Stop(m_StyleTransition, AnimationStopMode::ReleaseStyle);
+    ++m_SheetGeneration;
     m_CssMotion->Reset();
     Invalidate();
     return true;
@@ -464,6 +495,7 @@ AnimationId UiContext::BeginStyleTransition(std::optional<StyleSheet> initial, S
     {
         m_Animations.Stop(m_StyleTransition, AnimationStopMode::ReleaseStyle);
         m_StyleSheet = std::move(*initial);
+        ++m_SheetGeneration;
         m_CssMotion->Reset();
         Invalidate();
     }
@@ -496,6 +528,7 @@ AnimationId UiContext::BeginStyleTransition(std::optional<StyleSheet> initial, S
     const auto initialSheet = m_StyleSheet;
     m_Animations.Stop(m_StyleTransition, AnimationStopMode::ReleaseStyle);
     m_StyleSheet = std::move(final);
+    ++m_SheetGeneration;
     m_CssMotion->Reset();
     Invalidate();
     Restyle(m_Root, nullptr, m_FullStyleDirty);
@@ -609,6 +642,7 @@ AnimationId UiContext::BeginStyleTransition(std::optional<StyleSheet> initial, S
         animation.m_OnFinish = [this, initialSheet]
         {
             m_StyleSheet = initialSheet;
+            ++m_SheetGeneration;
             m_CssMotion->Reset();
             Invalidate();
         };

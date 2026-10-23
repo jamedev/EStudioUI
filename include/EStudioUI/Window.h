@@ -9,6 +9,25 @@ namespace EStudioUI
 {
 class Window;
 
+//! Native non-client behavior selected by prepared title-bar geometry.
+enum class WindowHitRegion
+{
+    //! Ordinary interactive client content.
+    Client,
+
+    //! Native caption movement and system gestures.
+    Caption,
+
+    //! Native minimize button.
+    Minimize,
+
+    //! Native maximize/restore and snap target.
+    Maximize,
+
+    //! Native close button.
+    Close
+};
+
 //! GLFW window and context creation options.
 struct WindowOptions
 {
@@ -103,6 +122,48 @@ class Window
 
     //! Exposes key presses after controls receive them, including F5/F6.
     Signal<Key>& KeyPressed();
+
+    //! Sets the native UTF-8 title and root accessible name.
+    void SetTitle(std::string title);
+
+    //! Returns the owned UTF-8 native title.
+    std::string GetTitle() const;
+
+    //! Adopts a prepared widget as an extended native title bar; null restores the standard frame.
+    void SetTitleBar(Widget* titleBar);
+
+    //! Reports actual native frame integration, or emulated/unsupported support.
+    PlatformSupport GetTitleBarSupport() const;
+
+    //! Moves this window to physical desktop coordinates.
+    void SetPosition(Point position);
+
+    //! Sets finite physical desktop bounds, including the platform frame.
+    void SetWindowBounds(Rect bounds);
+
+    //! Returns physical desktop bounds, including the native frame where provided.
+    Rect GetWindowBounds() const;
+
+    //! Minimizes this native window.
+    void Minimize();
+
+    //! Maximizes while retaining the system's work-area and snap behavior.
+    void Maximize();
+
+    //! Restores a minimized or maximized window.
+    void Restore();
+
+    //! Returns whether the containing native window is maximized.
+    bool IsMaximized() const;
+
+    //! Creates an owned window sharing the GPU group, fonts and native/headless mode.
+    std::unique_ptr<Window> CreateOwnedWindow(WindowOptions options = {});
+
+    //! Runs on the idle UI owner immediately before a requested frame, without adding an idle timer.
+    Signal<>& FramePreparing();
+
+    //! Reports completed native/programmatic closure once while resources remain retained.
+    Signal<>& Closed();
 
     //! Changes logical dimensions and invalidates layout.
     void SetSize(int width, int height);

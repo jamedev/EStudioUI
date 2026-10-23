@@ -117,12 +117,15 @@ class UiContext
             throw std::invalid_argument("A UI handle target must belong to this context.");
         const WidgetRef reference(&widget);
         const auto* owner = this;
+        const auto generation = widget.m_ContextGeneration;
         return UiHandle<T>::ForTarget(
             m_Dispatcher, widget.m_TargetKey,
-            [reference, owner]() -> T*
+            [reference, owner, generation]() -> T*
             {
                 auto* live = reference.Get();
-                return live && live->GetContext() == owner ? dynamic_cast<T*>(live) : nullptr;
+                return live && live->GetContext() == owner && live->m_ContextGeneration == generation
+                           ? dynamic_cast<T*>(live)
+                           : nullptr;
             },
             widget.m_LifetimeStop.get_token());
     }
@@ -316,6 +319,15 @@ class UiContext
     //! Converts window input coordinates into a widget's untransformed layout coordinates.
     Point ToLayoutPoint(const Widget& widget, Point point) const;
 
+    //! Returns the prepared transformed hit target without advancing input or layout.
+    Widget* GetWidgetAt(Point point) const;
+
+    //! Copies compiled CSS from another owner-thread context, retaining this context's widgets.
+    void CopyStyleSheetFrom(const UiContext& source);
+
+    //! Returns the successful stylesheet generation used by secondary workspace windows.
+    std::uint64_t GetStyleSheetRevision() const;
+
     //! Maps an attached widget's layout point through visual transforms into window coordinates.
     Point ToWindowPoint(const Widget& widget, Point point) const;
 
@@ -414,6 +426,18 @@ class UiContext
 
     //! Tracks guarded traversals without changing ordinary input callback semantics.
     mutable UiPhase m_Phase = UiPhase::Idle;
+
+    //! Retires focus/capture/popup sessions before moving an attached subtree.
+    void PrepareReparent(Widget& subtree);
+
+    //! Transfers inactive logical popup ownership after a subtree changes context.
+    void TransferOwnedPopups(Widget& subtree, UiContext& destination);
+
+    //! Detects stylesheet replacement without reparsing per frame.
+    std::uint64_t m_SheetGeneration = 0;
+
+    //! Distinguishes compatible window GPU share groups; zero denotes a CPU-only context.
+    std::uintptr_t m_GpuShareGroup = 0;
 
     //! Refreshes cached part defaults after paint-only owner changes without matching selectors.
     void RefreshStyleParts(Widget& widget);

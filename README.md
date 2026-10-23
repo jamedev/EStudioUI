@@ -3,7 +3,7 @@
 A C++20 application framework prototype, currently centered on GLFW windows,
 analytic GPU shapes and text, typed signals, and CSS styling. Controls include
 buttons, checkboxes/radio groups, read-only/editable combos, scrolling forms, splitters,
-progress/help controls, standalone scrollbars and persistent page stacks, shared image views/icons, single-line UTF-8 text boxes, tabs, lists, trees,
+progress/help controls, file/folder fields, a main-window shell with title-row controls, docked/floating panels and saved workspaces, standalone scrollbars and persistent page stacks, shared image views/icons, single-line UTF-8 text boxes, tabs, lists, trees,
 editable tables, toolbars/tool buttons, menu bars, nested command menus, asynchronous dialogs/popovers, and embedded 3D surfaces. Dependencies are managed with a pinned vcpkg
 manifest; no Qt or commercial SDK is required.
 
@@ -16,15 +16,32 @@ safe application code an acceptance requirement for every foundation change.
 
 F09 input/actions/focus, F11 platform contracts, and F10a essential control text
 are implemented. The first common-control batch is delivered in 0.18, command/dialog controls in 0.19,
-image/icon resources in 0.20, and standalone scrollbars/page stacks in 0.21. Remaining widget families
-and application workspaces continue through the roadmap. F10b document editing is a later track. F14 module extraction and SDK
+image/icon resources in 0.20, standalone scrollbars/page stacks in 0.21, and file controls/application workspaces in 0.22. Remaining widget families continue through the roadmap. F10b document editing is a later track. F14 module extraction and SDK
 packaging are deferred until that use informs reusable boundaries, including
 services for applications without a UI. Standalone modules are planned, not
 current package capabilities; see the roadmaps for acceptance criteria.
 
+## Application workspaces (0.22)
+
+The demo opens **Application workspace**; its launch button opens a real separate
+`MainWindow`. Add menus and arbitrary controls through `TitleBar().Menus()` and
+`TitleBar().Content()`. Windows retains native caption move/resize/system commands
+and the maximize hit-test protocol for Snap Layouts. Other platforms keep their
+standard OS frame with a configurable client title row.
+
+`DockManager` provides four resizable edge tab groups, captured header dragging,
+real floating windows and bounded workspace save/restore. Existing panel widgets,
+State bindings and shared OpenGLWidget scenes survive transfers. `FileDialog`,
+`FilePathEditor`, `FolderPicker` and `BindPath` reuse asynchronous platform services
+and canonical State validation. `StatusBar` and toolbar arrow/wheel/focus overflow
+complete the initial shell. No new runtime dependency or idle timer is added.
+See [contracts and scope](WORKSPACES.md), the [compiled example](examples/ApplicationWorkspace.cpp),
+and [verification](verification/WORKSPACES_0_22.md). Interactive Windows 11 flyouts,
+physical snap/DPI behavior and assistive-technology acceptance remain human checks.
+
 ## Scrolling and persistent pages (0.21)
 
-The demo opens **Scrolling & pages**. `ScrollBar` provides proportional horizontal/vertical
+The **Scrolling & pages** tab demonstrates these controls. `ScrollBar` provides proportional horizontal/vertical
 thumbs, keyboard/wheel/track/drag input, canonical State bindings and range accessibility.
 `StackedWidget` owns persistent pages without a tab strip; inactive pages contribute
 no layout, input, paint or continuous animation work. Both use existing rich CSS and

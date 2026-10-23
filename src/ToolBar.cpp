@@ -1,17 +1,76 @@
 #include <EStudioUI/ToolBar.h>
 #include <EStudioUI/UiContext.h>
 
+#include "OverflowStrip.h"
+
 namespace EStudioUI
 {
 ToolBar::ToolBar() : Widget("toolbar")
 {
     SetLayoutDirection(Axis::Horizontal);
+    SetHeight(SizeRule::Content());
+    auto& backward = Widget::Add<ToolButton>("‹");
+    backward.AddClass("toolbar-scroll");
+    backward.SetAccessibleName("Scroll toolbar left");
+    backward.SetWidth(SizeRule::Fixed(24));
+    backward.SetHeight(SizeRule::Fill());
+    m_Content = &Widget::Add<Detail::OverflowStrip>("toolbar-strip");
+    auto& forward = Widget::Add<ToolButton>("›");
+    forward.AddClass("toolbar-scroll");
+    forward.SetAccessibleName("Scroll toolbar right");
+    forward.SetWidth(SizeRule::Fixed(24));
+    forward.SetHeight(SizeRule::Fill());
+    const WidgetRef strip(m_Content);
+    backward.Clicked().Connect(
+        [strip]
+        {
+            if (auto* live = dynamic_cast<Detail::OverflowStrip*>(strip.Get()))
+                live->ScrollPage(-1);
+        });
+    forward.Clicked().Connect(
+        [strip]
+        {
+            if (auto* live = dynamic_cast<Detail::OverflowStrip*>(strip.Get()))
+                live->ScrollPage(1);
+        });
+}
+
+Widget& ToolBar::AddChild(std::unique_ptr<Widget> child)
+{
+    VerifyStructuralMutation();
+    return Content().AddChild(std::move(child));
+}
+
+bool ToolBar::RemoveChild(Widget& child)
+{
+    VerifyStructuralMutation();
+    return Content().RemoveChild(child);
+}
+
+Widget& ToolBar::Content() const
+{
+    VerifyAccess();
+    return *m_Content;
+}
+
+void ToolBar::ScrollBy(float distance)
+{
+    VerifyStructuralMutation();
+    if (!std::isfinite(distance))
+        throw std::invalid_argument("Toolbar scroll distance must be finite.");
+    // Wheel units preserve the strip's existing bounded, prepared-offset path.
+    static_cast<Detail::OverflowStrip*>(m_Content)->ScrollWheel({-distance / 48, 0});
+}
+
+bool ToolBar::OnScroll(Point delta, Modifiers)
+{
+    return static_cast<Detail::OverflowStrip*>(m_Content)->ScrollWheel(delta);
 }
 
 ToolButton& ToolBar::AddButton(std::string text)
 {
     VerifyStructuralMutation();
-    auto& button = Add<ToolButton>(std::move(text));
+    auto& button = Content().Add<ToolButton>(std::move(text));
     button.AddClass("toolbar-button");
     return button;
 }
@@ -29,13 +88,13 @@ ToolButton& ToolBar::AddAction(std::shared_ptr<Action> action)
 SplitToolButton& ToolBar::AddSplitButton(std::string text)
 {
     VerifyStructuralMutation();
-    return Add<SplitToolButton>(std::move(text));
+    return Content().Add<SplitToolButton>(std::move(text));
 }
 
 Widget& ToolBar::AddSeparator()
 {
     VerifyStructuralMutation();
-    auto& separator = Add<Widget>("separator");
+    auto& separator = Content().Add<Widget>("separator");
     separator.AddClass("toolbar-separator");
     separator.SetHeight(SizeRule::Fill());
     return separator;
@@ -46,7 +105,7 @@ bool ToolBar::OnKeyPreview(Key key, bool down, bool, Modifiers modifiers)
     if (!down || modifiers.m_Control || modifiers.m_Alt || (key != Key::Left && key != Key::Right))
         return false;
     std::vector<Widget*> buttons;
-    for (auto& child : GetChildren())
+    for (auto& child : Content().GetChildren())
     {
         if (!child->IsEnabled() || !child->IsVisible())
             continue;

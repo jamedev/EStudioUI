@@ -180,3 +180,21 @@ limits and earlier rules, and remain visible. Keep simple layouts on Box/Grid/
 Form/Flow where explicit relationships would add ceremony. Native live resize is
 a window/runtime responsibility and needs no application event-pump workaround.
 See [CONSTRAINT_LAYOUT.md](CONSTRAINT_LAYOUT.md).
+
+
+## Application workspaces
+
+The 0.22 [workspace example](examples/ApplicationWorkspace.cpp) composes an entire
+shell through `root.Add<MainWindow>(window)`. Menus, title-row controls, toolbars,
+central views, dock content and permanent status controls use the ordinary Add
+and action APIs. Application code supplies stable panel IDs and persists the
+owned SaveState string wherever appropriate. Native chrome, GPU sharing and
+floating-window teardown are framework responsibilities.
+
+`FilePathEditor` / `FolderPicker` use ordinary filesystem paths and `BindPath`;
+validation remains in canonical State. Browse is asynchronous and stale results
+cannot overwrite newer edits. Panel content is never rebuilt to change window
+ownership. Shared State/bindings follow actual widgets; old dispatcher-bound
+handles expire on transfer and new direct handles come from the destination.
+See [WORKSPACES.md](WORKSPACES.md) for the explicit initial docking topology and
+native/manual acceptance limits.

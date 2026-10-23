@@ -624,3 +624,32 @@ animation traversal. Hidden focus/capture/popup/composition retirement stays in
 UiContext; the container creates no event loop or duplicate input system. Custom
 page adoption preserves explicit sizing, composition and paint overrides.
 [SCROLL_STACK.md](SCROLL_STACK.md) records APIs, costs and ownership boundaries.
+
+
+## Application shell and workspace ownership (0.22)
+
+MainWindow composes WindowTitleBar, ordinary overflow ToolBar rows, DockManager
+and StatusBar. NativeWindowChrome contains Win32 subclass/DWM details, delegates
+caption/resize hit regions, and chains with NativeResizePump. Prepared hit queries
+never pump, lay out or render. Other native platforms retain their standard frame.
+Small caption/panel symbols use analytic GPU lines independent of font coverage.
+
+FileDialog is an owner-lifetime facade over PlatformServices. FilePathEditor and
+FolderPicker own an ordinary editor, bounded recent choices and a session/revision
+guard; BindPath uses the existing canonical binding machinery. No filesystem
+probe, UI wait, theme parse during painting or continuous workspace timer is added.
+
+DockManager composes two Splitters, four TabWidgets, a central container and hidden
+panel storage. Tab rows appear only for multiple panels. DockWidget subtrees move
+intact through Widget::ReparentTo; focus/preedit/capture and active popups retire
+before transfer, and owned popup records/widgets migrate together. Font caches
+retire on context changes. Context generations prevent stale UiHandles from
+reactivating after a return; shared bindings follow WidgetRef instead.
+
+CreateOwnedWindow shares the GPU group/fonts/compiled CSS. Floating GL surfaces
+keep separate scene contexts and producer/consumer synchronization. Incompatible
+GPU groups fail before ownership changes. Retired Window implementations restore
+the prior GL context after cleanup, including retirement at a frame boundary.
+A bounded versioned snapshot stores panel placement, selection, visibility,
+floating bounds and splitter sizes; parsing rejects the complete invalid payload
+before touching live state. [WORKSPACES.md](WORKSPACES.md) documents costs and limits.

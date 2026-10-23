@@ -23,6 +23,7 @@ class Slider;
 class ScrollBar;
 class ToolButton;
 class CheckBox;
+class FilePathEditor;
 
 //! Selects whether a control also publishes its committed edits to the state.
 enum class BindingMode
@@ -347,6 +348,9 @@ Binding BindChecked(ToolButton& target, State<bool>& state, BindingMode mode = B
 
 //! Binds a checkbox boolean value; indeterminate maps to false.
 Binding BindChecked(CheckBox& target, State<bool>& state, BindingMode mode = BindingMode::TwoWay);
+
+//! Binds an editable filesystem path with exact representability and canonical rollback.
+Binding BindPath(FilePathEditor& target, State<std::filesystem::path>& state, BindingMode mode = BindingMode::TwoWay);
 
 //! Binds the widget's local programmatic enabled flag in one direction.
 Binding BindEnabled(Widget& target, State<bool>& state);

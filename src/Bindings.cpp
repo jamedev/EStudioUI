@@ -1,5 +1,6 @@
 #include <EStudioUI/CheckBox.h>
 #include <EStudioUI/Bindings.h>
+#include <EStudioUI/FilePathEditor.h>
 #include <EStudioUI/Label.h>
 #include <EStudioUI/NumericInput.h>
 #include <EStudioUI/Slider.h>
@@ -162,6 +163,22 @@ ScopedBinding& ScopedBinding::operator=(ScopedBinding&& other) noexcept
         m_Binding = std::exchange(other.m_Binding, Binding{});
     }
     return *this;
+}
+
+Binding BindPath(FilePathEditor& target, State<std::filesystem::path>& state, BindingMode mode)
+{
+    const auto setter = [](FilePathEditor& live, const std::filesystem::path& path) { live.SetPath(path); };
+    auto [binding, data] = Detail::MakeBinding(
+        target, state, setter,
+        [](FilePathEditor& live, const std::filesystem::path& path)
+        {
+            if (!live.CanSetPath(path))
+                throw std::invalid_argument("Bound path must satisfy the editor's exact UTF-8 limits and validator.");
+        });
+    if (mode == BindingMode::TwoWay && data->IsConnected())
+        Detail::AddBindingWriter(data, target, state, target.PathChanged(), setter,
+                                 [](const FilePathEditor& live) { return live.GetPath(); });
+    return binding;
 }
 
 Binding BindText(Label& target, State<std::string>& state)

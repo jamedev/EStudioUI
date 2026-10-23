@@ -3,9 +3,11 @@
 #include <EStudioUI/TextBox.h>
 #include <EStudioUI/FramePacer.h>
 #include <EStudioUI/MemoryPlatformServices.h>
+#include <EStudioUI/WindowTitleBar.h>
 
 #include "ApplicationRuntime.h"
 #include "NativeResizePump.h"
+#include "NativeWindowChrome.h"
 #include "NativeAccessibility.h"
 #include "NativeTextInput.h"
 #include "NativePlatformServices.h"
@@ -218,6 +220,16 @@ struct Window::Impl : std::enable_shared_from_this<Window::Impl>
     std::unique_ptr<UiContext> m_Ui;
     std::unique_ptr<Renderer> m_Renderer;
     std::unique_ptr<Detail::NativeResizePump> m_ResizePump;
+    std::unique_ptr<Detail::NativeWindowChrome> m_Chrome;
+    WidgetRef m_TitleBar;
+    std::string m_Title;
+    std::filesystem::path m_FontPath;
+    std::vector<FontSource> m_FontSources;
+    FontLimits m_FontLimits;
+    Signal<> m_FramePreparing;
+    Signal<> m_ClosedSignal;
+    Point m_HeadlessPosition{100, 100};
+    bool m_HeadlessMaximized = false;
     std::unique_ptr<Detail::NativeAccessibility> m_Accessibility;
     std::unique_ptr<Detail::NativeTextInput> m_TextInput;
     Signal<Key> m_KeyPressed;
@@ -291,6 +303,11 @@ struct Window::Impl : std::enable_shared_from_this<Window::Impl>
             m_Metrics.m_HasScreenCoordinates = true;
         }
 #endif
+        if (m_Headless)
+        {
+            m_Metrics.m_ScreenOrigin = m_HeadlessPosition;
+            m_Metrics.m_HasScreenCoordinates = true;
+        }
         m_Metrics.Validate();
     }
 
@@ -331,7 +348,8 @@ struct Window::Impl : std::enable_shared_from_this<Window::Impl>
 #endif
         );
         if (m_Metrics.m_HasScreenCoordinates)
-            host.m_Capabilities.Set(PlatformFeature::ScreenCoordinates, PlatformSupport::Native);
+            host.m_Capabilities.Set(PlatformFeature::ScreenCoordinates,
+                                    m_Headless ? PlatformSupport::Emulated : PlatformSupport::Native);
 #ifdef _WIN32
         if (!m_Headless)
         {
@@ -409,8 +427,10 @@ struct Window::Impl : std::enable_shared_from_this<Window::Impl>
 
     ~Impl()
     {
+        auto* previousContext = m_Initialized ? glfwGetCurrentContext() : nullptr;
         m_TextInput.reset();
         m_Accessibility.reset();
+        m_Chrome.reset();
         m_ResizePump.reset();
         m_TargetLifetime.request_stop();
         if (m_Ui)
@@ -428,8 +448,13 @@ struct Window::Impl : std::enable_shared_from_this<Window::Impl>
                 glfwDestroyCursor(cursor);
         if (m_Window)
             glfwDestroyWindow(m_Window);
-        if (m_Initialized && --s_GlfwUsers == 0)
-            glfwTerminate();
+        if (m_Initialized)
+        {
+            if (--s_GlfwUsers == 0)
+                glfwTerminate();
+            else
+                glfwMakeContextCurrent(previousContext == m_Window ? nullptr : previousContext);
+        }
     }
 
     template <typename Callback> static void Dispatch(GLFWwindow* window, Callback callback)
@@ -476,6 +501,8 @@ struct Window::Impl : std::enable_shared_from_this<Window::Impl>
 
     bool IsOpen() const
     {
+        if (m_Chrome)
+            m_Chrome->RethrowError();
         if (m_ResizePump)
             m_ResizePump->RethrowError();
         if (m_CallbackError)
@@ -521,6 +548,14 @@ struct Window::Impl : std::enable_shared_from_this<Window::Impl>
         m_TargetLifetime.request_stop();
         if (m_Ui)
             m_Ui->GetDispatcher().Close();
+        try
+        {
+            m_ClosedSignal.Emit();
+        }
+        catch (...)
+        {
+            m_CallbackError = std::current_exception();
+        }
     }
 
     void Render(double time, bool drain)
@@ -557,6 +592,14 @@ struct Window::Impl : std::enable_shared_from_this<Window::Impl>
         }
         if (!m_Owner || m_Closed)
             return;
+        m_FramePreparing.Emit();
+        if (!m_Owner || m_Closed)
+            return;
+        if (m_Chrome)
+        {
+            const auto* title = m_TitleBar.Get();
+            m_Chrome->SetEnabled(title && title->GetContext() == m_Ui.get() && title->IsVisible());
+        }
         glfwMakeContextCurrent(m_Window);
         int width = 0, height = 0, framebufferWidth = 0, framebufferHeight = 0;
         glfwGetWindowSize(m_Window, &width, &height);
@@ -822,6 +865,10 @@ Window::Window(const WindowOptions& options, const std::filesystem::path& fontPa
     m_Impl = std::make_shared<Impl>();
     auto& self = *m_Impl;
     self.m_Headless = options.m_Headless;
+    self.m_Title = options.m_Title;
+    self.m_FontPath = fontPath;
+    self.m_FontSources = options.m_Fonts;
+    self.m_FontLimits = options.m_FontLimits;
     self.m_RenderWhenUnfocused = options.m_RenderWhenUnfocused;
     self.m_Pacer = FramePacer(options.m_MaxFrameRate);
     if (s_GlfwUsers > 0 && s_Headless != options.m_Headless)
@@ -853,7 +900,7 @@ Window::Window(const WindowOptions& options, const std::filesystem::path& fontPa
         glfwWindowHint(GLFW_CONTEXT_CREATION_API, GLFW_OSMESA_CONTEXT_API);
     }
     self.m_Window = glfwCreateWindow(std::max(1, options.m_Width), std::max(1, options.m_Height),
-                                     options.m_Title.c_str(), nullptr, nullptr);
+                                     options.m_Title.c_str(), nullptr, parent ? parent->m_Window : nullptr);
     if (!self.m_Window)
         throw std::runtime_error("Could not create an OpenGL 3.3 window/context.");
     glfwMakeContextCurrent(self.m_Window);
@@ -866,6 +913,8 @@ Window::Window(const WindowOptions& options, const std::filesystem::path& fontPa
         self.m_Font->AddFont(source);
     self.m_Ui = std::make_unique<UiContext>(*self.m_Font);
     self.m_Ui->SetOwnerLifetime(m_Impl);
+    self.m_Ui->m_GpuShareGroup =
+        parent ? parent->m_Ui->m_GpuShareGroup : reinterpret_cast<std::uintptr_t>(self.m_Window);
     self.m_Ui->Root().SetAccessibleName(options.m_Title);
     self.m_Renderer = std::make_unique<Renderer>(*self.m_Font);
     self.m_Ui->GetDispatcher().SetWakeup([] { glfwPostEmptyEvent(); });
@@ -1089,6 +1138,35 @@ Window::Window(const WindowOptions& options, const std::filesystem::path& fontPa
                 return remaining;
             });
         self.m_ResizePump->Attach(glfwGetWin32Window(self.m_Window));
+        const std::weak_ptr<Impl> chromeOwner = m_Impl;
+        self.m_Chrome = std::make_unique<Detail::NativeWindowChrome>(
+            glfwGetWin32Window(self.m_Window), m_Impl,
+            [chromeOwner](Point nativePoint)
+            {
+                const auto state = chromeOwner.lock();
+                if (!state || !state->m_Owner || state->m_Closed)
+                    return WindowHitRegion::Client;
+                auto* title = state->m_TitleBar.Get();
+                if (!title || title->GetContext() != state->m_Ui.get())
+                    return WindowHitRegion::Client;
+                const auto point = state->m_Metrics.FromNative(nativePoint);
+                if (const auto* builtIn = dynamic_cast<WindowTitleBar*>(title))
+                    return builtIn->HitTest(point);
+                auto* hit = state->m_Ui->GetWidgetAt(point);
+                for (auto* node = hit; node; node = node->GetParent())
+                    if (node == title)
+                        return hit->IsWindowDragRegion() ? WindowHitRegion::Caption : WindowHitRegion::Client;
+                return WindowHitRegion::Client;
+            },
+            [window = self.m_Window](Point nativePoint)
+            {
+                Impl::Dispatch(window,
+                               [&](Impl& state)
+                               {
+                                   if (state.m_Ui->GetPhase() == UiPhase::Idle)
+                                       state.DeliverInput(PointerEvent{state.m_Metrics.FromNative(nativePoint)});
+                               });
+            });
     }
 #endif
     self.m_Registration = std::make_shared<Detail::ApplicationWindow>();
@@ -1265,6 +1343,166 @@ void Window::Close()
         self->RequestClose();
     }
     Detail::FlushRetiredWindows();
+}
+
+void Window::SetTitle(std::string title)
+{
+    VerifyAccess();
+    if (title.size() > 4096 || TextBuffer::Sanitize(title) != title)
+        throw std::invalid_argument("A window title must be single-line UTF-8, at most 4096 bytes.");
+    m_Impl->m_Title = std::move(title);
+    glfwSetWindowTitle(m_Impl->m_Window, m_Impl->m_Title.c_str());
+    m_Impl->m_Ui->Root().SetAccessibleName(m_Impl->m_Title);
+    if (auto* titleBar = dynamic_cast<WindowTitleBar*>(m_Impl->m_TitleBar.Get()))
+        titleBar->SetCaption(m_Impl->m_Title);
+}
+
+std::string Window::GetTitle() const
+{
+    VerifyAccess();
+    return m_Impl->m_Title;
+}
+
+void Window::SetTitleBar(Widget* titleBar)
+{
+    VerifyAccess();
+    if (titleBar)
+    {
+        titleBar->VerifyAccess();
+        if (titleBar->GetContext() && titleBar->GetContext() != m_Impl->m_Ui.get())
+            throw std::invalid_argument("A title bar must belong to this window.");
+    }
+    m_Impl->m_TitleBar = WidgetRef(titleBar);
+    if (m_Impl->m_Chrome)
+        m_Impl->m_Chrome->SetEnabled(titleBar && titleBar->GetContext() == m_Impl->m_Ui.get());
+    RequestRepaint();
+}
+
+PlatformSupport Window::GetTitleBarSupport() const
+{
+    VerifyAccess();
+    return m_Impl->m_Headless ? PlatformSupport::Emulated
+           : m_Impl->m_Chrome ? PlatformSupport::Native
+                              : PlatformSupport::Unsupported;
+}
+
+void Window::SetPosition(Point position)
+{
+    VerifyAccess();
+    if (!std::isfinite(position.m_X) || !std::isfinite(position.m_Y) || std::abs(position.m_X) > 1000000 ||
+        std::abs(position.m_Y) > 1000000)
+        throw std::invalid_argument("Window desktop coordinates must be finite and bounded.");
+    m_Impl->m_HeadlessPosition = position;
+    if (!m_Impl->m_Headless)
+        glfwSetWindowPos(m_Impl->m_Window, static_cast<int>(std::round(position.m_X)),
+                         static_cast<int>(std::round(position.m_Y)));
+}
+
+void Window::SetWindowBounds(Rect bounds)
+{
+    VerifyAccess();
+    if (!std::isfinite(bounds.m_X) || !std::isfinite(bounds.m_Y) || !std::isfinite(bounds.m_Width) ||
+        !std::isfinite(bounds.m_Height) || std::abs(bounds.m_X) > 1000000 || std::abs(bounds.m_Y) > 1000000 ||
+        bounds.m_Width < 1 || bounds.m_Height < 1 || bounds.m_Width > 16384 || bounds.m_Height > 16384)
+        throw std::invalid_argument("Window desktop bounds must be finite, with dimensions 1..16384.");
+    const auto self = m_Impl;
+    Detail::ApplicationDispatchScope scope;
+    self->m_HeadlessPosition = {bounds.m_X, bounds.m_Y};
+#ifdef _WIN32
+    if (!self->m_Headless)
+        SetWindowPos(glfwGetWin32Window(self->m_Window), nullptr, static_cast<int>(std::round(bounds.m_X)),
+                     static_cast<int>(std::round(bounds.m_Y)), static_cast<int>(std::round(bounds.m_Width)),
+                     static_cast<int>(std::round(bounds.m_Height)), SWP_NOZORDER | SWP_NOACTIVATE);
+    else
+#endif
+    {
+        if (!self->m_Headless)
+            glfwSetWindowPos(self->m_Window, static_cast<int>(std::round(bounds.m_X)),
+                             static_cast<int>(std::round(bounds.m_Y)));
+        glfwSetWindowSize(self->m_Window, static_cast<int>(std::round(bounds.m_Width)),
+                          static_cast<int>(std::round(bounds.m_Height)));
+    }
+    self->UpdateMetrics();
+    self->m_Ui->RequestRepaint();
+}
+
+Rect Window::GetWindowBounds() const
+{
+    VerifyAccess();
+    const auto& state = *m_Impl;
+#ifdef _WIN32
+    if (!state.m_Headless)
+    {
+        RECT bounds{};
+        if (GetWindowRect(glfwGetWin32Window(state.m_Window), &bounds))
+            return {static_cast<float>(bounds.left), static_cast<float>(bounds.top),
+                    static_cast<float>(bounds.right - bounds.left), static_cast<float>(bounds.bottom - bounds.top)};
+    }
+#endif
+    int width = 0, height = 0, x = 0, y = 0;
+    glfwGetWindowSize(state.m_Window, &width, &height);
+    if (!state.m_Headless)
+        glfwGetWindowPos(state.m_Window, &x, &y);
+    return {state.m_Headless ? state.m_HeadlessPosition.m_X : static_cast<float>(x),
+            state.m_Headless ? state.m_HeadlessPosition.m_Y : static_cast<float>(y), static_cast<float>(width),
+            static_cast<float>(height)};
+}
+
+void Window::Minimize()
+{
+    VerifyAccess();
+    if (!m_Impl->m_Headless)
+        glfwIconifyWindow(m_Impl->m_Window);
+}
+
+void Window::Maximize()
+{
+    VerifyAccess();
+    m_Impl->m_HeadlessMaximized = true;
+    if (!m_Impl->m_Headless)
+        glfwMaximizeWindow(m_Impl->m_Window);
+}
+
+void Window::Restore()
+{
+    VerifyAccess();
+    m_Impl->m_HeadlessMaximized = false;
+    if (!m_Impl->m_Headless)
+        glfwRestoreWindow(m_Impl->m_Window);
+}
+
+bool Window::IsMaximized() const
+{
+    VerifyAccess();
+    return m_Impl->m_Headless ? m_Impl->m_HeadlessMaximized
+                              : glfwGetWindowAttrib(m_Impl->m_Window, GLFW_MAXIMIZED) != 0;
+}
+
+std::unique_ptr<Window> Window::CreateOwnedWindow(WindowOptions options)
+{
+    VerifyAccess();
+    const auto state = m_Impl;
+    options.m_Owner = this;
+    options.m_Headless = state->m_Headless;
+    auto additional = std::move(options.m_Fonts);
+    options.m_Fonts = state->m_FontSources;
+    options.m_Fonts.insert(options.m_Fonts.end(), additional.begin(), additional.end());
+    options.m_FontLimits = state->m_FontLimits;
+    auto window = std::make_unique<Window>(options, state->m_FontPath);
+    window->Ui().CopyStyleSheetFrom(*state->m_Ui);
+    return window;
+}
+
+Signal<>& Window::FramePreparing()
+{
+    VerifyAccess();
+    return m_Impl->m_FramePreparing;
+}
+
+Signal<>& Window::Closed()
+{
+    VerifyAccess();
+    return m_Impl->m_ClosedSignal;
 }
 
 void Window::SetSize(int width, int height)

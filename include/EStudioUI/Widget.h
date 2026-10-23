@@ -77,6 +77,15 @@ class Widget
     //! Removes an immediate child, including its descendants.
     bool RemoveChild(Widget& child);
 
+    //! Transfers this non-root subtree to another owner on the same UI thread.
+    void ReparentTo(Widget& parent);
+
+    //! Marks blank title-bar content as a native window drag region.
+    void SetWindowDragRegion(bool enabled);
+
+    //! Returns whether this exact hit target delegates dragging to the window manager.
+    bool IsWindowDragRegion() const;
+
     //! Removes all children.
     void ClearChildren();
 
@@ -407,6 +416,9 @@ class Widget
     //! Distinguishes target handles even when allocation addresses are reused.
     const std::uint64_t m_TargetKey;
 
+    //! Expires dispatcher-bound handles after a context transfer, including a later return.
+    std::uint64_t m_ContextGeneration = 0;
+
     //! Attaches or detaches a complete subtree.
     void Attach(UiContext* context, Widget* parent);
 
@@ -587,6 +599,12 @@ class Widget
 
     //! Stores owned decisions and issues from the last completed allocation.
     LayoutReport m_LayoutReport;
+
+    //! Delegates title-bar hits on this widget to native window movement.
+    bool m_WindowDragRegion = false;
+
+    //! Rejects recursive ownership transfer during input retirement.
+    bool m_Reparenting = false;
 
     //! Stores absolute geometry for an out-of-flow child.
     std::optional<Rect> m_FloatingBounds;

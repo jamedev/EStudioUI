@@ -18,6 +18,7 @@
 #include "CommandGallery.h"
 #include "ImageGallery.h"
 #include "ScrollStackGallery.h"
+#include "WorkspaceGallery.h"
 
 #include <EStudioUI/ContextMenu.h>
 #include <EStudioUI/ListWidget.h>
@@ -170,6 +171,9 @@ class WidgetGallery
 
     //! Owns the standalone scrolling and page composition gallery.
     std::unique_ptr<ScrollStackGallery> m_ScrollStack;
+
+    //! Owns the real application shell example and workspace framebuffer checks.
+    std::unique_ptr<WorkspaceGallery> m_Workspace;
     //! Observes the visible shortcut to a tab beyond a narrow tab strip.
     WidgetRef m_ConstraintShortcut;
 };

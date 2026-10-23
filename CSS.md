@@ -406,3 +406,28 @@ change is paint-only. StackedWidget pages expose `.stack-page` on both ordinary
 and custom page types; inactive pages leave layout and rendering. Root gradients,
 borders, shadows and compiled effects use the existing GPU pipeline.
 See [SCROLL_STACK.md](SCROLL_STACK.md) and [essential-widgets.css](assets/essential-widgets.css).
+
+
+## Application shell and path controls (0.22)
+
+MainWindow exposes `mainwindow`, `mainwindow-toolbars`, `window-titlebar`,
+`titlebar-menus`, `titlebar-content`, `workspace-central`, `statusbar`,
+`status-message` and `status-permanent`. Title/menu/content strips are clipped;
+caption buttons use `.caption-button` / `.caption-close`. Captions/panel commands
+paint small analytic symbols with the computed color; ordinary backgrounds,
+borders, shadows and hover/disabled states retain the shared GPU pipeline.
+
+Docking exposes `dockmanager`, `.workspace-splitter`, `.dock-tabs`, `dockwidget`,
+`dock-header`, `dock-grip`, `dock-content`, `dock-storage` and `dock-preview`.
+Normal splitter `::handle` and tab-button states apply. Single-panel groups hide
+the selector row. Preview is an ordinary floating paint widget, not a native
+surface or separate rendering pass. Floating windows copy the parent's compiled
+stylesheet on replacement; logical popup ownership follows moved panels.
+
+Path fields expose `filepatheditor` / `folderpicker` with `textbox.path-editor`,
+`.path-browse` and `.path-recent`. Editor selection/caret/preedit/placeholder parts
+remain the normal TextBox parts; recent menus use the shared ContextMenu stack.
+Toolbar navigation uses `.toolbar-scroll`; `toolbar-strip` supplies command gap,
+padding and clipping independently of the outer navigation row. Custom concrete
+ToolBar::Add/AddChild route inside Content. [Working rich styles](assets/essential-widgets.css)
+cover the new components without per-frame parsing or new dependencies.

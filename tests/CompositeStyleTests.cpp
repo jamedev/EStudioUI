@@ -63,7 +63,8 @@ void CompositeMetrics(FontFace& font)
               "numericinput { gap: 9px; } .numeric-increment, .numeric-decrement { width: 39px; } "
               "tabbar { gap: 19px; } contextmenu { gap: 11px; } .menu-separator { height: 4px; }");
     Check(Near(toolbar.GetStyle().m_Gap, 17), "toolbar gap is theme controlled");
-    Check(Near(toolbar.GetChildren()[1]->GetBounds().m_Width, 5), "toolbar separator CSS width reaches layout");
+    Check(Near(toolbar.Content().GetChildren()[1]->GetBounds().m_Width, 5),
+          "toolbar separator CSS width reaches layout");
     Check(Near(chooser.GetStyle().m_Gap, 7), "split-button gap is theme controlled");
     Check(Near(chooser.GetChildren()[1]->GetBounds().m_Width, 47), "split-arrow CSS width reaches hit geometry");
     Check(Near(numeric.GetStyle().m_Gap, 9), "numeric input gap is theme controlled");

@@ -268,6 +268,7 @@ InputGallery::InputGallery(Window& window, Widget& page) : m_Window(window)
         }));
     auto& footer = modal.Add<ToolBar>();
     auto& accept = footer.AddButton("Apply");
+    m_ModalAccept = WidgetRef(&accept);
     auto& cancel = footer.AddButton("Cancel");
     m_Modal = WidgetRef(&modal);
     m_Connections.emplace_back(accept.Clicked().Connect(
@@ -346,7 +347,7 @@ void InputGallery::Verify(const std::filesystem::path& assets, const std::filesy
     ui.KeyEvent(Key::Escape, true);
     Check(!child.IsPending() && m_Session.IsPending() && ui.GetPopupCount() == 1,
           "Escape dismisses one layer and preserves the modal session");
-    auto& apply = *Live(m_Modal).GetChildren().back()->GetChildren().front();
+    auto& apply = Live(m_ModalAccept);
     Click(ui, apply);
     Check(m_Session.GetResult() && m_Session.GetResult()->m_Reason == PopupCloseReason::Accepted &&
               ui.GetFocus() == m_SettingsButton.Get(),

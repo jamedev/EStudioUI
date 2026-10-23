@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.24)
-project(EStudioUI VERSION 0.21.0 LANGUAGES C CXX)
+project(EStudioUI VERSION 0.22.0 LANGUAGES C CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -84,6 +84,9 @@ add_library(EStudioUIGl STATIC third_party/glad/src/gl.c)
 target_include_directories(EStudioUIGl PUBLIC third_party/glad/include)
 
 add_library(EStudioUI STATIC
+    src/FileDialog.cpp src/FilePathEditor.cpp src/FolderPicker.cpp src/StatusBar.cpp
+    src/MainWindow.cpp src/WindowTitleBar.cpp src/WindowCommandButton.cpp src/NativeWindowChrome.cpp src/UiReparent.cpp
+    src/DockWidget.cpp src/DockManager.cpp
     src/Image.cpp src/ImageDecoder.cpp src/Icon.cpp src/ImageView.cpp
     src/Style.cpp src/TextBuffer.cpp src/FontFace.cpp src/FontResource.cpp src/TextLayout.cpp src/TextShaper.cpp src/Renderer.cpp
     src/Widget.cpp src/UiContext.cpp src/Label.cpp src/Button.cpp src/TextBox.cpp src/Window.cpp
@@ -117,7 +120,7 @@ target_include_directories(EStudioUI PUBLIC include)
 target_include_directories(EStudioUI SYSTEM PRIVATE "${ESTUDIOUI_KIWI_INCLUDE_DIR}")
 target_include_directories(EStudioUI SYSTEM PRIVATE "${ESTUDIOUI_STB_INCLUDE_DIR}")
 if(WIN32)
-    target_link_libraries(EStudioUI PRIVATE comctl32 ole32 oleaut32 shell32 uuid uiautomationcore imm32)
+    target_link_libraries(EStudioUI PRIVATE dwmapi comctl32 ole32 oleaut32 shell32 uuid uiautomationcore imm32)
 endif()
 target_link_libraries(EStudioUI PRIVATE EStudioUIGl glfw Freetype::Freetype harfbuzz::harfbuzz SheenBidi::SheenBidi libunibreak::libunibreak ${ESTUDIOUI_UTF8PROC_TARGET})
 target_link_libraries(EStudioUI PUBLIC Threads::Threads)
@@ -143,9 +146,11 @@ if(ESTUDIOUI_BUILD_DEMO)
         demo/WidgetStylesGallery.cpp demo/WidgetStylesProbe.cpp demo/ApplicationProbe.cpp demo/FoundationGallery.cpp
         demo/StateGallery.cpp demo/ModelGallery.cpp demo/LayoutGallery.cpp demo/ConstraintGallery.cpp demo/InputGallery.cpp demo/PlatformGallery.cpp
         demo/PlatformSemanticProbe.cpp demo/TextGallery.cpp demo/EssentialGallery.cpp demo/CommandGallery.cpp
-        demo/GpuProbeWindow.cpp demo/RenderingProfile.cpp demo/ImageGallery.cpp demo/ScrollStackGallery.cpp)
+        demo/GpuProbeWindow.cpp demo/RenderingProfile.cpp demo/ImageGallery.cpp demo/ScrollStackGallery.cpp demo/WorkspaceGallery.cpp)
     target_link_libraries(EStudioUIDemo PRIVATE EStudioUI::EStudioUI EStudioUIGl glfw)
     target_compile_definitions(EStudioUIDemo PRIVATE ESTUDIOUI_DEMO_BUILD_CONFIGURATION="$<CONFIG>")
+    add_executable(EStudioUIWorkspaceExample examples/ApplicationWorkspace.cpp)
+    target_link_libraries(EStudioUIWorkspaceExample PRIVATE EStudioUI::EStudioUI)
     add_executable(EStudioUIConstraintExample examples/ConstraintLayout.cpp)
     target_link_libraries(EStudioUIConstraintExample PRIVATE EStudioUI::EStudioUI)
     add_executable(EStudioUIInputExample examples/InputActions.cpp)
@@ -199,6 +204,13 @@ endif()
 
 if(ESTUDIOUI_BUILD_TESTS)
     enable_testing()
+    add_executable(EStudioUIWorkspaceCoreTests tests/WorkspaceCoreTests.cpp)
+    target_link_libraries(EStudioUIWorkspaceCoreTests PRIVATE EStudioUI::EStudioUI)
+    target_compile_definitions(EStudioUIWorkspaceCoreTests PRIVATE ESTUDIOUI_FONT_PATH="${CMAKE_CURRENT_SOURCE_DIR}/third_party/fonts/NotoSans.ttf")
+    if(MSVC)
+        target_compile_options(EStudioUIWorkspaceCoreTests PRIVATE /utf-8)
+    endif()
+    add_test(NAME WorkspaceCore COMMAND EStudioUIWorkspaceCoreTests)
     add_executable(EStudioUICoreTests tests/CoreTests.cpp)
     target_link_libraries(EStudioUICoreTests PRIVATE EStudioUI::EStudioUI)
     target_compile_definitions(EStudioUICoreTests PRIVATE ESTUDIOUI_FONT_PATH="${CMAKE_CURRENT_SOURCE_DIR}/third_party/fonts/NotoSans.ttf")
@@ -275,6 +287,14 @@ if(ESTUDIOUI_BUILD_TESTS)
         endif()
         add_test(NAME NativePlatform COMMAND EStudioUINativePlatformTests)
         set_tests_properties(NativePlatform PROPERTIES TIMEOUT 90)
+        add_executable(EStudioUINativeChromeTests tests/NativeWindowChromeTests.cpp src/NativeWindowChrome.cpp src/NativeResizePump.cpp)
+        target_include_directories(EStudioUINativeChromeTests PRIVATE src include)
+        target_link_libraries(EStudioUINativeChromeTests PRIVATE comctl32 dwmapi)
+        if(MSVC)
+            target_compile_options(EStudioUINativeChromeTests PRIVATE /utf-8 /W4)
+        endif()
+        add_test(NAME NativeChrome COMMAND EStudioUINativeChromeTests)
+        set_tests_properties(NativeChrome PROPERTIES TIMEOUT 20 LABELS "Native;Window")
         add_executable(EStudioUINativeResizeTests tests/NativeResizeTests.cpp src/NativeResizePump.cpp)
         target_include_directories(EStudioUINativeResizeTests PRIVATE src)
         target_link_libraries(EStudioUINativeResizeTests PRIVATE comctl32)

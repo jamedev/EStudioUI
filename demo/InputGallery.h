@@ -48,6 +48,9 @@ class InputGallery
     //! Observes the modal surface's first editable field.
     WidgetRef m_ModalEditor;
 
+    //! Observes the modal command independently of toolbar composition.
+    WidgetRef m_ModalAccept;
+
     //! Observes a chooser owned logically by a button inside the modal surface.
     WidgetRef m_ModalMenu;
 

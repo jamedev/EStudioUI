@@ -17,6 +17,15 @@ class TabWidget final : public Widget
     //! Removes a page and selects the nearest surviving tab.
     void RemoveTab(int index);
 
+    //! Shows or hides the selector row while preserving pages and current selection.
+    void SetTabBarVisible(bool visible);
+
+    //! Returns whether the selector row is configured visible.
+    bool IsTabBarVisible() const;
+
+    //! Reorders persistent pages/selectors while preserving the selected page identity.
+    void MoveTab(int from, int to);
+
     //! Returns a page by index, throwing for an invalid index.
     Widget& GetPage(int index) const;
 
@@ -67,6 +76,12 @@ class TabWidget final : public Widget
         //! Observes the matching tab button.
         WidgetRef m_Button;
     };
+
+    //! Observes the owned complete selector/navigation row.
+    Widget* m_Navigation = nullptr;
+
+    //! Configured row visibility independent of hidden ancestors and CSS.
+    bool m_TabBarVisible = true;
 
     //! Owns selectors through the widget tree.
     Widget* m_Strip = nullptr;

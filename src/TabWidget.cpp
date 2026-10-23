@@ -3,6 +3,8 @@
 #include <EStudioUI/BoxLayout.h>
 #include <EStudioUI/ListWidget.h>
 
+#include "OverflowStrip.h"
+
 #include <algorithm>
 #include <cmath>
 #include <stdexcept>
@@ -11,122 +13,7 @@ namespace EStudioUI
 {
 namespace
 {
-struct TabStripState
-{
-    std::uint64_t m_RevealTarget = 0;
-    float m_Offset = 0;
-};
-
-//! Preserves natural captions, an explicit viewport offset and minimal focus reveal.
-class TabStripLayout final : public LayoutStrategy
-{
-  public:
-    explicit TabStripLayout(std::shared_ptr<TabStripState> state) : m_State(std::move(state))
-    {
-    }
-
-    std::string_view GetName() const override
-    {
-        return "Scrollable tab strip";
-    }
-
-    LayoutPlan Compute(const LayoutContext& context) const override
-    {
-        auto natural = context;
-        natural.m_Constraints.m_Width.reset();
-        natural.m_DefiniteWidth = false;
-        natural.m_Justification = LayoutJustification::Start;
-        auto plan = BoxLayout(Axis::Horizontal).Compute(natural);
-        const float width = context.m_Constraints.m_Width.value_or(plan.m_Measure.m_Preferred.m_X);
-        float offset = std::clamp(m_State->m_Offset, 0.0f,
-                                  std::max(0.0f, plan.m_Measure.m_Preferred.m_X - width));
-        for (const auto& slot : plan.m_Slots)
-            if (context.m_Children[slot.m_Index].m_Target == m_State->m_RevealTarget)
-            {
-                const auto& bounds = slot.m_Bounds;
-                if (bounds.m_X < offset || bounds.m_Width > width)
-                    offset = bounds.m_X;
-                else if (bounds.m_X + bounds.m_Width > offset + width)
-                    offset = bounds.m_X + bounds.m_Width - width;
-                break;
-            }
-        offset = std::clamp(offset, 0.0f, std::max(0.0f, plan.m_Measure.m_Preferred.m_X - width));
-        for (auto& slot : plan.m_Slots)
-            slot.m_Bounds.m_X -= offset;
-        plan.m_Measure.m_Minimum.m_X = 0;
-        return plan;
-    }
-
-  private:
-    std::shared_ptr<TabStripState> m_State;
-};
-
-//! Invalidates its own arrangement when selection moves inside an unchanged viewport.
-class TabStrip final : public Widget
-{
-  public:
-    TabStrip() : Widget("tabbar"), m_State(std::make_shared<TabStripState>())
-    {
-        SetWidth(SizeRule::Fill());
-        SetHeight(SizeRule::Content());
-        SetLayout(TabStripLayout(m_State));
-    }
-
-    void Reveal(std::uint64_t selected)
-    {
-        if (m_State->m_RevealTarget == selected)
-            return;
-        m_State->m_Offset = GetOffset();
-        m_State->m_RevealTarget = selected;
-        Invalidate(Invalidation::Arrange | Invalidation::HitTest | Invalidation::Paint);
-    }
-
-    bool ScrollPage(int direction)
-    {
-        return ScrollBy(static_cast<float>(direction) * std::max(48.0f, GetContentBounds().m_Width * 0.75f));
-    }
-
-    bool ScrollWheel(Point delta)
-    {
-        const float amount = std::abs(delta.m_X) > std::abs(delta.m_Y) ? delta.m_X : delta.m_Y;
-        return ScrollBy(-amount * 48.0f);
-    }
-
-  protected:
-    bool OnScroll(Point delta, Modifiers) override
-    {
-        return ScrollWheel(delta);
-    }
-
-  private:
-    float GetOffset() const
-    {
-        const auto& children = GetPreparedLayoutReport().m_Children;
-        return children.empty() ? 0.0f
-                                : std::max(0.0f, children.front().m_Rules.m_Margin.m_Left -
-                                                    children.front().m_Slot.m_Bounds.m_X);
-    }
-
-    bool ScrollBy(float distance)
-    {
-        const auto& children = GetPreparedLayoutReport().m_Children;
-        if (children.empty())
-            return false;
-        const float offset = GetOffset();
-        const auto& last = children.back();
-        const float width = last.m_Slot.m_Bounds.m_X + last.m_Slot.m_Bounds.m_Width +
-                            last.m_Rules.m_Margin.m_Right + offset;
-        const float next = std::clamp(offset + distance, 0.0f, std::max(0.0f, width - GetContentBounds().m_Width));
-        if (next == offset)
-            return false;
-        m_State->m_RevealTarget = 0;
-        m_State->m_Offset = next;
-        Invalidate(Invalidation::Arrange | Invalidation::HitTest | Invalidation::Paint);
-        return true;
-    }
-
-    std::shared_ptr<TabStripState> m_State;
-};
+using TabStrip = Detail::OverflowStrip;
 
 //! Includes navigation controls in the strip's wheel-scrolling region.
 class TabNavigation final : public Widget
@@ -202,6 +89,7 @@ class TabButton final : public ToolButton
 TabWidget::TabWidget() : Widget("tabwidget")
 {
     auto& navigation = Add<TabNavigation>();
+    m_Navigation = &navigation;
     navigation.SetLayoutDirection(Axis::Horizontal);
     navigation.SetHeight(SizeRule::Content());
     navigation.SetGap(4);
@@ -301,6 +189,70 @@ void TabWidget::RemoveTab(int index)
         SetCurrentIndex(std::max(0, next));
     else
         m_CurrentChanged.Emit(-1);
+}
+
+void TabWidget::SetTabBarVisible(bool visible)
+{
+    VerifyStructuralMutation();
+    if (m_TabBarVisible == visible)
+        return;
+    m_TabBarVisible = visible;
+    m_Navigation->SetVisible(visible);
+    NotifySemanticsChanged();
+}
+
+bool TabWidget::IsTabBarVisible() const
+{
+    VerifyAccess();
+    return m_TabBarVisible;
+}
+
+void TabWidget::MoveTab(int from, int to)
+{
+    VerifyStructuralMutation();
+    const auto ownerLease = RetainOwner();
+    (void)GetPage(from);
+    (void)GetPage(to);
+    if (from == to)
+        return;
+    const auto selected = m_Current >= 0 ? m_Tabs[static_cast<std::size_t>(m_Current)].m_Page : WidgetRef{};
+    const auto moved = m_Tabs[static_cast<std::size_t>(from)];
+    const auto destination = m_Tabs[static_cast<std::size_t>(to)];
+    const auto reorder = [](auto& items, std::size_t oldIndex, std::size_t newIndex)
+    {
+        if (oldIndex < newIndex)
+            std::rotate(items.begin() + static_cast<std::ptrdiff_t>(oldIndex),
+                        items.begin() + static_cast<std::ptrdiff_t>(oldIndex + 1),
+                        items.begin() + static_cast<std::ptrdiff_t>(newIndex + 1));
+        else
+            std::rotate(items.begin() + static_cast<std::ptrdiff_t>(newIndex),
+                        items.begin() + static_cast<std::ptrdiff_t>(oldIndex),
+                        items.begin() + static_cast<std::ptrdiff_t>(oldIndex + 1));
+    };
+    reorder(m_Tabs, static_cast<std::size_t>(from), static_cast<std::size_t>(to));
+    const auto reorderOwned = [&](Widget& parent, WidgetRef child, WidgetRef before)
+    {
+        auto& children = parent.m_Children;
+        const auto oldItem = std::find_if(children.begin(), children.end(),
+                                          [child](const auto& item) { return item.get() == child.Get(); });
+        const auto newItem = std::find_if(children.begin(), children.end(),
+                                          [before](const auto& item) { return item.get() == before.Get(); });
+        reorder(children, static_cast<std::size_t>(oldItem - children.begin()),
+                static_cast<std::size_t>(newItem - children.begin()));
+        parent.Invalidate(Invalidation::Structure);
+    };
+    // Ownership order supplies selector layout and semantic traversal; page identity remains stable.
+    reorderOwned(*m_Strip, moved.m_Button, destination.m_Button);
+    reorderOwned(*m_Pages, moved.m_Page, destination.m_Page);
+    const int previous = m_Current;
+    for (std::size_t index = 0; index < m_Tabs.size(); ++index)
+        if (m_Tabs[index].m_Page.Get() == selected.Get())
+            m_Current = static_cast<int>(index);
+    if (m_Current >= 0)
+        static_cast<TabStrip*>(m_Strip)->Reveal(
+            m_Tabs[static_cast<std::size_t>(m_Current)].m_Button.Get()->m_TargetKey);
+    if (previous != m_Current)
+        m_CurrentChanged.Emit(m_Current);
 }
 
 Widget& TabWidget::GetPage(int index) const
@@ -477,13 +429,15 @@ bool TabWidget::OnKeyPreview(Key key, bool down, bool, Modifiers modifiers)
 SemanticInfo TabWidget::DescribeSemantics() const
 {
     auto info = Widget::DescribeSemantics();
-    info.m_SelectionRequired = !m_Tabs.empty();
+    if (!m_TabBarVisible)
+        info.m_Role = SemanticRole::Group;
+    info.m_SelectionRequired = m_TabBarVisible && !m_Tabs.empty();
     return info;
 }
 
 std::size_t TabWidget::GetSemanticSelectionCount() const
 {
-    return m_Current >= 0 && static_cast<std::size_t>(m_Current) < m_Tabs.size() &&
+    return m_TabBarVisible && m_Current >= 0 && static_cast<std::size_t>(m_Current) < m_Tabs.size() &&
                    m_Tabs[static_cast<std::size_t>(m_Current)].m_Button.Get()
                ? 1
                : 0;

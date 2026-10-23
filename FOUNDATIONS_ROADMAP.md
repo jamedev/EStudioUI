@@ -641,3 +641,27 @@ Win32/WGL framebuffer integration, five extra native Debug runs of 99 checks
 each, Linux/software GL 41/41, isolated TSan 6/6, and local ASan/UBSan 41/41.
 [Verification](verification/SCROLL_STACK_0_21.md) records exact evidence and actual
 renderer captures without closing the separate human IME/AT/mixed-DPI gates.
+
+
+## File controls and application workspaces (0.22)
+
+W29, W20/W30 and initial W21 reuse F09 input/actions, F11 platform/popup ownership,
+F10a text, F08 layouts and the existing GPU renderer. FilePathEditor/FolderPicker
+compose existing editors and native asynchronous pickers; BindPath keeps State
+validation/rollback. MainWindow adds CSS title-row menus/custom widgets, overflow
+commands, central content and status. Windows non-client hit regions preserve
+system caption/resize behavior and continue the ordinary modal-resize scheduler.
+
+DockManager retains actual panel subtrees across four resizable tab groups and
+owned floating windows. Reparenting retires input/preedit/popups, migrates logical
+popup ownership, expires old dispatcher-handle generations and preserves shared
+State/model/action bindings. Owned windows share the GPU group and font settings;
+retired-window destruction restores the prior current GL context. Workspace
+snapshots are bounded and fully validated before applying changes.
+
+[Contracts](WORKSPACES.md) and [verification](verification/WORKSPACES_0_22.md)
+record delivered scope and test evidence. This is feature-driven workspace
+persistence, not completion of generic F16 document/history services. Arbitrary
+nested dock trees, W22 document workspaces, F10b and F14 remain deferred. Windows
+11 Snap Layout overlays, physical mixed-monitor transitions and real AT stay in
+the separate interactive F11 acceptance list.
