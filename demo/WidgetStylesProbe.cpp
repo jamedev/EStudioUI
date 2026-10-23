@@ -1,4 +1,5 @@
 #include "WidgetStylesProbe.h"
+#include "GpuProbeWindow.h"
 
 #include <EStudioUI/ListWidget.h>
 #include <EStudioUI/NumericInput.h>
@@ -188,6 +189,7 @@ void VerifyWidgetStyles(const std::filesystem::path& assets, const std::filesyst
     std::string error;
     Check(ui.SetStyleSheet(Theme(false), error), "rich part stylesheet parses: " + error);
     window.RenderFrame(0);
+    AllowOversizedGpuProbe(window);
 
     Renderer reference(ui.GetFont());
     reference.SetPartialRedrawEnabled(false);
@@ -203,7 +205,9 @@ void VerifyWidgetStyles(const std::filesystem::path& assets, const std::filesyst
         GLint viewport[4]{};
         glGetIntegerv(GL_VIEWPORT, viewport);
         const int width = viewport[2], height = viewport[3];
-        Check(width == static_cast<int>(Width) * scale && height == static_cast<int>(Height) * scale,
+        const auto dpi = window.Platform().GetWindowMetrics().m_PixelScale;
+        Check(width == static_cast<int>(std::round(Width * static_cast<float>(scale) * dpi.m_X)) &&
+                  height == static_cast<int>(std::round(Height * static_cast<float>(scale) * dpi.m_Y)),
               "native framebuffer matches requested DPI test scale");
         const auto render = [&](Renderer& renderer)
         {

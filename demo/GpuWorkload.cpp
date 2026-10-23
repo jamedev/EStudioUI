@@ -1,4 +1,5 @@
 #include "GpuWorkload.h"
+#include "GpuProbeWindow.h"
 
 #include <EStudioUI/Button.h>
 #include <EStudioUI/Label.h>
@@ -38,6 +39,7 @@ void VerifyPixels(Window& owner, const std::filesystem::path& assets, const std:
     options.m_Height = 360;
     options.m_Headless = owner.IsHeadless();
     Window window(options, assets / "NotoSans.ttf");
+    AllowOversizedGpuProbe(window);
     auto& ui = window.Ui();
     std::string error;
     Check(ui.SetStyleSheet(R"CSS(

@@ -193,6 +193,22 @@ void TabOverflow(FontFace& font)
     Check(list && list->GetItem(28) == "Renamed workspace", "Reopening refreshes tab chooser captions");
     ui.KeyEvent(Key::Escape, true);
     Check(!ui.GetPopup(), "Escape dismisses the chooser without changing pages");
+    Click(ui, Center(*chooser));
+    list = dynamic_cast<ListWidget*>(ui.GetPopup());
+    tabs.RemoveTab(28);
+    list->SetCurrentIndex(28);
+    ui.KeyEvent(Key::Enter, true);
+    Check(!ui.GetPopup() && tabs.GetCurrentIndex() == 27,
+          "Choosing a removed page dismisses without selecting an unrelated replacement");
+    Click(ui, Center(*chooser));
+    list = dynamic_cast<ListWidget*>(ui.GetPopup());
+    ui.KeyEvent(Key::Escape, true);
+    const WidgetRef tabsRef(&tabs);
+    list->CurrentChanged().Connect([&](int) { ui.Root().RemoveChild(tabs); });
+    Click(ui, Center(*chooser));
+    ui.Prepare(5000, 260);
+    Check(!tabsRef.Get() && !ui.GetPopup(),
+          "Refreshing a chooser tolerates owner deletion from a list selection observer");
 }
 
 void TabsAndCommands(FontFace& font)

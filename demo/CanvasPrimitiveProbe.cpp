@@ -1,4 +1,5 @@
 #include "CanvasPrimitiveProbe.h"
+#include "GpuProbeWindow.h"
 
 #include <EStudioUI/Window.h>
 #include <glad/gl.h>
@@ -35,6 +36,7 @@ void VerifyCanvasPrimitives(const std::filesystem::path& assets, const std::file
     options.m_Height = 360;
     options.m_Headless = headless;
     Window window(options, assets / "NotoSans.ttf");
+    AllowOversizedGpuProbe(window);
     window.RenderFrame();
     auto& retained = window.Graphics();
     Renderer reference(window.Ui().GetFont());

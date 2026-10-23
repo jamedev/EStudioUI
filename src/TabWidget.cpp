@@ -275,6 +275,7 @@ void TabWidget::ShowTabChooser()
     if (!GetContext() || m_Tabs.empty())
         return;
     const auto lease = RetainOwner();
+    const WidgetRef self(this);
     auto* list = dynamic_cast<ListWidget*>(m_Chooser.Get());
     if (!list)
     {
@@ -284,7 +285,6 @@ void TabWidget::ShowTabChooser()
         popup->SetWidth(SizeRule::Content(0, 360));
         list = &static_cast<ListWidget&>(GetContext()->AddOwnedPopup(std::move(popup), *this));
         m_Chooser = WidgetRef(list);
-        const WidgetRef self(this);
         const auto choose = [self](int index)
         {
             if (auto* live = dynamic_cast<TabWidget*>(self.Get()))
@@ -302,8 +302,14 @@ void TabWidget::ShowTabChooser()
         captions.push_back(static_cast<ToolButton*>(tab.m_Button.Get())->GetText());
         m_ChooserPages.push_back(tab.m_Page);
     }
+    const WidgetRef listRef(list);
+    const auto current = m_Current;
     list->SetItems(std::move(captions));
-    list->SetCurrentIndex(m_Current);
+    if (!self.Get() || !listRef.Get())
+        return;
+    list->SetCurrentIndex(current);
+    if (!self.Get() || !listRef.Get())
+        return;
     PopupOptions options;
     options.m_AnchorWidget = m_ChooserButton;
     options.m_Placement = PopupPlacement::Below;

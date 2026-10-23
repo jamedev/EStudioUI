@@ -1,4 +1,5 @@
 #include "PainterProbe.h"
+#include "GpuProbeWindow.h"
 
 #include <EStudioUI/PaintWidget.h>
 #include <EStudioUI/Window.h>
@@ -56,6 +57,7 @@ void VerifyPainter(const std::filesystem::path& assets, const std::filesystem::p
     options.m_Height = 360;
     options.m_Headless = headless;
     Window window(options, assets / "NotoSans.ttf");
+    AllowOversizedGpuProbe(window);
     std::string error;
     Check(window.Ui().SetStyleSheet(
               "window { background: #101828; } paint-probe { background: #00ff00; border: 4px solid #0000ff; "

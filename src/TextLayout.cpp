@@ -30,6 +30,7 @@ TextCaret TextLayout::HitTestCaret(float x) const
     next = std::lower_bound(m_VisualCarets.begin(), next, edge,
                             [](const VisualCaret& stop, float value) { return stop.m_X < value; });
     const bool fromRight = edge == m_VisualCarets.front().m_X || (edge != m_VisualCarets.back().m_X && x > edge);
+    // Different logical endpoints can occupy one bidi join. Follow the pointed grapheme's edge.
     const auto limit = std::min<std::size_t>(8, static_cast<std::size_t>(m_VisualCarets.end() - next));
     for (std::size_t i = 0; i < limit; ++i)
     {

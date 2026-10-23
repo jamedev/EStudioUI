@@ -139,7 +139,8 @@ if(ESTUDIOUI_BUILD_DEMO)
         demo/CustomWidgetGallery.cpp demo/PainterProbe.cpp demo/InputControlsProbe.cpp
         demo/WidgetStylesGallery.cpp demo/WidgetStylesProbe.cpp demo/ApplicationProbe.cpp demo/FoundationGallery.cpp
         demo/StateGallery.cpp demo/ModelGallery.cpp demo/LayoutGallery.cpp demo/ConstraintGallery.cpp demo/InputGallery.cpp demo/PlatformGallery.cpp
-        demo/PlatformSemanticProbe.cpp demo/TextGallery.cpp demo/EssentialGallery.cpp demo/CommandGallery.cpp)
+        demo/PlatformSemanticProbe.cpp demo/TextGallery.cpp demo/EssentialGallery.cpp demo/CommandGallery.cpp
+        demo/GpuProbeWindow.cpp)
     target_link_libraries(EStudioUIDemo PRIVATE EStudioUI::EStudioUI EStudioUIGl glfw)
     add_executable(EStudioUIConstraintExample examples/ConstraintLayout.cpp)
     target_link_libraries(EStudioUIConstraintExample PRIVATE EStudioUI::EStudioUI)

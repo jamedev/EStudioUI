@@ -7,6 +7,7 @@
 #include "InputControlsProbe.h"
 #include "WidgetStylesProbe.h"
 #include "ApplicationProbe.h"
+#include "GpuProbeWindow.h"
 
 #include <EStudioUI/Button.h>
 #include <EStudioUI/TextBox.h>
@@ -323,6 +324,7 @@ class Demo
     void Verify(const fs::path& output)
     {
         fs::create_directories(output);
+        AllowOversizedGpuProbe(m_Window);
         auto& ui = m_Window.Ui();
         auto& gpu = m_Window.Graphics();
         m_Tabs->SetCurrentIndex(0);
