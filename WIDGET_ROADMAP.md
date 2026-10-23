@@ -82,8 +82,8 @@ only change appearance should share implementations and semantic roles.
 | W17 | StackedWidget | Persistent pages without requiring a visible tab strip | Essential — **0.21 delivered** |
 | W18 | GroupBox / Frame / Separator | Titled/checkable groups and reusable visual structure | Essential — **0.18 delivered** |
 | W19 | CollapsiblePanel / Accordion / ToolBox | Expandable inspector sections and categorized tools | High |
-| W20 | MainWindow | Central workspace, title-row menus/widgets, toolbars, status, owned windows | High — **0.22 implemented; native/manual acceptance recorded separately** |
-| W21 | DockWidget / DockManager | Four edge tab groups, splitters, dock/float, grip dragging, tabify/reorder and bounded restore | High — **0.22 implemented**; arbitrary nested dock trees remain later |
+| W20 | MainWindow | Central workspace, title-row menus/widgets, toolbars, status, owned windows | High — **0.22 delivered; interactive acceptance recorded separately** |
+| W21 | DockWidget / DockManager | Four edge tab groups, splitters, dock/float, grip dragging, tabify/reorder and bounded restore | High — **0.22 delivered**; arbitrary nested dock trees remain later |
 | W22 | DocumentWorkspace | Multiple documents, close/reorder/detach tabs, unsaved-state indicators | High |
 | W23 | Overlay / Drawer | Anchored or sliding temporary panels | Later |
 
@@ -96,8 +96,8 @@ only change appearance should share implementations and semantic roles.
 | W26 | Popup / Popover | Shared anchored interactive content and dismissal/focus behavior | Essential — **0.19 delivered** |
 | W27 | Dialog | In-window modal/modeless operation, ownership, default/cancel actions | Essential — **0.19 delivered** |
 | W28 | MessageBox / InputDialog / DialogButtonBox | Reusable confirmation, errors, input requests, standard responses | Essential — **0.19 delivered** |
-| W29 | FileDialog / FolderPicker / FilePathEditor | Asynchronous open/save/folder selection, filters, recent paths, canonical path bindings | Essential — **0.22 implemented** |
-| W30 | StatusBar | Message and permanent application widget area | High — **0.22 implemented** |
+| W29 | FileDialog / FolderPicker / FilePathEditor | Asynchronous open/save/folder selection, filters, recent paths, canonical path bindings | Essential — **0.22 delivered** |
+| W30 | StatusBar | Message and permanent application widget area | High — **0.22 delivered** |
 | W31 | Banner / Toast / ValidationMessage | Nonmodal and field-level feedback with accessible announcements | High |
 | W32 | ColorPicker / ColorEditor | Palette, RGB/HSV, alpha, hexadecimal input | High |
 | W33 | FontPicker / FontEditor | Family, size, style, preview using the shared font service | High |
@@ -238,3 +238,12 @@ including Windows title-row menus/widgets with native non-client behavior.
 CSS and persistence. [Verification](verification/WORKSPACES_0_22.md) distinguishes
 automated checks from Windows 11 snap, mixed-DPI and interactive accessibility acceptance.
 W22 document workspaces, arbitrary nested dock trees, F10b and F14 remain separate work.
+
+
+Final 0.22 source `d2aa847` passes Windows Release/Debug **44/44** each,
+native Win32/WGL framebuffer integration and PowerShell profile smoke, five
+extra native Debug lifecycle runs (**99 checks each**), Linux **42/42**, isolated
+TSan **6/6**, and local ASan/UBSan **42/42**. See the
+[final-source CI run](https://github.com/jamedev/EStudioUI/actions/runs/39980739125)
+and [verification record/captures](verification/WORKSPACES_0_22.md). Windows 11
+flyouts, physical mixed-DPI/snap and real AT remain interactive acceptance work.

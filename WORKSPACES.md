@@ -96,7 +96,9 @@ Application-specific existence/permission checks belong in background work.
 Browsing coalesces repeated requests, tracks an owner-side session and ignores
 accepted results after a newer edit/options change or transfer to another
 context. Recent paths retain at most sixteen distinct nonempty entries, with
-accepted selections placed first. `PathChanged` delivers owned snapshots with
+accepted selections placed first. Recent menus follow transformed/resized
+field geometry; choices rejected by the current editor validator are disabled.
+`PathChanged` delivers owned snapshots with
 bounded reentrant notification; `BrowseFinished` reports terminal picker
 outcomes. A picker already started before a panel transfer remains owned by its
 original native surface until completion/cancellation; its result cannot
@@ -144,8 +146,9 @@ use CreateOwnedWindow rather than independent Window instances.
 roots, owned overlays, cycles, incompatible GPU groups and reentrant transfers.
 A retained WidgetRef and a shared State binding follow a moved widget. A typed
 UiHandle captured from the old context remains dispatcher-bound and reports
-TargetExpired after a context transfer, including a later return to the original window. Use shared State for
-long-lived worker data or obtain the destination's handle for direct delivery.
+TargetExpired after a context transfer, including a later return to the original
+window. Use shared State for long-lived worker data or obtain the destination's
+handle for direct delivery.
 Keep application state in a store whose lifetime spans the workspace; a
 floating window's private StateStore naturally expires when that host retires.
 

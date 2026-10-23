@@ -665,3 +665,11 @@ persistence, not completion of generic F16 document/history services. Arbitrary
 nested dock trees, W22 document workspaces, F10b and F14 remain deferred. Windows
 11 Snap Layout overlays, physical mixed-monitor transitions and real AT stay in
 the separate interactive F11 acceptance list.
+
+
+The final 0.22 implementation (`d2aa847`) is verified by Windows Release/Debug
+44/44 each, actual native WGL/Mesa framebuffer integration, PowerShell profile
+smoke and five extra native Debug lifecycle runs of 99 checks each. Linux passes
+42/42 and isolated TSan 6/6; local ASan/UBSan passes 42/42. Both CI builds have
+zero C++ compiler warnings. [Evidence](verification/WORKSPACES_0_22.md) links the
+exact-source workflow and actual renderer captures; interactive F11 gates stay open.

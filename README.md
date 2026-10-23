@@ -39,6 +39,8 @@ See [contracts and scope](WORKSPACES.md), the [compiled example](examples/Applic
 and [verification](verification/WORKSPACES_0_22.md). Interactive Windows 11 flyouts,
 physical snap/DPI behavior and assistive-technology acceptance remain human checks.
 
+![Application workspace rendered by EStudioUI](verification/workspace-wide.png)
+
 ## Scrolling and persistent pages (0.21)
 
 The **Scrolling & pages** tab demonstrates these controls. `ScrollBar` provides proportional horizontal/vertical
