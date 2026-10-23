@@ -7,7 +7,14 @@ and the interactive gallery compile against the delivered headers.
 Release regression: 37/37 Linux CTest suites pass, including 75 checks in
 EssentialWidgets and the actual software-GL framebuffer integration (12.28
 seconds total). No compiler warnings. The public CommonControls example compiles.
-Sanitizer and Windows results are recorded after their final runs.
+ASan/UBSan: 37/37 suites pass, including GPU integration (84.32 seconds).
+Leak detection is disabled under host tracing; native third-party libraries/Mesa
+are uninstrumented. Tested code: db969c0.
+
+Windows / MSVC 2022 / x64-windows-estudioui: Release 39/39, Debug 39/39,
+plus three extra native Debug runs of 89 checks each. No compiler warnings.
+Linux CI: Release/software GL 37/37 and isolated TSan 6/6.
+[Verified CI run](https://github.com/jamedev/EStudioUI/actions/runs/39883366899).
 
 The new CPU fixture checks three-state choices, shared boolean bindings/actions,
 coherent exclusive selection, keyboard activation/navigation, wrong-thread and
@@ -45,3 +52,9 @@ input methods, Narrator and mixed-monitor observations.
 ![Virtual combo popup](essential-popup-0-18.png)
 
 ![Nonactivating tooltip](essential-tooltip-0-18.png)
+
+The actual interactive EssentialGallery composition was also rendered with both
+dark and light styles and checked to start idle. This uses its scrolling form,
+compound controls and progress strip, rather than a substitute mockup.
+
+![Interactive essential gallery](essential-gallery-0-18.png)
