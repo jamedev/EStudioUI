@@ -211,6 +211,12 @@ per-feature F12 resource budgets and actual framebuffer checks. Standalone
 ScrollBar/StackedWidget ship in [0.21](SCROLL_STACK.md). Native-service widgets and
 broader workspace controls follow; document editing and module extraction remain deferred.
 
+The 0.21 ScrollBar/StackedWidget increment is verified at `795f638`: Windows
+Release/Debug 42/42 each, native Win32/WGL framebuffer checks and five extra
+native Debug runs of 99 checks each; Linux/software GL 41/41 and isolated TSan
+6/6; local ASan/UBSan 41/41. See [verification](verification/SCROLL_STACK_0_21.md)
+for exact source, actual gallery/contract captures and remaining human platform gates.
+
 The 0.20 image/icon increment is verified at `fbdf62d`: Windows Release/Debug
 41/41 each, native Win32/WGL framebuffer checks and five extra native Debug runs
 of 97 checks, Linux/software GL 40/40 and isolated TSan 6/6, local ASan/UBSan

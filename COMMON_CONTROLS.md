@@ -1,7 +1,6 @@
 # Essential controls (0.18)
 
-The demo opens **Essential widgets**. Its header shortcut returns to this page
-from the older galleries. The first batch provides CheckBox, RadioButton /
+The **Essential widgets** tab demonstrates the first common-control batch. It provides CheckBox, RadioButton /
 RadioGroup, ComboBox, ScrollArea, Splitter, GroupBox, Frame, Separator,
 ProgressBar, BusyIndicator and ToolTip. No new runtime dependency is added.
 See the compiled [small example](examples/CommonControls.cpp), the interactive

@@ -2,8 +2,10 @@
 
 The implementation adds W15 standalone ScrollBar and W17 StackedWidget on the
 existing foundation contracts. No dependency or new continuous timer is added.
-Source and evidence commit identities and completed integration results are
-recorded below as validation finishes; pending checks are not claimed as passed.
+Source is published in `e057186` plus the local-hover follow-up `795f638`.
+CI for the final source: [Build and test run 39954728552](https://github.com/jamedev/EStudioUI/actions/runs/39954728552).
+Automated integration passed for that exact final source. Human platform
+acceptance and hardware performance limits remain separate below.
 
 ## Behavioral coverage
 
@@ -44,7 +46,27 @@ type and exercises its RangeValue write/read path on the owning dispatcher.
   complete development run also passed 41/41 in 19.39 and 20.71 seconds.
 - No C++ compiler warnings observed. The existing libunibreak CMake developer
   scope warnings remain unchanged.
-- ASan/UBSan and Windows CI: pending at this source/evidence checkpoint.
+- Final GNU 13 Debug (`-O1 -g1`) ASan/UBSan: **41/41 passed**, 92.71 seconds,
+  including GPU integration (32.87 seconds) and rendering-profile smoke (9.38 seconds).
+  Every generated object and executable had a valid ELF header before testing.
+  Leak detection was disabled under host tracing; third-party libraries were not
+  rebuilt with instrumentation. The earlier pre-hover-fix checkpoint also passed
+  41/41 in 99.76 seconds and is not substituted for the final-source result.
+- Independent Linux CI (`120417940620`): **41/41 passed**, 25.41 seconds,
+  including actual software-GL GPU integration (14.05 seconds) and rendering
+  profile smoke (7.00 seconds). The isolated foundation CPU ThreadSanitizer
+  configuration passed **6/6**, 3.39 seconds; this does not claim that native/GL
+  or every widget control is ThreadSanitizer-instrumented.
+- Windows CI (`120417941179`): MSVC Release **42/42 passed**, 10.13 seconds;
+  MSVC Debug **42/42 passed**, 61.09 seconds. Windows native UIA verifies the
+  scrollbar control type and canonical RangeValue write/read.
+- Actual native Win32/WGL framebuffer integration: **PASS**, with staged
+  Mesa 26.2.4 llvmpipe (LLVM 23.1.2), followed by the PowerShell rendering-profile
+  smoke flow (`-Frames 12 -Warmup 4 -Rate 0`). This is real native context/input
+  and framebuffer execution on a software driver, not a hardware speed result.
+- Five additional native Debug lifecycle runs: **99 checks each**, all passed.
+- The complete final-source [CI run](https://github.com/jamedev/EStudioUI/actions/runs/39954728552)
+  concluded **success**. No C++ compiler warnings were observed in either job.
 
 Software GL pixel checks establish rendering correctness and work accounting,
 not a hardware GPU utilization or 60 FPS claim. Real assistive technology,
@@ -67,3 +89,13 @@ and restoration; real pixels verify neutral track hover and the correct hover
 fill even when the pointer lies outside the shrunken thumb. No unrelated engine
 state/animation policy was changed. Root widget CSS animation remains supported;
 shared scrollbar palettes do not run independent part timelines.
+
+## Interactive gallery capture
+
+[Actual styled gallery](scroll-stack-gallery-0-21.png) is the shipped
+ScrollStackGallery constructor rendered in an isolated 1,000 x 650 production
+headless Window, with all eight demo stylesheets including the dark theme.
+It is an actual C++ framebuffer capture, converted directly from PPM to PNG.
+The contract fixture above remains separate from this interactive-panel capture.
+
+PNG SHA-256: `0a7ff1302a5ec155102c4c2733d72cf518c268d6da2a8030ba2650314bec2301`.

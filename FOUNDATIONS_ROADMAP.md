@@ -635,3 +635,9 @@ through the ordinary visibility/input boundary. No new dependency, timer or
 foundation gate is introduced. See [contracts](SCROLL_STACK.md) and
 [verification](verification/SCROLL_STACK_0_21.md). Continue native-service widgets
 and application workspace controls; F10b/F14 remain deferred.
+
+The final 0.21 source (`795f638`) passed Windows Release/Debug 42/42 each, native
+Win32/WGL framebuffer integration, five extra native Debug runs of 99 checks
+each, Linux/software GL 41/41, isolated TSan 6/6, and local ASan/UBSan 41/41.
+[Verification](verification/SCROLL_STACK_0_21.md) records exact evidence and actual
+renderer captures without closing the separate human IME/AT/mixed-DPI gates.
