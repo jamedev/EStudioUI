@@ -232,8 +232,13 @@ readback or CPU image copy to ordinary rendering/presentation.
 
 `SetPartialRedrawEnabled(false)` selects the full redraw reference path, submitting
 every recorded primitive without damage culling. `SetGpuTimingEnabled(true)`
-enables an eight-slot `GL_TIME_ELAPSED` query ring; only available results are
-read, and busy slots never stall submission. Timing is disabled by default.
+enables an eight-frame ring with four `GL_TIMESTAMP` markers per frame; only
+available results are read, and busy slots never stall submission. Completed
+samples carry their submitted frame serial and separate upload, retained drawing
+and presentation-copy scopes. Native swap/compositor work is outside those scopes.
+Zero-bit timestamp counters disable timing; wrapping/nonmonotonic samples are
+discarded. Timing is disabled by default. Damage diagnostics distinguish budget
+fallback from mandatory full redraw and retain the original dirty-tile area.
 See [PERFORMANCE.md](PERFORMANCE.md) for reproducible native profiling.
 
 The first backend is GL 3.3 core to keep setup and platform dependencies small.
@@ -508,9 +513,12 @@ pruning. See [WIDGET_STYLING.md](WIDGET_STYLING.md).
 
 ## Common-control composition (0.18)
 
-TabWidget reserves a navigation row containing the actual `tabbar` and a persistent
-tab chooser. A pure row strategy preserves caption widths and clips around the
-selected/focused selector. The chooser reuses the owned popup stack and a virtual
+TabWidget reserves a navigation row containing backward/forward arrow buttons,
+the actual `tabbar` and a persistent tab chooser. A pure row strategy preserves
+caption widths and an explicit viewport offset. Selection/focus uses minimal
+reveal; it does not realign a visible selector between pointer press and release.
+Arrows and horizontal/vertical wheel motion scroll the viewport independently of
+page selection. The chooser reuses the owned popup stack and a virtual
 ListWidget; captions and weak page identities are copied on opening, never during
 paint. Choosing a snapshot row resolves its persistent page again after popup
 closure, so removal of preceding tabs cannot select an unrelated page.

@@ -348,7 +348,7 @@ class UiContext
     //! Ends platform sessions before closing the owner queue or native window.
     void ClosePlatformServices();
 
-    //! Arms help for a changed hover or keyboard focus target.
+    //! Arms hover help, or keyboard help for an explicit preferred target.
     void ArmToolTip(Widget* preferred = nullptr);
     //! Cancels pending and visible help without moving focus.
     void DismissToolTip();

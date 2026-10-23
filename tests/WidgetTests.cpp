@@ -181,9 +181,18 @@ void TabOverflow(FontFace& font)
     ui.KeyEvent(Key::Enter, true);
     Check(tabs.GetCurrentIndex() == 28 && &tabs.GetPage(28) == selectedPage.Get(),
           "An open chooser keeps persistent page identities when preceding tabs are removed");
+    ui.Prepare(260, 260);
+    Check(last->GetBounds().m_X >= last->GetClip().m_X - 0.01f &&
+              last->GetBounds().m_X + last->GetBounds().m_Width <=
+                  last->GetClip().m_X + last->GetClip().m_Width + 0.01f,
+          "Live narrowing keeps a fitting selected tab entirely inside its viewport");
+    const float naturalCaptionWidth = last->GetBounds().m_Width;
     ui.Prepare(240, 260);
-    Check(last->GetBounds().m_X + last->GetBounds().m_Width <= last->GetClip().m_X + last->GetClip().m_Width + 0.01f,
-          "Live narrowing keeps the selected tab inside its viewport");
+    Check(Near(last->GetBounds().m_Width, naturalCaptionWidth) &&
+              last->GetBounds().m_Width > last->GetClip().m_Width &&
+              Near(last->GetBounds().m_X, last->GetClip().m_X) &&
+              chooser->GetBounds().m_X + chooser->GetBounds().m_Width <= 240.01f,
+          "An oversized natural caption reveals its left edge and clips without displacing the chooser");
     ui.Prepare(5000, 260);
     Check(FindTabCommand(tabs, "Workspace 1")->GetBounds().m_X >= 0 && last->GetBounds().m_X >= 0,
           "Widening restores the natural tab row after overflow");
@@ -209,6 +218,133 @@ void TabOverflow(FontFace& font)
     ui.Prepare(5000, 260);
     Check(!tabsRef.Get() && !ui.GetPopup(),
           "Refreshing a chooser tolerates owner deletion from a list selection observer");
+}
+
+void TabViewportNavigation(FontFace& font, const char* theme)
+{
+    UiContext ui(font);
+    std::string error;
+    Check(ui.LoadStyleSheet(std::filesystem::path(ESTUDIOUI_ASSETS_PATH) / theme, error),
+          "The tab navigation regression loads its complete theme: " + error);
+    auto& tabs = ui.Root().Add<TabWidget>();
+    tabs.SetHeight(SizeRule::Fill());
+    for (int i = 0; i < 30; ++i)
+        tabs.AddTab("Workspace " + std::to_string(i));
+    ui.Prepare(540, 260);
+    auto* chooser = FindTabCommand(tabs, "...");
+    auto* backward = FindTabCommand(tabs, "‹");
+    auto* forward = FindTabCommand(tabs, "›");
+    auto* first = FindTabCommand(tabs, "Workspace 0");
+    auto* last = FindTabCommand(tabs, "Workspace 29");
+    auto* previous = FindTabCommand(tabs, "Workspace 28");
+    Check(chooser && backward && forward && first && last && previous,
+          "Tab navigation exposes persistent left/right arrows and the complete chooser");
+    const auto selectedColor = first->GetStyle().m_Color;
+    const auto ordinaryColor = previous->GetStyle().m_Color;
+    Check(selectedColor != ordinaryColor && backward->GetContentBounds().m_Width > 10 &&
+              forward->GetContentBounds().m_Width > 10,
+          "Selected tab CSS is distinct and themed navigation arrows retain room for their glyphs");
+    auto* strip = first->GetParent();
+    Click(ui, Center(*chooser));
+    ui.Prepare(540, 260);
+    ui.KeyEvent(Key::End, true);
+    ui.KeyEvent(Key::Enter, true);
+    ui.Prepare(540, 260);
+    Check(tabs.GetCurrentIndex() == 29 && !ui.GetPopup(), "Choosing the last page reveals and focuses its selector");
+
+    const auto click = Center(*previous);
+    const float previousX = previous->GetBounds().m_X;
+    ui.PointerDown(click);
+    ui.Prepare(540, 260);
+    Check(Near(previous->GetBounds().m_X, previousX),
+          "Focusing an already visible late selector preserves its geometry between press and release");
+    ui.PointerUp(click);
+    ui.Prepare(540, 260);
+    Check(tabs.GetCurrentIndex() == 28, "One pointer click selects a neighboring tab after choosing a late page");
+    Check(previous->GetStyle().m_Color == selectedColor && last->GetStyle().m_Color == ordinaryColor,
+          "The first pointer activation updates both selected and unselected tab CSS");
+
+    int changes = 0;
+    tabs.CurrentChanged().Connect([&](int) { ++changes; });
+    const float beforeBackward = first->GetBounds().m_X;
+    Click(ui, Center(*backward));
+    ui.Prepare(540, 260);
+    Check(first->GetBounds().m_X > beforeBackward && tabs.GetCurrentIndex() == 28 && changes == 0,
+          "The left arrow scrolls the viewport without selecting another page");
+    const float beforeForward = first->GetBounds().m_X;
+    Click(ui, Center(*forward));
+    ui.Prepare(540, 260);
+    Check(first->GetBounds().m_X < beforeForward && tabs.GetCurrentIndex() == 28 && changes == 0,
+          "The right arrow scrolls the viewport without publishing a page change");
+
+    const auto content = strip->GetContentBounds();
+    const Point wheelPoint{content.m_X + content.m_Width * 0.5f, content.m_Y + content.m_Height * 0.5f};
+    const float beforeWheel = first->GetBounds().m_X;
+    ui.Scroll(wheelPoint, {0, 1});
+    ui.Prepare(540, 260);
+    Check(first->GetBounds().m_X > beforeWheel && changes == 0,
+          "Vertical wheel motion over tab selectors scrolls their visible area");
+    const float beforeHorizontal = first->GetBounds().m_X;
+    ui.Scroll(Center(*forward), {-0.5f, 0});
+    ui.Prepare(540, 260);
+    Check(first->GetBounds().m_X < beforeHorizontal && changes == 0,
+          "Horizontal wheel motion over a navigation control scrolls the same viewport");
+
+    ui.Scroll(Center(*chooser), {0, 1000});
+    ui.Prepare(540, 260);
+    Check(first->GetBounds().m_X >= first->GetClip().m_X - 0.01f && tabs.GetCurrentIndex() == 28,
+          "Wheel scrolling can reveal the first selector while preserving the current late page");
+    const float clampedFirst = first->GetBounds().m_X;
+    Click(ui, Center(*backward));
+    ui.Prepare(540, 260);
+    Check(Near(first->GetBounds().m_X, clampedFirst), "Backward scrolling clamps at the first selector");
+    tabs.SetCurrentIndex(28);
+    ui.Prepare(540, 260);
+    Check(previous->GetBounds().m_X >= previous->GetClip().m_X - 0.01f &&
+              previous->GetBounds().m_X + previous->GetBounds().m_Width <=
+                  previous->GetClip().m_X + previous->GetClip().m_Width + 0.01f && changes == 0,
+          "Selecting the current page explicitly reveals its selector without a duplicate signal");
+
+    ui.Scroll(wheelPoint, {0, -1000});
+    ui.Prepare(540, 260);
+    const float clampedLast = last->GetBounds().m_X;
+    Click(ui, Center(*forward));
+    ui.Prepare(540, 260);
+    Check(Near(last->GetBounds().m_X, clampedLast) && tabs.GetCurrentIndex() == 28,
+          "Forward scrolling clamps at the last selector");
+    ui.Scroll(wheelPoint, {0, 0.5f});
+    ui.Prepare(540, 260);
+    bool clickedPartial = false;
+    for (int i = 0; i < tabs.GetTabCount(); ++i)
+    {
+        auto* button = FindTabCommand(tabs, "Workspace " + std::to_string(i));
+        const auto bounds = button->GetBounds();
+        const auto visible = bounds.Intersect(button->GetClip());
+        if (visible.m_Width <= 1 || visible.m_Width >= bounds.m_Width - 1 || i == tabs.GetCurrentIndex())
+            continue;
+        const Point point{visible.m_X + visible.m_Width * 0.5f, visible.m_Y + visible.m_Height * 0.5f};
+        ui.PointerDown(point);
+        ui.Prepare(540, 260);
+        ui.PointerUp(point);
+        ui.Prepare(540, 260);
+        Check(tabs.GetCurrentIndex() == i, "A partially clipped selector also activates with one pointer click");
+        clickedPartial = true;
+        break;
+    }
+    Check(clickedPartial, "The navigation regression includes a partially visible tab");
+
+    ui.SetFocus(last);
+    ui.Prepare(540, 260);
+    ui.KeyEvent(Key::Home, true);
+    ui.Prepare(540, 260);
+    Check(tabs.GetCurrentIndex() == 0 && ui.GetFocus() == first &&
+              first->GetBounds().m_X >= first->GetClip().m_X - 0.01f,
+          "Keyboard page navigation still selects, focuses and reveals after manual viewport scrolling");
+    ui.Prepare(5000, 260);
+    Check(first->GetBounds().m_X >= first->GetClip().m_X - 0.01f &&
+              last->GetBounds().m_X + last->GetBounds().m_Width <=
+                  last->GetClip().m_X + last->GetClip().m_Width + 0.01f,
+          "Widening resets a previously scrolled strip when every natural caption fits");
 }
 
 void TabsAndCommands(FontFace& font)
@@ -457,6 +593,8 @@ int main()
         Sizing(font);
         TabsAndCommands(font);
         TabOverflow(font);
+        TabViewportNavigation(font, "dark.css");
+        TabViewportNavigation(font, "light.css");
         Popups(font);
         Collections(font);
         CallbackLifetimes(font);

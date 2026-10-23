@@ -3,6 +3,8 @@
 #include <EStudioUI/BoxLayout.h>
 #include <EStudioUI/ListWidget.h>
 
+#include <algorithm>
+#include <cmath>
 #include <stdexcept>
 
 namespace EStudioUI
@@ -11,10 +13,11 @@ namespace
 {
 struct TabStripState
 {
-    std::uint64_t m_Selected = 0;
+    std::uint64_t m_RevealTarget = 0;
+    float m_Offset = 0;
 };
 
-//! Measures natural captions and clips their row around the selected tab.
+//! Preserves natural captions, an explicit viewport offset and minimal focus reveal.
 class TabStripLayout final : public LayoutStrategy
 {
   public:
@@ -35,11 +38,19 @@ class TabStripLayout final : public LayoutStrategy
         natural.m_Justification = LayoutJustification::Start;
         auto plan = BoxLayout(Axis::Horizontal).Compute(natural);
         const float width = context.m_Constraints.m_Width.value_or(plan.m_Measure.m_Preferred.m_X);
-        float offset = 0;
+        float offset = std::clamp(m_State->m_Offset, 0.0f,
+                                  std::max(0.0f, plan.m_Measure.m_Preferred.m_X - width));
         for (const auto& slot : plan.m_Slots)
-            if (context.m_Children[slot.m_Index].m_Target == m_State->m_Selected)
-                offset = std::max(0.0f, slot.m_Bounds.m_X + slot.m_Bounds.m_Width - width);
-        offset = std::min(offset, std::max(0.0f, plan.m_Measure.m_Preferred.m_X - width));
+            if (context.m_Children[slot.m_Index].m_Target == m_State->m_RevealTarget)
+            {
+                const auto& bounds = slot.m_Bounds;
+                if (bounds.m_X < offset || bounds.m_Width > width)
+                    offset = bounds.m_X;
+                else if (bounds.m_X + bounds.m_Width > offset + width)
+                    offset = bounds.m_X + bounds.m_Width - width;
+                break;
+            }
+        offset = std::clamp(offset, 0.0f, std::max(0.0f, plan.m_Measure.m_Preferred.m_X - width));
         for (auto& slot : plan.m_Slots)
             slot.m_Bounds.m_X -= offset;
         plan.m_Measure.m_Minimum.m_X = 0;
@@ -63,14 +74,83 @@ class TabStrip final : public Widget
 
     void Reveal(std::uint64_t selected)
     {
-        if (m_State->m_Selected == selected)
+        if (m_State->m_RevealTarget == selected)
             return;
-        m_State->m_Selected = selected;
+        m_State->m_Offset = GetOffset();
+        m_State->m_RevealTarget = selected;
         Invalidate(Invalidation::Arrange | Invalidation::HitTest | Invalidation::Paint);
     }
 
+    bool ScrollPage(int direction)
+    {
+        return ScrollBy(static_cast<float>(direction) * std::max(48.0f, GetContentBounds().m_Width * 0.75f));
+    }
+
+    bool ScrollWheel(Point delta)
+    {
+        const float amount = std::abs(delta.m_X) > std::abs(delta.m_Y) ? delta.m_X : delta.m_Y;
+        return ScrollBy(-amount * 48.0f);
+    }
+
+  protected:
+    bool OnScroll(Point delta, Modifiers) override
+    {
+        return ScrollWheel(delta);
+    }
+
   private:
+    float GetOffset() const
+    {
+        const auto& children = GetPreparedLayoutReport().m_Children;
+        return children.empty() ? 0.0f
+                                : std::max(0.0f, children.front().m_Rules.m_Margin.m_Left -
+                                                    children.front().m_Slot.m_Bounds.m_X);
+    }
+
+    bool ScrollBy(float distance)
+    {
+        const auto& children = GetPreparedLayoutReport().m_Children;
+        if (children.empty())
+            return false;
+        const float offset = GetOffset();
+        const auto& last = children.back();
+        const float width = last.m_Slot.m_Bounds.m_X + last.m_Slot.m_Bounds.m_Width +
+                            last.m_Rules.m_Margin.m_Right + offset;
+        const float next = std::clamp(offset + distance, 0.0f, std::max(0.0f, width - GetContentBounds().m_Width));
+        if (next == offset)
+            return false;
+        m_State->m_RevealTarget = 0;
+        m_State->m_Offset = next;
+        Invalidate(Invalidation::Arrange | Invalidation::HitTest | Invalidation::Paint);
+        return true;
+    }
+
     std::shared_ptr<TabStripState> m_State;
+};
+
+//! Includes navigation controls in the strip's wheel-scrolling region.
+class TabNavigation final : public Widget
+{
+  public:
+    TabNavigation() : Widget("tab-navigation")
+    {
+    }
+
+    void SetStrip(TabStrip& strip)
+    {
+        m_Strip = WidgetRef(&strip);
+    }
+
+  protected:
+    bool OnScroll(Point delta, Modifiers) override
+    {
+        if (auto* strip = dynamic_cast<TabStrip*>(m_Strip.Get()))
+            return strip->ScrollWheel(delta);
+        return false;
+    }
+
+  private:
+    WidgetRef m_Strip;
 };
 
 //! A tab command publishes selection without an independent toggle action.
@@ -121,11 +201,38 @@ class TabButton final : public ToolButton
 
 TabWidget::TabWidget() : Widget("tabwidget")
 {
-    auto& navigation = Add<Widget>("tab-navigation");
+    auto& navigation = Add<TabNavigation>();
     navigation.SetLayoutDirection(Axis::Horizontal);
     navigation.SetHeight(SizeRule::Content());
     navigation.SetGap(4);
-    m_Strip = &navigation.Add<TabStrip>();
+    auto& backward = navigation.Add<ToolButton>("‹");
+    backward.AddClass("tab-scroll");
+    backward.AddClass("tab-scroll-backward");
+    backward.SetAccessibleName("Scroll tabs left");
+    backward.SetWidth(SizeRule::Fixed(28));
+    backward.SetHeight(SizeRule::Fill());
+    auto& strip = navigation.Add<TabStrip>();
+    m_Strip = &strip;
+    navigation.SetStrip(strip);
+    auto& forward = navigation.Add<ToolButton>("›");
+    forward.AddClass("tab-scroll");
+    forward.AddClass("tab-scroll-forward");
+    forward.SetAccessibleName("Scroll tabs right");
+    forward.SetWidth(SizeRule::Fixed(28));
+    forward.SetHeight(SizeRule::Fill());
+    const WidgetRef stripRef(&strip);
+    backward.Clicked().Connect(
+        [stripRef]
+        {
+            if (auto* live = dynamic_cast<TabStrip*>(stripRef.Get()))
+                live->ScrollPage(-1);
+        });
+    forward.Clicked().Connect(
+        [stripRef]
+        {
+            if (auto* live = dynamic_cast<TabStrip*>(stripRef.Get()))
+                live->ScrollPage(1);
+        });
     m_ChooserButton = &navigation.Add<ToolButton>("...");
     m_ChooserButton->AddClass("tab-overflow");
     m_ChooserButton->SetAccessibleName("Choose a tab");
@@ -218,10 +325,10 @@ void TabWidget::SetCurrentIndex(int index)
     VerifyAccess();
     const auto ownerLease = RetainOwner();
     (void)GetPage(index);
+    static_cast<TabStrip*>(m_Strip)->Reveal(m_Tabs[static_cast<std::size_t>(index)].m_Button.Get()->m_TargetKey);
     if (m_Current == index)
         return;
     m_Current = index;
-    static_cast<TabStrip*>(m_Strip)->Reveal(m_Tabs[static_cast<std::size_t>(index)].m_Button.Get()->m_TargetKey);
     for (std::size_t i = 0; i < m_Tabs.size(); ++i)
     {
         if (auto* page = m_Tabs[i].m_Page.Get())

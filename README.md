@@ -408,7 +408,9 @@ selected alternatives, including FreeType's FTL.
 - `TabWidget` owns persistent pages and excludes inactive pages from layout/input.
   Arrow/Home/End keys navigate the tab strip; Ctrl+Tab / Ctrl+Shift+Tab switch pages.
   A `...` chooser lists all pages in a virtual scrolling popup; selected and focused
-  selectors remain visible when the natural-width row overflows.
+  selectors are minimally revealed when the natural-width row overflows. Arrow
+  buttons and horizontal/vertical mouse wheel input scroll the row independently
+  of page selection.
 - `ListWidget` supports selection, prefix search, activation, keyboard/page
   navigation, and scrolling. `TreeWidget` adds stable IDs and expansion/navigation.
 - `TableWidget` supports virtualized rows, cell selection/copying, stable
@@ -548,6 +550,13 @@ embedding. The first backend uses OpenGL 3.3 core; macOS is not verified.
 On Windows, use the corresponding EXE path and omit `--headless`. Benchmark
 timings include CPU submission and synchronous readback, excluding widget layout
 and shaping; use Release and your actual GPU for meaningful performance results.
+
+For paced rendering captures without measured-frame readbacks, run
+`.\scripts\Profile-Rendering.ps1`. It builds/tests Release and profiles actual
+Rich CSS animations, synchronized and isolated sliders, and text editing/selection.
+CPU/frame counters and completed GPU upload/draw/presentation-copy timestamps are
+exported with exact frame identities. See [PERFORMANCE.md](PERFORMANCE.md) for
+options, the forced-presentation baseline and hardware interpretation.
 
 The repository's workflow builds MSVC 2022 Debug/Release with the same PowerShell
 script for core/native CPU checks, plus a staged Win32/WGL framebuffer run with a

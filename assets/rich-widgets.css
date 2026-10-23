@@ -42,6 +42,7 @@
     transition: background-color 140ms ease, border-color 140ms ease, box-shadow 140ms ease;
 }
 .widget-styles button:hover, .widget-styles toolbutton:hover { background: #36586a; border-color: #75daca; }
+.widget-styles .tab-scroll { padding: 4px; }
 .widget-styles button:focus, .widget-styles toolbutton:focus { border: 1px solid #a8f6e6; box-shadow: 0 0 0 2px #65cfb936; }
 .widget-styles button:active, .widget-styles toolbutton:active { background: #1d3446; box-shadow: inset 0 2px 4px #00000035; }
 .widget-styles toolbutton:checked { background: #3d786f; color: #eafff5; border-color: #70d6c2; }

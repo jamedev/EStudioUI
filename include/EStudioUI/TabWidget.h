@@ -4,7 +4,7 @@
 
 namespace EStudioUI
 {
-//! Owns a tab strip and persistent pages; inactive pages never affect layout.
+//! Owns scrollable tab navigation and persistent pages; inactive pages never affect layout.
 class TabWidget final : public Widget
 {
   public:
@@ -48,7 +48,7 @@ class TabWidget final : public Widget
     //! Selects adjacent tabs when an arrow key is pressed on the tab strip.
     bool OnKeyPreview(Key key, bool down, bool repeat, Modifiers modifiers) override;
 
-    //! Reveals tab selectors reached through keyboard or accessibility focus.
+    //! Minimally reveals focused selectors without displacing already visible tabs.
     void OnDescendantFocused(Widget& descendant) override;
 
   private:

@@ -497,37 +497,51 @@ struct Renderer::Impl
     std::vector<PixelRect> m_Damage;
     std::vector<Batch> m_Batches;
     std::size_t m_RepaintPixels = 0, m_ReplayedGlyphs = 0;
+    RedrawReason m_RedrawReason = RedrawReason::None;
+    std::size_t m_DirtyTileCount = 0, m_DirtyTilePixels = 0, m_DamageCandidateRectangles = 0;
 
     bool m_TimingEnabled = false;
-    std::array<GLuint, 8> m_Queries{};
+    GLint m_GpuTimestampBits = 0;
+    static constexpr std::size_t s_TimingMarkers = 4;
+    std::array<GLuint, 8 * s_TimingMarkers> m_Queries{};
     std::array<bool, 8> m_QueryPending{};
     std::array<std::uint64_t, 8> m_QuerySerials{};
-    std::uint64_t m_NextQuerySerial = 0, m_LastQuerySerial = 0;
+    std::uint64_t m_FrameSerial = 0, m_LastQuerySerial = 0;
     int m_ActiveQuery = -1;
     double m_GpuMilliseconds = -1;
+    double m_GpuUploadMilliseconds = -1, m_GpuDrawMilliseconds = -1, m_GpuPresentMilliseconds = -1;
     std::uint64_t m_TimingSamples = 0;
 
     void PollTimers()
     {
         if (!m_TimingEnabled)
             return;
-        for (std::size_t i = 0; i < m_Queries.size(); ++i)
+        for (std::size_t i = 0; i < m_QueryPending.size(); ++i)
         {
             if (!m_QueryPending[i])
                 continue;
             GLint available = 0;
-            glGetQueryObjectiv(m_Queries[i], GL_QUERY_RESULT_AVAILABLE, &available);
+            const auto first = i * s_TimingMarkers;
+            glGetQueryObjectiv(m_Queries[first + s_TimingMarkers - 1], GL_QUERY_RESULT_AVAILABLE, &available);
             if (!available)
                 continue;
-            GLuint64 nanoseconds = 0;
-            glGetQueryObjectui64v(m_Queries[i], GL_QUERY_RESULT, &nanoseconds);
+            std::array<GLuint64, s_TimingMarkers> times{};
+            for (std::size_t marker = 0; marker < times.size(); ++marker)
+                glGetQueryObjectui64v(m_Queries[first + marker], GL_QUERY_RESULT, &times[marker]);
+            m_QueryPending[i] = false;
+            // Counter precision is implementation-defined. A wrapping or reset
+            // timestamp must become a missing sample, never an unsigned spike.
+            if (!std::is_sorted(times.begin(), times.end()))
+                continue;
             if (m_QuerySerials[i] > m_LastQuerySerial)
             {
-                m_GpuMilliseconds = static_cast<double>(nanoseconds) / 1000000;
+                m_GpuMilliseconds = static_cast<double>(times[3] - times[0]) / 1000000;
+                m_GpuUploadMilliseconds = static_cast<double>(times[1] - times[0]) / 1000000;
+                m_GpuDrawMilliseconds = static_cast<double>(times[2] - times[1]) / 1000000;
+                m_GpuPresentMilliseconds = static_cast<double>(times[3] - times[2]) / 1000000;
                 m_LastQuerySerial = m_QuerySerials[i];
             }
             ++m_TimingSamples;
-            m_QueryPending[i] = false;
         }
     }
 
@@ -535,14 +549,20 @@ struct Renderer::Impl
     {
         if (!m_TimingEnabled)
             return;
-        for (std::size_t i = 0; i < m_Queries.size(); ++i)
+        for (std::size_t i = 0; i < m_QueryPending.size(); ++i)
             if (!m_QueryPending[i])
             {
-                glBeginQuery(GL_TIME_ELAPSED, m_Queries[i]);
-                m_QuerySerials[i] = ++m_NextQuerySerial;
+                glQueryCounter(m_Queries[i * s_TimingMarkers], GL_TIMESTAMP);
+                m_QuerySerials[i] = m_FrameSerial;
                 m_ActiveQuery = static_cast<int>(i);
                 return;
             }
+    }
+
+    void MarkTimer(std::size_t marker)
+    {
+        if (m_ActiveQuery >= 0)
+            glQueryCounter(m_Queries[static_cast<std::size_t>(m_ActiveQuery) * s_TimingMarkers + marker], GL_TIMESTAMP);
     }
 
     void EnsureRetainedTarget()
@@ -650,14 +670,17 @@ struct Renderer::Impl
         const int rows = (m_FramebufferHeight + tile - 1) / tile;
         m_DirtyTiles.assign(static_cast<std::size_t>(columns * rows), 0);
         m_Damage.clear();
+        m_RedrawReason = RedrawReason::None;
+        m_DirtyTileCount = m_DirtyTilePixels = m_DamageCandidateRectangles = 0;
         m_Bounds.resize(m_Instances.size());
         m_TextureStates.assign(m_Instances.size(), {});
         for (const auto& image : m_Images)
             m_TextureStates[image.m_Instance] = {image.m_Texture, image.m_Revision};
         for (std::size_t i = 0; i < m_Instances.size(); ++i)
             m_Bounds[i] = InstanceBounds(m_Instances[i]);
-        const auto full = [&]
+        const auto full = [&](RedrawReason reason)
         {
+            m_RedrawReason = reason;
             m_Damage = {{0, 0, m_FramebufferWidth, m_FramebufferHeight}};
             m_RepaintPixels =
                 static_cast<std::size_t>(m_FramebufferWidth) * static_cast<std::size_t>(m_FramebufferHeight);
@@ -665,7 +688,18 @@ struct Renderer::Impl
         if (!m_PartialRedraw || !m_HistoryValid || m_Clear != m_PreviousClear || m_Width != m_PreviousWidth ||
             m_Height != m_PreviousHeight)
         {
-            full();
+            auto reason = RedrawReason::ClearChanged;
+            if (!m_PartialRedraw)
+                reason = RedrawReason::FullRequested;
+            else if (m_PreviousWidth > 0 && (m_Width != m_PreviousWidth || m_Height != m_PreviousHeight))
+                reason = RedrawReason::ViewportChanged;
+            else if (!m_HistoryValid)
+                reason = RedrawReason::HistoryInvalid;
+            m_DirtyTileCount = static_cast<std::size_t>(columns) * static_cast<std::size_t>(rows);
+            m_DirtyTilePixels =
+                static_cast<std::size_t>(m_FramebufferWidth) * static_cast<std::size_t>(m_FramebufferHeight);
+            m_DamageCandidateRectangles = 1;
+            full(reason);
             return;
         }
         const auto dirty = [&](Rect bounds)
@@ -759,6 +793,17 @@ struct Renderer::Impl
                 minimum = std::min(minimum, old);
             }
         }
+        // Count the complete changed tile map before the bounded rectangle planner
+        // can select a full repaint. This distinguishes sparse fragmentation from
+        // genuinely large damage without allocating an unbounded rectangle list.
+        for (int y = 0; y < rows; ++y)
+            for (int x = 0; x < columns; ++x)
+                if (m_DirtyTiles[static_cast<std::size_t>(y * columns + x)])
+                {
+                    ++m_DirtyTileCount;
+                    m_DirtyTilePixels += static_cast<std::size_t>(std::min(tile, m_FramebufferWidth - x * tile)) *
+                                         static_cast<std::size_t>(std::min(tile, m_FramebufferHeight - y * tile));
+                }
         m_RepaintPixels = 0;
         for (int y = 0; y < rows; ++y)
         {
@@ -785,15 +830,18 @@ struct Renderer::Impl
                 else
                     m_Damage.push_back(rect);
                 m_RepaintPixels += static_cast<std::size_t>(rect.m_Width * rect.m_Height);
+                m_DamageCandidateRectangles = m_Damage.size();
                 const auto pixels =
                     static_cast<std::size_t>(m_FramebufferWidth) * static_cast<std::size_t>(m_FramebufferHeight);
                 if (m_Damage.size() > 16 || m_RepaintPixels > pixels * 3 / 5)
                 {
-                    full();
+                    full(m_Damage.size() > 16 ? RedrawReason::DamageRectangles : RedrawReason::DamageArea);
                     return;
                 }
             }
         }
+        if (!m_Damage.empty())
+            m_RedrawReason = RedrawReason::Partial;
     }
 
     void BuildBatches()
@@ -1475,7 +1523,15 @@ void Renderer::SetGpuTimingEnabled(bool enabled)
     m_Affinity.VerifyAccess("Renderer::SetGpuTimingEnabled");
     auto& self = *m_Impl;
     if (enabled && !self.m_Queries[0])
+    {
+        glGetQueryiv(GL_TIMESTAMP, GL_QUERY_COUNTER_BITS, &self.m_GpuTimestampBits);
+        if (self.m_GpuTimestampBits <= 0)
+        {
+            self.m_TimingEnabled = false;
+            return;
+        }
         glGenQueries(static_cast<GLsizei>(self.m_Queries.size()), self.m_Queries.data());
+    }
     self.m_TimingEnabled = enabled;
 }
 
@@ -1497,6 +1553,7 @@ void Renderer::EndFrame()
         throw std::runtime_error("Frame effects exceed the texture buffer limit.");
     if (self.m_Submitted.size() > static_cast<std::size_t>(std::numeric_limits<GLsizei>::max()))
         throw std::runtime_error("Frame exceeds the GL instance limit.");
+    ++self.m_FrameSerial;
     self.StartTimer();
     glBindVertexArray(self.m_Vao);
     if (submitted && self.m_FontDirty)
@@ -1531,6 +1588,7 @@ void Renderer::EndFrame()
         glActiveTexture(GL_TEXTURE1);
         glBindTexture(GL_TEXTURE_BUFFER, self.m_BandTexture);
     }
+    self.MarkTimer(1);
     glBindFramebuffer(GL_FRAMEBUFFER, self.m_RetainedFramebuffer);
     glEnable(GL_SCISSOR_TEST);
     glClearColor(self.m_Clear.m_R, self.m_Clear.m_G, self.m_Clear.m_B, self.m_Clear.m_A);
@@ -1563,21 +1621,23 @@ void Renderer::EndFrame()
         }
     }
     glDisable(GL_SCISSOR_TEST);
+    self.MarkTimer(2);
     glBindFramebuffer(GL_READ_FRAMEBUFFER, self.m_RetainedFramebuffer);
     glBindFramebuffer(GL_DRAW_FRAMEBUFFER, 0);
     // The native back buffer is not guaranteed to survive buffer swaps. Present
     // the retained result with a cheap full copy, never relying on swap preservation.
     glBlitFramebuffer(0, 0, self.m_FramebufferWidth, self.m_FramebufferHeight, 0, 0, self.m_FramebufferWidth,
                       self.m_FramebufferHeight, GL_COLOR_BUFFER_BIT, GL_NEAREST);
+    self.MarkTimer(3);
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
     if (self.m_ActiveQuery >= 0)
     {
-        glEndQuery(GL_TIME_ELAPSED);
         self.m_QueryPending[static_cast<std::size_t>(self.m_ActiveQuery)] = true;
         self.m_ActiveQuery = -1;
     }
     self.m_Stats = {};
     auto& stats = self.m_Stats;
+    stats.m_FrameSerial = self.m_FrameSerial;
     stats.m_DrawCalls = calls;
     stats.m_Shapes = self.m_ShapeCount;
     stats.m_Glyphs = self.m_GlyphCount;
@@ -1593,7 +1653,16 @@ void Renderer::EndFrame()
     stats.m_SubmittedInstances = self.m_Submitted.size();
     stats.m_ReplayedGlyphs = self.m_ReplayedGlyphs;
     stats.m_DamageRectangles = self.m_Damage.size();
+    stats.m_RedrawReason = self.m_RedrawReason;
+    stats.m_DirtyTileCount = self.m_DirtyTileCount;
+    stats.m_DirtyTilePixels = self.m_DirtyTilePixels;
+    stats.m_DamageCandidateRectangles = self.m_DamageCandidateRectangles;
     stats.m_GpuMilliseconds = self.m_GpuMilliseconds;
+    stats.m_GpuTimingFrame = self.m_LastQuerySerial;
+    stats.m_GpuTimestampBits = self.m_GpuTimestampBits;
+    stats.m_GpuUploadMilliseconds = self.m_GpuUploadMilliseconds;
+    stats.m_GpuDrawMilliseconds = self.m_GpuDrawMilliseconds;
+    stats.m_GpuPresentMilliseconds = self.m_GpuPresentMilliseconds;
     stats.m_TimingSamples = self.m_TimingSamples;
     self.m_PreviousKeys.swap(self.m_PaintKeys);
     self.m_PreviousInstances.swap(self.m_Instances);

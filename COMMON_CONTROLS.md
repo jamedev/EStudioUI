@@ -111,6 +111,9 @@ popup, including inside a modal presentation. Escape dismisses that top layer
 without closing its parent. Other input dismisses help and continues normally.
 Composition cancels pending help. Focus/owner loss, expiry and deactivation retire
 the presentation; one visible interval is bounded to ten seconds.
+Pointer movement resolves help from the actual hovered control and its logical
+ancestors. It dismisses unrelated keyboard help instead of borrowing the focused
+control's tooltip. Explicit keyboard focus still anchors help beside its source.
 
 The new PopupOptions flags `m_TakeFocus` and `m_InputTransparent` also support custom
 noninteractive overlays. Defaults preserve ordinary popup/modal behavior. Custom

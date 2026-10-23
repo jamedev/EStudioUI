@@ -8,6 +8,7 @@
 #include "WidgetStylesProbe.h"
 #include "ApplicationProbe.h"
 #include "GpuProbeWindow.h"
+#include "RenderingProfile.h"
 
 #include <EStudioUI/Button.h>
 #include <EStudioUI/TextBox.h>
@@ -15,6 +16,7 @@
 #include <glad/gl.h>
 
 #include <algorithm>
+#include <charconv>
 #include <chrono>
 #include <vector>
 #include <cmath>
@@ -267,6 +269,11 @@ class Demo
     void Profile(const fs::path& output)
     {
         ProfileUiWorkload(m_Window, *m_Tabs, m_Assets, output);
+    }
+
+    void ProfileRendering(const fs::path& output, const RenderingProfileOptions& options)
+    {
+        ProfileRenderingWorkload(m_Window, *m_Tabs, m_Assets, m_CurrentCss, output, options);
     }
 
     bool LoadCss(const fs::path& path, bool reportFailure = true)
@@ -547,6 +554,9 @@ int main(int argc, char** argv)
         bool benchmark = false;
         bool profile = false;
         bool profileCanvas = false;
+        bool profileRendering = false;
+        bool renderingOptionsProvided = false;
+        RenderingProfileOptions renderingOptions;
         for (int i = 1; i < argc; ++i)
         {
             const std::string argument = argv[i];
@@ -556,6 +566,14 @@ int main(int argc, char** argv)
                     throw std::runtime_error("Missing value for " + argument);
                 return argv[i];
             };
+            const auto numericValue = [&](auto& destination)
+            {
+                const auto text = value();
+                const auto parsed = std::from_chars(text.data(), text.data() + text.size(), destination);
+                if (parsed.ec != std::errc{} || parsed.ptr != text.data() + text.size())
+                    throw std::runtime_error("Invalid numeric value for " + argument + ": " + text);
+                renderingOptionsProvided = true;
+            };
             if (argument == "--headless")
                 options.m_Headless = true;
             else if (argument == "--self-test")
@@ -564,6 +582,19 @@ int main(int argc, char** argv)
                 profile = true;
             else if (argument == "--profile-canvas")
                 profileCanvas = true;
+            else if (argument == "--profile-rendering")
+                profileRendering = true;
+            else if (argument == "--profile-frames")
+                numericValue(renderingOptions.m_Frames);
+            else if (argument == "--profile-warmup")
+                numericValue(renderingOptions.m_Warmup);
+            else if (argument == "--profile-rate")
+                numericValue(renderingOptions.m_FrameRate);
+            else if (argument == "--profile-case")
+            {
+                renderingOptions.m_Case = value();
+                renderingOptionsProvided = true;
+            }
             else if (argument == "--benchmark")
                 benchmark = true;
             else if (argument == "--font")
@@ -576,14 +607,22 @@ int main(int argc, char** argv)
             {
                 std::cout << "EStudioUIDemo [--css FILE] [--font FILE] [--self-test] [--benchmark] [--profile-ui] "
                              "[--profile-canvas] "
+                             "[--profile-rendering] [--profile-case CASE] [--profile-frames N] "
+                             "[--profile-warmup N] [--profile-rate HZ] "
                              "[--headless] "
                              "[--output DIR]\n"
+                          << "Rendering cases: all, rich-css, widget-styles, isolated-slider, text, baseline.\n"
+                          << "Rendering defaults: 180 measured / 30 warmup / 60 Hz; rate 0 selects unpaced mode.\n"
                           << "F5 reloads CSS; F6 switches themes. Headless mode requires OSMesa (Linux).\n";
                 return 0;
             }
             else
                 throw std::runtime_error("Unknown argument: " + argument);
         }
+        if (renderingOptionsProvided && !profileRendering)
+            throw std::runtime_error("Rendering profile options require --profile-rendering.");
+        if (profileRendering && (profile || profileCanvas || benchmark))
+            throw std::runtime_error("Choose one profiling or benchmark mode per invocation.");
         if (profileCanvas)
         {
             ProfileCanvas(assets, output, options.m_Headless);
@@ -597,8 +636,13 @@ int main(int argc, char** argv)
         if (selfTest)
         {
             demo.Verify(output);
-            if (!benchmark && !profile)
+            if (!benchmark && !profile && !profileRendering)
                 return 0;
+        }
+        if (profileRendering)
+        {
+            demo.ProfileRendering(output, renderingOptions);
+            return 0;
         }
         if (profile)
         {
@@ -612,7 +656,7 @@ int main(int argc, char** argv)
         }
         if (options.m_Headless)
             throw std::runtime_error(
-                "Use --self-test, --benchmark, --profile-ui, or --profile-canvas with --headless.");
+                "Use --self-test, --benchmark, --profile-ui, --profile-rendering, or --profile-canvas with --headless.");
         return window.Run();
     }
     catch (const std::exception& error)

@@ -140,8 +140,9 @@ if(ESTUDIOUI_BUILD_DEMO)
         demo/WidgetStylesGallery.cpp demo/WidgetStylesProbe.cpp demo/ApplicationProbe.cpp demo/FoundationGallery.cpp
         demo/StateGallery.cpp demo/ModelGallery.cpp demo/LayoutGallery.cpp demo/ConstraintGallery.cpp demo/InputGallery.cpp demo/PlatformGallery.cpp
         demo/PlatformSemanticProbe.cpp demo/TextGallery.cpp demo/EssentialGallery.cpp demo/CommandGallery.cpp
-        demo/GpuProbeWindow.cpp)
+        demo/GpuProbeWindow.cpp demo/RenderingProfile.cpp)
     target_link_libraries(EStudioUIDemo PRIVATE EStudioUI::EStudioUI EStudioUIGl glfw)
+    target_compile_definitions(EStudioUIDemo PRIVATE ESTUDIOUI_DEMO_BUILD_CONFIGURATION="$<CONFIG>")
     add_executable(EStudioUIConstraintExample examples/ConstraintLayout.cpp)
     target_link_libraries(EStudioUIConstraintExample PRIVATE EStudioUI::EStudioUI)
     add_executable(EStudioUIInputExample examples/InputActions.cpp)
@@ -275,5 +276,9 @@ if(ESTUDIOUI_BUILD_TESTS)
     if(ESTUDIOUI_GPU_TESTS AND TARGET EStudioUIDemo AND UNIX AND NOT APPLE)
         add_test(NAME GpuIntegration COMMAND EStudioUIDemo --headless --self-test --output "${CMAKE_CURRENT_BINARY_DIR}/verification")
         set_tests_properties(GpuIntegration PROPERTIES TIMEOUT 120)
+        add_test(NAME RenderingProfile COMMAND EStudioUIDemo --headless --profile-rendering
+            --profile-frames 12 --profile-warmup 4 --profile-rate 0
+            --output "${CMAKE_CURRENT_BINARY_DIR}/profile-smoke")
+        set_tests_properties(RenderingProfile PROPERTIES TIMEOUT 120)
     endif()
 endif()

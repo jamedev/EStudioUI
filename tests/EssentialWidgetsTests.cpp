@@ -460,6 +460,61 @@ void ProgressAndHelp()
     Check(!ui.GetPopup(), "Native composition cancels delayed help instead of opening an overlay while typing");
     ui.CancelTextComposition();
 }
+
+void ToolTipTargetIsolation()
+{
+    FontFace font(ESTUDIOUI_FONT_PATH);
+    UiContext ui(font);
+    auto& source = ui.Root().Add<Button>("Focused source");
+    source.SetFloatingBounds({20, 120, 160, 40});
+    source.SetToolTip("Help belongs to the focused source.", 0.1);
+    auto& unrelated = ui.Root().Add<Button>("Unrelated tab");
+    unrelated.SetFloatingBounds({300, 30, 160, 40});
+    ui.Prepare(500, 300);
+    ui.SetTime(0);
+    Click(ui, source);
+    ui.PointerMove(Center(unrelated));
+    ui.SetTime(0.2);
+    Check(!ui.GetPopup() && ui.GetFocus() == &source,
+          "Hovering an unrelated tab never borrows help from the previously activated control");
+
+    ui.PointerMove(Center(source));
+    ui.SetTime(0.4);
+    const auto* hoverHelp = dynamic_cast<ToolTip*>(ui.GetPopup());
+    Check(hoverHelp && hoverHelp->GetText() == source.GetToolTip() && ui.GetFocus() == &source,
+          "Returning to the actual help source opens its nonactivating pointer tooltip");
+    ui.PointerMove(Center(unrelated));
+    ui.SetTime(0.6);
+    Check(!ui.GetPopup(), "Leaving a focused source dismisses its help even while it retains keyboard focus");
+
+    ui.SetFocus(nullptr);
+    ui.SetFocus(&source);
+    ui.SetTime(0.8);
+    const auto* focusHelp = dynamic_cast<ToolTip*>(ui.GetPopup());
+    Check(focusHelp && focusHelp->GetBounds().m_Y >= source.GetBounds().m_Y + source.GetBounds().m_Height &&
+              ui.GetFocus() == &source,
+          "Explicit keyboard focus still shows help beside its source rather than at the unrelated pointer");
+    auto sameTab = Center(unrelated);
+    sameTab.m_X += 1;
+    ui.PointerMove(sameTab);
+    ui.SetTime(1);
+    Check(!ui.GetPopup(), "A mouse move cancels unrelated focus help even when its hover path has not changed");
+
+    unrelated.SetToolTip("Help belongs to the other tab.", 0.1);
+    ui.PointerMove(sameTab);
+    ui.SetTime(1.2);
+    const auto* otherHelp = dynamic_cast<ToolTip*>(ui.GetPopup());
+    Check(otherHelp && otherHelp->GetText() == unrelated.GetToolTip() && ui.GetFocus() == &source,
+          "A hovered tab selects its own tooltip independently of the keyboard focus target");
+
+    const WidgetRef removed(&source);
+    auto session = ui.GetPopupSession(*ui.GetPopup());
+    session.OnFinished([&](PopupResult) { ui.Root().RemoveChild(source); });
+    ui.PointerMove(Center(source));
+    ui.SetTime(1.4);
+    Check(!removed.Get() && !ui.GetPopup(),
+          "Tooltip dismissal callbacks may delete the next hover target without leaving a stale help deadline");
+}
 } // namespace
 
 int main()
@@ -471,6 +526,7 @@ int main()
         DisabledChoices();
         Containers();
         ProgressAndHelp();
+        ToolTipTargetIsolation();
         std::cout << s_Checks << " essential widget checks passed\n";
         return 0;
     }

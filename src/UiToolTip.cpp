@@ -25,15 +25,17 @@ void UiContext::ArmToolTip(Widget* preferred)
                 target = candidate;
                 break;
             }
-    if (!target)
-        target = m_Focus.Get();
     while (target && target->m_ToolTip.empty())
         target = LogicalParent(*target);
     if (target && (!target->IsVisible() || !target->IsEnabled()))
         target = nullptr;
     if (target == m_ToolTipTarget.Get())
         return;
+    const WidgetRef reference(target);
     DismissToolTip();
+    target = reference.Get();
+    if (target && (target->GetContext() != this || !target->IsVisible() || !target->IsEnabled()))
+        target = nullptr;
     m_ToolTipTarget = WidgetRef(target);
     if (target && !target->m_ToolTip.empty())
         m_ToolTipDeadline = GetTime() + target->m_ToolTipDelay;

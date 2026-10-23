@@ -94,6 +94,7 @@ tabwidget { gap: 10px; }
 tabbar { gap: 4px; }
 tabbar toolbutton { height: 40px; padding: 8px 13px; border-radius: 8px; }
 tabbar .selected, tabbar .tab-button:selected { background: #5066d9; color: #ffffff; border-color: #5066d9; }
+.tab-scroll { padding: 4px; }
 tabpage { gap: 12px; }
 toolbar { padding: 6px; gap: 6px; background: #ffffff; border: 1px solid #c5cddd; border-radius: 8px; }
 toolbutton { height: 34px; padding: 6px 12px; background: #edf1f8; border: 1px solid #c5cddd; border-radius: 5px; font-size: 14px; text-align: center; }

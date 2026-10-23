@@ -512,6 +512,8 @@ bool UiContext::RoutePointer(const PointerEvent& event)
     {
         m_PointerPosition = event.m_Position;
         RefreshHover();
+        if (event.m_Type == PointerEventType::Move)
+            ArmToolTip();
     }
     if (event.m_Type == PointerEventType::Cancel)
     {

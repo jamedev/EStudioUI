@@ -117,8 +117,11 @@ effects and hard size limits. Its C++ anchor relationships own placement;
 measurement contracts. Ordinary box/grid/form/flow CSS behavior is unchanged.
 
 Tab strips use `tabbar .tab-button:selected`; the older `.selected` class remains available.
-The row is clipped inside `tab-navigation`, with natural caption widths and automatic
-reveal of the selected/focused tab. `.tab-overflow` styles the persistent `...`
+The row is clipped inside `tab-navigation`, with natural caption widths and minimal
+reveal of the selected/focused tab. `.tab-scroll` styles both arrow buttons;
+`.tab-scroll-backward` and `.tab-scroll-forward` select each direction. Arrows and
+horizontal/vertical wheel input scroll the visible row without selecting a page.
+`.tab-overflow` styles the persistent `...`
 chooser button; `listwidget.tab-chooser` and its ordinary collection/scroll parts
 style the root-owned, scrollable list of all pages. Its selector ancestry follows
 the TabWidget. CSS does not need to hide excess selectors or duplicate page commands.

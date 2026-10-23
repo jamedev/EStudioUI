@@ -227,6 +227,78 @@ void VerifyHidden(Window& owner, const std::filesystem::path& assets)
           "revealed CSS animation catches up to logical elapsed time");
 }
 
+void VerifyDiagnostics(Window& owner, const std::filesystem::path& assets, const std::filesystem::path& output)
+{
+    WindowOptions options;
+    options.m_Headless = owner.IsHeadless();
+    options.m_Width = 1024;
+    options.m_Height = 640;
+    Window window(options, assets / "NotoSans.ttf");
+    AllowOversizedGpuProbe(window);
+    window.RenderFrame(0);
+    GLint viewport[4]{};
+    glGetIntegerv(GL_VIEWPORT, viewport);
+    Renderer renderer(window.Ui().GetFont());
+    renderer.SetGpuTimingEnabled(true);
+    const auto render = [&](bool alternate, bool large, Color clear, float width = 1024)
+    {
+        const Rect clip{0, 0, width, 640};
+        renderer.BeginFrame(width, 640, viewport[2], viewport[3], clear);
+        for (int i = 0; i < (large ? 1 : 20); ++i)
+        {
+            renderer.SetWidgetPaint(clip, clip, nullptr, false, 0, static_cast<std::uintptr_t>(i + 1));
+            const Rect bounds = large ? clip : Rect{16.0f + static_cast<float>(i % 5) * 192,
+                                                  16.0f + static_cast<float>(i / 5) * 128, 10, 10};
+            renderer.DrawSolid(bounds, {alternate ? .7f : .3f, .4f, .6f, 1}, clip);
+        }
+        renderer.EndFrame();
+        // Readback belongs only to this deterministic correctness probe. The
+        // interactive performance profiler never synchronizes measured frames.
+        renderer.ReadPixel({0, 0});
+        return renderer.GetStats();
+    };
+    const Color clear{.04f, .07f, .12f, 1};
+    const auto first = render(false, false, clear);
+    Check(first.m_FrameSerial > 0 && first.m_RedrawReason == RedrawReason::HistoryInvalid &&
+              first.m_RepaintPixels == first.m_FramebufferPixels,
+          "first frame diagnostics identify unavailable retained history");
+    auto stats = render(false, false, clear);
+    Check(stats.m_FrameSerial == first.m_FrameSerial + 1 && stats.m_RedrawReason == RedrawReason::None &&
+              stats.m_RepaintPixels == 0 && stats.m_DirtyTileCount == 0 && stats.m_DirtyTilePixels == 0,
+          "unchanged diagnostics retain pixels and advance the submitted frame serial");
+    stats = render(true, false, clear);
+    Check(stats.m_RedrawReason == RedrawReason::DamageRectangles && stats.m_DamageCandidateRectangles == 17 &&
+              stats.m_DirtyTileCount >= 20 && stats.m_DirtyTilePixels < stats.m_FramebufferPixels / 2 &&
+              stats.m_RepaintPixels == stats.m_FramebufferPixels,
+          "sparse fragmentation diagnostics preserve original damage when rectangle budget selects full redraw");
+    stats = render(false, true, clear);
+    Check(stats.m_RedrawReason == RedrawReason::DamageArea && stats.m_DirtyTilePixels == stats.m_FramebufferPixels,
+          "large changes report the area fallback independently of fragmentation");
+    stats = render(false, true, {.1f, .2f, .3f, 1});
+    Check(stats.m_RedrawReason == RedrawReason::ClearChanged, "clear changes report their mandatory full redraw");
+    stats = render(false, true, clear, 1000);
+    Check(stats.m_RedrawReason == RedrawReason::ViewportChanged, "logical viewport changes report their full redraw");
+    renderer.SetPartialRedrawEnabled(false);
+    stats = render(false, true, clear, 1000);
+    Check(stats.m_RedrawReason == RedrawReason::FullRequested, "explicit full redraw is distinct from budget fallback");
+    Check(stats.m_GpuTimestampBits == 0 ||
+              (stats.m_TimingSamples > 0 && stats.m_GpuTimingFrame > 0 && stats.m_GpuTimingFrame < stats.m_FrameSerial &&
+              stats.m_GpuMilliseconds >= 0 && stats.m_GpuUploadMilliseconds >= 0 && stats.m_GpuDrawMilliseconds >= 0 &&
+              stats.m_GpuPresentMilliseconds >= 0 &&
+              std::abs(stats.m_GpuMilliseconds - stats.m_GpuUploadMilliseconds - stats.m_GpuDrawMilliseconds -
+                       stats.m_GpuPresentMilliseconds) < .00001),
+          "asynchronous GPU phases sum to their total and identify a completed earlier frame");
+    const auto samples = stats.m_TimingSamples;
+    renderer.SetGpuTimingEnabled(false);
+    stats = render(false, true, clear, 1000);
+    Check(stats.m_TimingSamples == samples, "disabled GPU timing does not consume pending measurements");
+    std::ofstream report(output / "renderer-diagnostics.txt");
+    report << "Damage decisions: missing history, unchanged, sparse fragmentation, large area, clear, viewport, "
+              "explicit full redraw: PASS.\n"
+           << "Completed GPU sample/frame association and upload + retained draw + presentation-copy sum: "
+           << (stats.m_GpuTimestampBits > 0 ? "PASS" : "UNAVAILABLE (zero-bit timestamp counter)") << ".\n";
+}
+
 std::string ReadCss(const std::filesystem::path& path)
 {
     std::ifstream input(path, std::ios::binary);
@@ -258,6 +330,7 @@ void VerifyGpuWorkload(Window& owner, const std::filesystem::path& assets, const
 {
     VerifyHidden(owner, assets);
     VerifyPixels(owner, assets, output);
+    VerifyDiagnostics(owner, assets, output);
     owner.RenderFrame(owner.Ui().GetTime());
 }
 
@@ -277,7 +350,7 @@ void ProfileUiWorkload(Window& window, TabWidget& tabs, const std::filesystem::p
     std::ofstream report(output / "gpu-workload.txt");
     report << "Driver: " << gpu.GetDriverDescription() << "\n"
            << "Actual gallery / 1180x820 / four warmup and 32 measured frames per case.\n"
-           << "GL_TIME_ELAPSED queries are polled asynchronously; completed-frame CPU timings include readback.\n"
+           << "GL_TIMESTAMP queries are polled asynchronously; completed-frame CPU timings include readback.\n"
            << "Unpaced profiling measures per-frame cost, not utilization percent. Software GL does not predict "
               "hardware load.\n";
     double clock = ui.GetTime();
