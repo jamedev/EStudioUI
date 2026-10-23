@@ -287,3 +287,16 @@ for measured results and [native acceptance](verification/PLATFORM_ACCEPTANCE.md
 for input-method, Narrator and mixed-monitor checks. Automated UI Automation or
 synthetic native composition messages do not replace those interactive checks.
 Native hardware GPU timing and additional platform adapters remain F15 evidence.
+
+
+Native picker cancellation is deferred out of shell initialization callbacks.
+After the initial folder-ready event, cancellation can close the dialog from a
+100 ms timer attached to its actual HWND as well as the existing helper-window
+channel. The picker STA owns both timers; cleanup removes its window property
+and timers before releasing the worker state. This makes cancellation independent
+of dispatch to a message-only helper during the shell's modal loop. It does not
+pump the framework loop or request GPU frames. Native acceptance runs enable
+phase/Close-result diagnostics through `ESTUDIOUI_NATIVE_PLATFORM_TESTS=1`.
+See Microsoft's [IFileDialog::Close](https://learn.microsoft.com/en-us/windows/win32/api/shobjidl_core/nf-shobjidl_core-ifiledialog-close)
+and [SetTimer](https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-settimer)
+contracts for callback and thread ownership.

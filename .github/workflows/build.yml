@@ -29,15 +29,22 @@ jobs:
           restore-keys: |
             windows-v143-${{ hashFiles('vcpkg.json', 'vcpkg-bootstrap.json', 'vcpkg-configuration.json', 'cmake/ports/**', 'cmake/triplets/*.cmake') }}-
             windows-v143-
-      - name: Install, build, and test Release and Debug
+      - name: Install, build, and test Release
         shell: powershell
         run: |
           New-Item -ItemType Directory -Path $env:VCPKG_DEFAULT_BINARY_CACHE -Force | Out-Null
           $checkout = Join-Path $env:RUNNER_TEMP 'estudioui-vcpkg'
           ./Build.ps1 -VcpkgRoot $checkout -Configuration Release -SkipGpuTest
+      - name: Build and test Debug
+        shell: powershell
+        run: |
+          $checkout = Join-Path $env:RUNNER_TEMP 'estudioui-vcpkg'
           ./Build.ps1 -VcpkgRoot $checkout -Configuration Debug -SkipGpuTest
-          # Recheck native STA cancellation/COM teardown in Debug to catch timing-sensitive failures.
-          for ($attempt = 1; $attempt -le 3; $attempt++) {
+      - name: Repeat native Debug lifecycle probes
+        shell: powershell
+        run: |
+          # Recheck native STA cancellation/COM teardown after both complete suites.
+          for ($attempt = 1; $attempt -le 5; $attempt++) {
             ./build/windows-vcpkg/Debug/EStudioUINativePlatformTests.exe
             if ($LASTEXITCODE -ne 0) { throw "Native Debug repetition $attempt failed with exit code $LASTEXITCODE." }
           }

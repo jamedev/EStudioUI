@@ -2,9 +2,11 @@
 
 #ifdef _WIN32
 #include <shobjidl.h>
+#include <oleidl.h>
 #include <shlobj.h>
 
 #include <atomic>
+#include <cstdio>
 #include <mutex>
 #include <stdexcept>
 #include <thread>
@@ -16,6 +18,9 @@ namespace
 {
 constexpr UINT s_Cancel = WM_APP + 0x31b;
 constexpr UINT_PTR s_CancelTimer = 0x31b;
+constexpr UINT_PTR s_DialogCancelTimer = 0xe57d0001U;
+constexpr wchar_t s_CancelProperty[] = L"EStudioUI.FilePicker.CancellationState";
+void CALLBACK DialogCancelTimer(HWND window, UINT message, UINT_PTR timer, DWORD time);
 
 template <typename T> class ComPointer
 {
@@ -57,6 +62,53 @@ struct WorkerState
     HWND m_Control = nullptr;
     IFileDialog* m_Dialog = nullptr;
     bool m_Closing = false;
+    bool m_Ready = false;
+    HWND m_CancelWindow = nullptr;
+    unsigned m_CloseAttempts = 0;
+    bool m_Trace = []
+    {
+        wchar_t value[2]{};
+        return GetEnvironmentVariableW(L"ESTUDIOUI_NATIVE_PLATFORM_TESTS", value, 2) == 1 && value[0] == L'1';
+    }();
+
+    void Trace(const char* phase, HRESULT result = S_OK) const
+    {
+        if (m_Trace)
+            std::fprintf(stderr, "Native picker STA %lu: %s (0x%08lx)\n",
+                         static_cast<unsigned long>(GetCurrentThreadId()), phase, static_cast<unsigned long>(result));
+    }
+
+    void StopWindowTimer()
+    {
+        if (m_CancelWindow && GetPropW(m_CancelWindow, s_CancelProperty) == this)
+        {
+            KillTimer(m_CancelWindow, s_DialogCancelTimer);
+            RemovePropW(m_CancelWindow, s_CancelProperty);
+        }
+        m_CancelWindow = nullptr;
+    }
+
+    void ObserveWindow(IFileDialog* dialog)
+    {
+        if (!dialog || (m_CancelWindow && GetPropW(m_CancelWindow, s_CancelProperty) == this))
+            return;
+        ComPointer<IOleWindow> native;
+        HWND window = nullptr;
+        if (FAILED(dialog->QueryInterface(IID_PPV_ARGS(native.Put()))) || FAILED(native->GetWindow(&window)) ||
+            !window || GetWindowThreadProcessId(window, nullptr) != GetCurrentThreadId())
+            return;
+        StopWindowTimer();
+        if (!SetPropW(window, s_CancelProperty, this))
+            return;
+        if (!SetTimer(window, s_DialogCancelTimer, 100, DialogCancelTimer))
+        {
+            RemovePropW(window, s_CancelProperty);
+            return;
+        }
+        m_CancelWindow = window;
+        Trace("native-window cancellation timer armed");
+    }
+
     bool m_Cancelled = false;
     bool m_Finished = false;
 
@@ -77,13 +129,23 @@ struct WorkerState
     void RequestNativeClose(IFileDialog* dialog)
     {
         // Only the picker STA calls this method. Shell callbacks can reenter it.
-        if (!dialog || m_Closing)
+        if (!dialog || !m_Ready || m_Closing || !Cancelled())
             return;
         m_Closing = true;
-        dialog->Close(HRESULT_FROM_WIN32(ERROR_CANCELLED));
+        if (++m_CloseAttempts <= 3)
+            Trace("request Close");
+        const auto result = dialog->Close(HRESULT_FROM_WIN32(ERROR_CANCELLED));
+        if (m_CloseAttempts <= 3)
+            Trace("Close returned", result);
         m_Closing = false;
     }
 };
+
+void CALLBACK DialogCancelTimer(HWND window, UINT, UINT_PTR, DWORD)
+{
+    if (auto* state = static_cast<WorkerState*>(GetPropW(window, s_CancelProperty)))
+        state->RequestNativeClose(state->m_Dialog);
+}
 
 LRESULT CALLBACK ControlProcedure(HWND window, UINT message, WPARAM wParam, LPARAM lParam)
 {
@@ -100,7 +162,9 @@ LRESULT CALLBACK ControlProcedure(HWND window, UINT message, WPARAM wParam, LPAR
         // that fails or is consumed by the shell's initialization message loop.
         if (message == s_Cancel)
             SetTimer(window, s_CancelTimer, 16, nullptr);
-        state->RequestNativeClose(state->m_Dialog);
+        state->ObserveWindow(state->m_Dialog);
+        if (message == WM_TIMER)
+            state->RequestNativeClose(state->m_Dialog);
         return 0;
     }
     return DefWindowProcW(window, message, wParam, lParam);
@@ -170,7 +234,10 @@ class CancellationEvents final : public IFileDialogEvents
 
     HRESULT STDMETHODCALLTYPE OnFolderChange(IFileDialog* dialog) override
     {
-        return CheckCancellation(dialog);
+        m_State.ObserveWindow(dialog);
+        m_State.m_Ready = true;
+        m_State.Trace("initial folder ready");
+        return S_OK;
     }
 
     HRESULT STDMETHODCALLTYPE OnSelectionChange(IFileDialog* dialog) override
@@ -201,10 +268,9 @@ class CancellationEvents final : public IFileDialogEvents
   private:
     HRESULT CheckCancellation(IFileDialog* dialog)
     {
-        // OnFolderChange/OnTypeChange also run when the shell opens the picker.
-        // This covers cancellation delivered before its modal message loop.
-        if (m_State.Cancelled())
-            m_State.RequestNativeClose(dialog);
+        // Initialization callbacks only arm cancellation. Closing inline can
+        // reenter shell startup; the native HWND timer runs after these return.
+        m_State.ObserveWindow(dialog);
         return S_OK;
     }
 
@@ -297,8 +363,11 @@ FileDialogResult Pick(HWND owner, const FileDialogOptions& options, WorkerState&
         return {FileDialogStatus::Cancelled};
     const EventLease events(*dialog.Get(), state);
     state.m_Dialog = dialog.Get();
+    state.Trace("enter Show");
     const HRESULT shown = dialog->Show(owner);
+    state.Trace("Show returned", shown);
     state.m_Dialog = nullptr;
+    state.StopWindowTimer();
     KillTimer(state.m_Control, s_CancelTimer);
     if (shown == HRESULT_FROM_WIN32(ERROR_CANCELLED) || state.Cancelled())
         return {FileDialogStatus::Cancelled};
@@ -393,6 +462,7 @@ void WindowsFileDialog::Begin(FileDialogOptions options, std::stop_token stop,
              wake = m_Impl->m_Wake]
             {
                 const std::stop_callback cancelled(stop, [state] { state->Cancel(); });
+                state->Trace("initialize apartment");
                 const HRESULT initialized = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED | COINIT_DISABLE_OLE1DDE);
                 FileDialogResult result;
                 HWND control = nullptr;
@@ -404,7 +474,9 @@ void WindowsFileDialog::Begin(FileDialogOptions options, std::stop_token stop,
                         const std::lock_guard lock(state->m_Mutex);
                         state->m_Control = control;
                     }
+                    state->Trace("control published");
                     result = Pick(owner, options, *state);
+                    state->Trace("picker resources released");
                 }
                 catch (const std::exception& error)
                 {
@@ -418,11 +490,19 @@ void WindowsFileDialog::Begin(FileDialogOptions options, std::stop_token stop,
                     const std::lock_guard lock(state->m_Mutex);
                     state->m_Control = nullptr;
                 }
+                state->m_Dialog = nullptr;
+                state->StopWindowTimer();
                 if (control)
                     DestroyWindow(control);
+                state->Trace("control destroyed");
                 if (SUCCEEDED(initialized))
+                {
+                    state->Trace("uninitialize apartment");
                     CoUninitialize();
+                    state->Trace("apartment released");
+                }
                 complete(std::move(result));
+                state->Trace("completion published");
                 // Hold the same lock used by IsRunning until the last GLFW wake
                 // returns. Retirement cannot terminate GLFW before that wake.
                 const std::lock_guard lock(state->m_Mutex);
