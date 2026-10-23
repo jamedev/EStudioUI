@@ -21,6 +21,7 @@ colorpicker { background: #202d41; padding: 10px; gap: 8px; }
 color-channel { padding: 0; gap: 6px; }
 color-palette { padding: 4px 0 0; gap: 4px; }
 .color-popover { background: #202d41; border: 1px solid #55739b; border-radius: 8px; padding: 2px; box-shadow: 0 10px 24px #00000070; }
-/* Compact vector fields keep full component values visible. Arrow keys and wheel still step. */
-vectoreditor numericinput > .numeric-decrement, vectoreditor numericinput > .numeric-increment { display: none; }
-vectoreditor .numeric-editor { padding: 4px; font-size: 12px; }
+/* Compact component fields keep complete values visible. Arrow keys and wheel still step. */
+vectoreditor numericinput > .numeric-decrement, vectoreditor numericinput > .numeric-increment,
+color-channel numericinput > .numeric-decrement, color-channel numericinput > .numeric-increment { display: none; }
+vectoreditor .numeric-editor, color-channel .numeric-editor { padding: 4px; font-size: 12px; }
