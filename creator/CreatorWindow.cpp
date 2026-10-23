@@ -23,6 +23,10 @@
 #ifdef _WIN32
 #define NOMINMAX
 #include <windows.h>
+// Keep the Win32 convenience macro out of the framework class namespace.
+#ifdef MessageBox
+#undef MessageBox
+#endif
 #endif
 
 namespace EStudioUI
