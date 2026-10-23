@@ -6,7 +6,13 @@ native text-range geometry, bounded CPU/GPU caches. See [TEXT.md](../TEXT.md).
 
 Linux Release: 36/36 CTest suites pass, including FontText and actual GPU integration.
 The public ControlText example is compiled alongside the existing examples.
-ASan/UBSan and Windows Release/Debug/native results are recorded after their runs.
+ASan/UBSan: 36/36 suites pass, including GPU integration (78.08 seconds).
+Leak detection is disabled under host tracing; native third-party libraries/Mesa
+are uninstrumented. Linux CI also passes Release and isolated TSan checks.
+Windows compiles with zero warnings; its first native run exposed a fixture issue:
+a hidden HWND correctly returns no visible text rectangles. The fixture now shows
+the HWND without activation before asserting two disjoint physical rectangles.
+Windows Release/Debug/native results are recorded after the corrected run.
 
 FontText checks fallback identities/coverage, real variation/italic selection,
 Arabic glyph IDs against an independently configured HarfBuzz reference,

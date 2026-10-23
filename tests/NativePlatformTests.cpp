@@ -793,6 +793,9 @@ void Accessibility(UiContext& ui, HWND window)
     ui.Prepare(800, 600);
     int invocations = 0;
     const ScopedConnection invocationConnection(button.Clicked().Connect([&] { ++invocations; }));
+    // Native range geometry intentionally excludes hidden HWNDs.
+    ShowWindow(window, SW_SHOWNOACTIVATE);
+    UpdateWindow(window);
     Trace("attach UI Automation provider");
     Detail::NativeAccessibility bridge(ui, window);
     std::atomic<bool> done = false;
