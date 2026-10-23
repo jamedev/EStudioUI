@@ -122,6 +122,11 @@ bool ColorEditor::Commit()
     {
         return true;
     }
+    if (m_Editor->GetText() == ColorToHex(m_Color))
+    {
+        SetState(Invalid, false);
+        return true;
+    }
     Color color;
     try
     {

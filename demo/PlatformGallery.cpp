@@ -1,4 +1,5 @@
 #include "PlatformGallery.h"
+#include "GpuProbeWindow.h"
 
 #include <EStudioUI/MemoryPlatformServices.h>
 #include <EStudioUI/SemanticTree.h>
@@ -354,8 +355,7 @@ void PlatformGallery::Verify(const std::filesystem::path& output)
     Check(visible.m_Width > 2 && visible.m_Height > 2, "native file-drop fixture is inside the client viewport");
     const auto metrics = probe.Platform().GetWindowMetrics();
     const Point point{visible.m_X + visible.m_Width * 0.5f, visible.m_Y + visible.m_Height * 0.5f};
-    glfwSetCursorPos(native, static_cast<double>(point.m_X) * metrics.m_InputScale.m_X,
-                     static_cast<double>(point.m_Y) * metrics.m_InputScale.m_Y);
+    PositionGpuProbeCursor(probe, point);
     double nativeX = 0, nativeY = 0;
     glfwGetCursorPos(native, &nativeX, &nativeY);
     const auto actual = metrics.FromNative({static_cast<float>(nativeX), static_cast<float>(nativeY)});

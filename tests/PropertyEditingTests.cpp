@@ -98,6 +98,14 @@ void VectorsAndColors(UiContext& ui)
     Check(!color.Commit() && color.GetColor() == previous,
           "Invalid intermediate color input preserves canonical color");
     Throws([&] { color.SetColor({1.1f, 0, 0, 1}); }, "Out-of-range color components reject");
+    const Color precise{.1234567f, .3456789f, .5678912f, .7891234f};
+    color.SetColor(precise);
+    int passiveChanges = 0;
+    const auto precisionObserver = color.ColorChanged().Connect([&](Color) { ++passiveChanges; });
+    color.Editor().FocusLost().Emit();
+    Check(color.GetColor() == precise && passiveChanges == 0,
+          "Unedited hexadecimal presentation preserves full canonical float precision on focus loss");
+    precisionObserver.Disconnect();
     auto& picker = ui.Root().Add<ColorPicker>();
     picker.SetColor({1, 0, 0, .5f});
     picker.SetModel(ColorModel::Hsv);
