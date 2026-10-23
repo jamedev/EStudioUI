@@ -4,7 +4,7 @@ A C++20 application framework prototype, currently centered on GLFW windows,
 analytic GPU shapes and text, typed signals, and CSS styling. Controls include
 buttons, checkboxes/radio groups, read-only/editable combos, scrolling forms, splitters,
 progress/help controls, single-line UTF-8 text boxes, tabs, lists, trees,
-editable tables, toolbars/tool buttons, popup menus, and embedded 3D surfaces. Dependencies are managed with a pinned vcpkg
+editable tables, toolbars/tool buttons, menu bars, nested command menus, asynchronous dialogs/popovers, and embedded 3D surfaces. Dependencies are managed with a pinned vcpkg
 manifest; no Qt or commercial SDK is required.
 
 Development follows the [framework foundation roadmap](FOUNDATIONS_ROADMAP.md)
@@ -15,15 +15,30 @@ The [developer experience principles](DEVELOPER_EXPERIENCE.md) make simple,
 safe application code an acceptance requirement for every foundation change.
 
 F09 input/actions/focus, F11 platform contracts, and F10a essential control text
-are implemented. The first common-control batch is delivered in 0.18. Remaining widget families
+are implemented. The first common-control batch is delivered in 0.18; command/dialog controls follow in 0.19. Remaining widget families
 and application workspaces continue through the roadmap. F10b document editing is a later track. F14 module extraction and SDK
 packaging are deferred until that use informs reusable boundaries, including
 services for applications without a UI. Standalone modules are planned, not
 current package capabilities; see the roadmaps for acceptance criteria.
 
+## Commands, dialogs and rich CSS (0.19)
+
+The demo opens **Menus & dialogs**. MenuBar reuses shared commands and nested
+ContextMenu presentations with GPU glyph icons, checked actions and shortcut
+hints. Popup supplies anchored interactive content; Dialog, MessageBox,
+InputDialog and DialogButtonBox return asynchronous results without nested event
+loops. Dialogs stay centered during resize; anchored surfaces follow layout and
+transforms. Input prompts return owned validated text, and modeless tools keep
+the workspace interactive.
+
+See [COMMAND_DIALOGS.md](COMMAND_DIALOGS.md), the compiled
+[example](examples/CommandDialogs.cpp) and
+[verification](verification/COMMAND_DIALOGS_0_19.md). `.\Build.ps1 -Run` still
+installs the pinned dependencies, compiles, tests and launches in one shot.
+
 ## Essential widgets and rich CSS (0.18)
 
-The demo opens **Essential widgets**: working three-state checkboxes, exclusive
+The **Essential widgets** tab contains working three-state checkboxes, exclusive
 radio groups, read-only/editable combos, scrolling forms, splitters, titled/checkable
 groups, frames/separators, progress/busy indicators and delayed tooltips. Rich CSS
 styles the actual control parts through the existing GPU renderer. The searchable

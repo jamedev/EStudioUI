@@ -528,3 +528,29 @@ invalidation path. Tooltip deadlines join the window scheduler, rather than
 requesting animation frames. Nonactivating/input-transparent popup options retain
 normal defaults, modal ancestry and shared input reentrancy/focus guards. See
 [COMMON_CONTROLS.md](COMMON_CONTROLS.md) for limits and public usage.
+
+
+## Command and dialog surfaces (0.19)
+
+MenuBar owns bounded persistent triggers and observes root-owned ContextMenus.
+The bar retains canonical action associations independently of popup visibility;
+shortcut resolution continues to deduplicate shared actions. MenuItem extends
+ToolButton with cached caption/icon/hint layouts and analytic check/arrow parts.
+There is no OS menu dependency or per-paint CSS parsing.
+
+Popup exposes the existing PopupSession stack as a composable control. Directional
+anchors are weak identities, not retained widget pointers. A bounded overlay
+arrangement pass follows viewport/layout/transform changes without invalidating
+unrelated intrinsic caches. Center placement stays current throughout live resize.
+The nonmodal owner-input exception enables menu switching; modeless mode permits
+outside interaction without relaxing modal barriers. Ordinary defaults preserve
+existing popup dismissal and focus behavior.
+
+Dialog composes a header, content widget and DialogButtonBox. Standard response
+roles choose acceptance/rejection or remain open for Apply/Reset/Help handlers.
+MessageBox adds wrapping text; InputDialog reuses TextBox validation/composition
+and returns a typed session. Accepted text is snapshotted once before completion
+callbacks; no result owns an editor, context or native window. Modeless closure
+preserves focus already moved outside its dialog. All surfaces reuse the ordinary
+scheduler, input transforms, semantics and retained GPU renderer. See
+[COMMAND_DIALOGS.md](COMMAND_DIALOGS.md) for the public ownership/cost contract.

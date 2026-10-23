@@ -256,17 +256,19 @@ class Demo
         std::ifstream widgets(m_Assets / "rich-widgets.css", std::ios::binary);
         std::ifstream textStyles(m_Assets / "text-controls.css", std::ios::binary);
         std::ifstream essentialStyles(m_Assets / "essential-widgets.css", std::ios::binary);
+        std::ifstream commandStyles(m_Assets / "command-dialogs.css", std::ios::binary);
         bool loaded = false;
-        if (theme && animation && rich && widgets && textStyles && essentialStyles)
+        if (theme && animation && rich && widgets && textStyles && essentialStyles && commandStyles)
             loaded = m_Window.Ui().SetStyleSheet(std::string(std::istreambuf_iterator<char>(theme), {}) + "\n" +
                                                      std::string(std::istreambuf_iterator<char>(animation), {}) + "\n" +
                                                      std::string(std::istreambuf_iterator<char>(rich), {}) + "\n" +
                                                      std::string(std::istreambuf_iterator<char>(widgets), {}) + "\n" +
                                                      std::string(std::istreambuf_iterator<char>(textStyles), {}) + "\n" +
-                                                     std::string(std::istreambuf_iterator<char>(essentialStyles), {}),
+                                                     std::string(std::istreambuf_iterator<char>(essentialStyles), {}) + "\n" +
+                                                     std::string(std::istreambuf_iterator<char>(commandStyles), {}),
                                                  error);
         else
-            error = "Cannot read theme, animation-start.css, rich-buttons.css, rich-widgets.css, text-controls.css, or essential-widgets.css.";
+            error = "Cannot read theme, animation-start.css, rich-buttons.css, rich-widgets.css, text-controls.css, essential-widgets.css, or command-dialogs.css.";
         if (!loaded)
         {
             m_Message->AddClass("error");

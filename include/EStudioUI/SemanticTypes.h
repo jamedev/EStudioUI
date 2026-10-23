@@ -83,7 +83,9 @@ enum class SemanticRole
     ProgressBar,
     Splitter,
     Separator,
-    ToolTip
+    ToolTip,
+    MenuBar,
+    Dialog
 };
 
 //! Supported interactions; advertised only when implemented by a semantic control.

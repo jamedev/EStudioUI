@@ -50,6 +50,7 @@ CONTROLTYPEID ControlType(SemanticRole role)
 {
     switch (role)
     {
+    case SemanticRole::Dialog:
     case SemanticRole::Window:
         return UIA_WindowControlTypeId;
     case SemanticRole::Text:
@@ -88,6 +89,8 @@ CONTROLTYPEID ControlType(SemanticRole role)
         return UIA_TreeControlTypeId;
     case SemanticRole::Table:
         return UIA_TableControlTypeId;
+    case SemanticRole::MenuBar:
+        return UIA_MenuBarControlTypeId;
     case SemanticRole::Menu:
         return UIA_MenuControlTypeId;
     case SemanticRole::MenuItem:
@@ -467,7 +470,8 @@ class Provider final : public IRawElementProviderSimple,
         else if (pattern == UIA_GridItemPatternId && node.m_GridContainer && node.m_Info.m_Row && node.m_Info.m_Column)
             *result = static_cast<IGridItemProvider*>(this);
         else if (pattern == UIA_ExpandCollapsePatternId &&
-                 (node.m_Info.m_Role == SemanticRole::TreeItem || node.m_Info.m_Role == SemanticRole::ComboBox))
+                 (node.m_Info.m_Role == SemanticRole::TreeItem || node.m_Info.m_Role == SemanticRole::ComboBox ||
+                  (node.m_Info.m_Role == SemanticRole::MenuItem && node.m_Info.m_Expandable)))
             *result = static_cast<IExpandCollapseProvider*>(this);
         else if (pattern == UIA_ScrollItemPatternId && HasSemanticAction(actions, SemanticAction::ScrollIntoView))
             *result = static_cast<IScrollItemProvider*>(this);
@@ -538,7 +542,7 @@ class Provider final : public IRawElementProviderSimple,
                     *result = Boolean(node.m_Info.m_Selected);
                 return S_OK;
             case UIA_ExpandCollapseExpandCollapseStatePropertyId:
-                if (node.m_Info.m_Role == SemanticRole::TreeItem)
+                if (node.m_Info.m_Role == SemanticRole::TreeItem || node.m_Info.m_Expandable)
                     *result = Integer(!node.m_Info.m_Expandable ? ExpandCollapseState_LeafNode
                                       : node.m_Info.m_Expanded  ? ExpandCollapseState_Expanded
                                                                 : ExpandCollapseState_Collapsed);

@@ -1,5 +1,6 @@
 #include <EStudioUI/ContextMenu.h>
 #include <EStudioUI/UiContext.h>
+#include <EStudioUI/MenuBar.h>
 
 #include <stdexcept>
 
@@ -12,10 +13,13 @@ ContextMenu::ContextMenu() : Widget("contextmenu")
 
 ContextMenu::~ContextMenu() = default;
 
-ToolButton& ContextMenu::AddAction(std::string text, bool enabled)
+MenuItem& ContextMenu::AddAction(std::string text, bool enabled)
 {
     VerifyStructuralMutation();
-    auto& action = Add<ToolButton>(std::move(text));
+    if (GetChildren().size() >= 4096)
+        throw std::length_error("A command menu supports at most 4,096 presentations.");
+    auto& action = Add<MenuItem>(std::move(text));
+    action.m_MenuBar = m_MenuBar;
     action.AddClass("menu-action");
     action.SetAccessibleRole(SemanticRole::MenuItem);
     action.SetEnabled(enabled);
@@ -29,7 +33,7 @@ ToolButton& ContextMenu::AddAction(std::string text, bool enabled)
     return action;
 }
 
-ToolButton& ContextMenu::AddAction(std::shared_ptr<Action> action)
+MenuItem& ContextMenu::AddAction(std::shared_ptr<Action> action)
 {
     if (!action)
         throw std::invalid_argument("A menu action cannot be null.");
@@ -42,12 +46,16 @@ ToolButton& ContextMenu::AddAction(std::shared_ptr<Action> action)
 ContextMenu& ContextMenu::AddMenu(std::string text)
 {
     VerifyStructuralMutation();
+    if (GetChildren().size() >= 4096)
+        throw std::length_error("A command menu supports at most 4,096 presentations.");
     auto menu = std::make_unique<ContextMenu>();
     auto& result = *menu;
-    auto& button = Add<ToolButton>(std::move(text));
+    result.m_MenuBar = m_MenuBar;
+    auto& button = Add<MenuItem>(std::move(text));
     button.AddClass("menu-action");
     button.SetAccessibleRole(SemanticRole::MenuItem);
     button.AddClass("submenu-action");
+    button.m_HasSubmenu = true;
     const auto index = m_Submenus.size();
     m_Submenus.push_back({WidgetRef(&button), std::move(menu), {}});
     const WidgetRef owner(this);
@@ -73,14 +81,21 @@ void ContextMenu::OpenSubmenu(std::size_t index)
         entry.m_Menu = WidgetRef(&context->AddOwnedPopup(std::move(entry.m_Pending), *button));
     if (auto* menu = dynamic_cast<ContextMenu*>(entry.m_Menu.Get()))
     {
-        const auto bounds = button->GetBounds();
-        menu->Open(context->ToWindowPoint(*button, {bounds.m_X + bounds.m_Width, bounds.m_Y}), this);
+        if (auto* item = dynamic_cast<MenuItem*>(button))
+            item->m_Submenu = WidgetRef(menu);
+        PopupOptions options;
+        options.m_Parent = this;
+        options.m_Placement = PopupPlacement::Right;
+        options.m_AnchorWidget = button;
+        context->ShowPopup(*menu, {}, options);
     }
 }
 
 void ContextMenu::AddSeparator()
 {
     VerifyStructuralMutation();
+    if (GetChildren().size() >= 4096)
+        throw std::length_error("A command menu supports at most 4,096 presentations.");
     auto& separator = Add<Widget>("separator");
     separator.AddClass("menu-separator");
 }
@@ -127,7 +142,21 @@ bool ContextMenu::IsFocusable() const
 
 bool ContextMenu::OnKeyPreview(Key key, bool down, bool, Modifiers modifiers)
 {
-    if (down && key == Key::Left && GetContext()->GetPopupParent(*this))
+    if (down && !modifiers.m_Alt && !modifiers.m_Control && !modifiers.m_Meta &&
+        (key == Key::Left || key == Key::Right) && !dynamic_cast<ContextMenu*>(GetContext()->GetPopupParent(*this)))
+    {
+        bool onSubmenu = false;
+        if (key == Key::Right)
+            for (const auto& entry : m_Submenus)
+                onSubmenu |= entry.m_Button.Get() == GetContext()->GetFocus();
+        if (!onSubmenu)
+            if (auto* bar = dynamic_cast<MenuBar*>(m_MenuBar.Get()))
+            {
+                bar->NavigateMenu(key == Key::Left ? -1 : 1, true);
+                return true;
+            }
+    }
+    if (down && key == Key::Left && dynamic_cast<ContextMenu*>(GetContext()->GetPopupParent(*this)))
     {
         Close();
         return true;

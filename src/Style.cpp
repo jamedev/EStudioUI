@@ -1466,7 +1466,8 @@ Style StyleSheet::Compute(const StyleNode& node, const Style* inherited, int pse
         style.m_TextAlign = inherited->m_TextAlign;
         style.m_WordWrap = inherited->m_WordWrap;
     }
-    if (pseudoElement == 0 && (node.m_Type == "button" || node.m_Type == "toolbutton" || node.m_Type == "textbox"))
+    if (pseudoElement == 0 && (node.m_Type == "button" || node.m_Type == "toolbutton" || node.m_Type == "textbox" ||
+                               node.m_Type == "menu-trigger" || node.m_Type == "dialog-close"))
     {
         style.m_Height = {Length::Unit::Pixels, 44};
         style.m_Padding = {10, 14, 10, 14};
@@ -1493,6 +1494,23 @@ Style StyleSheet::Compute(const StyleNode& node, const Style* inherited, int pse
             style.m_Radius = 7;
             style.m_Background = {0.12f, 0.16f, 0.25f, 1};
             style.m_BorderColor = {0.3f, 0.4f, 0.6f, 1};
+        }
+        else if (node.m_Type == "dialog" || node.m_Type == "popup")
+        {
+            style.m_Width = {Length::Unit::Pixels, node.m_Type == "dialog" ? 460.0f : 280.0f};
+            style.m_TextAlign = "left";
+            style.m_Padding = {16, 18, 16, 18};
+            style.m_Gap = 14;
+            style.m_Radius = 10;
+            style.m_BorderWidth = 1;
+            style.m_Background = {0.09f, 0.12f, 0.18f, 1};
+            style.m_Color = {0.93f, 0.96f, 1, 1};
+            style.m_BorderColor = {0.3f, 0.4f, 0.6f, 1};
+        }
+        else if (node.m_Type == "menubar")
+        {
+            style.m_Padding = {4, 6, 4, 6};
+            style.m_Background = {0.09f, 0.12f, 0.18f, 1};
         }
         else if (node.m_Type == "tooltip")
         {

@@ -855,7 +855,7 @@ void Widget::SetAccessibleDescription(std::optional<std::string> description)
 void Widget::SetAccessibleRole(std::optional<SemanticRole> role)
 {
     VerifyStructuralMutation();
-    if (role && (*role < SemanticRole::Group || *role > SemanticRole::ToolTip))
+    if (role && (*role < SemanticRole::Group || *role > SemanticRole::Dialog))
         throw std::invalid_argument("Invalid accessible role.");
     m_AccessibleRole = role;
     NotifySemanticsChanged();

@@ -247,6 +247,9 @@ class UiContext
     //! Returns whether a widget has a live presentation anywhere in the chain.
     bool IsPopupOpen(const Widget& popup) const;
 
+    //! Returns a copy of one live presentation result, or an empty handle when closed.
+    PopupSession GetPopupSession(const Widget& popup) const;
+
     //! Returns the number of currently stacked presentations.
     std::size_t GetPopupCount() const;
 
@@ -439,6 +442,9 @@ class UiContext
     //! Returns the top overlay or root as the active keyboard/focus boundary.
     Widget& InputRoot() const;
 
+    //! Checks the keyboard scope and explicit nonmodal pointer-owner exceptions.
+    bool IsInputAllowed(const Widget& widget) const;
+
     //! Searches overlays front-to-back, stopping at a modal barrier.
     Widget* InputHitTest(Point position) const;
 
@@ -503,6 +509,8 @@ class UiContext
         PopupOptions m_Options;
         //! Stores the requested window-coordinate origin.
         Point m_Anchor;
+        //! Observes directional placement without retaining an anchor widget.
+        WidgetRef m_AnchorWidget;
         //! Owns asynchronous completion independently of widget lifetime.
         PopupSession m_Session;
     };
@@ -552,6 +560,9 @@ class UiContext
 
     //! Places children using the documented flex subset.
     void Layout(Widget& widget, Rect bounds, Rect clip, bool definiteWidth = false, bool definiteHeight = false);
+
+    //! Repositions at most 64 overlays while reusing intrinsic caches and ordinary tree geometry.
+    void ArrangePopups();
 
     //! Finds the frontmost displayed widget inside all ancestor clips.
     Widget* HitTest(Widget& widget, Point position, Affine parentTransform = {}) const;

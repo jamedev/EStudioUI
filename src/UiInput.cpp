@@ -78,9 +78,26 @@ bool UiContext::IsWithin(const Widget* widget, const Widget* ancestor) const
 Widget& UiContext::InputRoot() const
 {
     for (auto i = m_Popups.rbegin(); i != m_Popups.rend(); ++i)
-        if (auto* popup = i->m_Widget.Get(); popup && (i->m_Options.m_TakeFocus || i->m_Options.m_Modal))
+        if (auto* popup = i->m_Widget.Get();
+            popup && ((i->m_Options.m_TakeFocus && !i->m_Options.m_Modeless) || i->m_Options.m_Modal))
             return *popup;
     return const_cast<Widget&>(m_Root);
+}
+
+bool UiContext::IsInputAllowed(const Widget& widget) const
+{
+    if (IsWithin(&widget, &InputRoot()))
+        return true;
+    for (auto entry = m_Popups.rbegin(); entry != m_Popups.rend(); ++entry)
+    {
+        if (entry->m_Options.m_Modal)
+            return false;
+        if (entry->m_Options.m_AllowOwnerInput)
+            if (auto* popup = entry->m_Widget.Get())
+                if (IsWithin(&widget, LogicalParent(*popup)))
+                    return true;
+    }
+    return false;
 }
 
 Widget* UiContext::InputHitTest(Point position) const
@@ -282,10 +299,10 @@ bool UiContext::DispatchShortcut(const KeyboardEvent& event)
         m_LastShortcut = ShortcutStatus::Ambiguous;
         return true;
     }
-    if (!m_Popups.empty() && !m_Popups.back().m_Options.m_Modal)
+    if (!m_Popups.empty() && !m_Popups.back().m_Options.m_Modal && !m_Popups.back().m_Options.m_Modeless)
     {
         std::size_t first = m_Popups.size() - 1;
-        while (first && !m_Popups[first - 1].m_Options.m_Modal)
+        while (first && !m_Popups[first - 1].m_Options.m_Modal && !m_Popups[first - 1].m_Options.m_Modeless)
             --first;
         ClosePopupBranch(first, {PopupCloseReason::Closed, 0});
     }
@@ -304,7 +321,8 @@ bool UiContext::RouteKey(const KeyboardEvent& event)
     }
     const auto modifiers = EditingModifiers(event.m_Modifiers);
     if (event.m_Down && event.m_Key == Key::Escape && !m_Popups.empty() &&
-        m_Popups.back().m_Options.m_DismissOnEscape && !event.m_Modifiers.m_AltGraph)
+        m_Popups.back().m_Options.m_DismissOnEscape && !event.m_Modifiers.m_AltGraph &&
+        (!m_Popups.back().m_Options.m_Modeless || IsWithin(m_Focus.Get(), m_Popups.back().m_Widget.Get())))
     {
         ClosePopup({PopupCloseReason::Escape, 0});
         return true;
@@ -516,6 +534,17 @@ bool UiContext::RoutePointer(const PointerEvent& event)
                 hit = i - 1;
                 break;
             }
+            if (m_Popups[i - 1].m_Options.m_Modeless)
+            {
+                hit = i - 1;
+                break;
+            }
+            if (popup && m_Popups[i - 1].m_Options.m_AllowOwnerInput)
+                if (auto* owner = LogicalParent(*popup); owner && HitTest(*owner, event.m_Position))
+                {
+                    hit = i - 1;
+                    break;
+                }
             if (!m_Popups[i - 1].m_Options.m_DismissOnOutside)
             {
                 if (i < m_Popups.size())
@@ -582,7 +611,7 @@ bool UiContext::RoutePointer(const PointerEvent& event)
         if (event.m_Button == PointerButton::Left)
             SetFocus(widget->IsFocusable() ? widget : nullptr);
         widget = target.Get();
-        if (!widget || !IsWithin(widget, &InputRoot()))
+        if (!widget || !IsInputAllowed(*widget))
             return true;
         m_Capture = target;
         m_CapturePointer = event.m_PointerId;
@@ -671,7 +700,7 @@ void UiContext::SetFocus(Widget* widget)
     VerifyDispatchPhase();
     if (widget && (!widget->IsEnabled() || !widget->IsFocusable() || widget->m_Context != this || !widget->IsVisible()))
         widget = nullptr;
-    if (widget && !IsWithin(widget, &InputRoot()))
+    if (widget && !IsInputAllowed(*widget))
         return;
     if (m_Focus.Get() == widget)
         return;
@@ -783,7 +812,20 @@ PopupSession UiContext::ShowPopup(Widget& popup, Point anchor, PopupOptions opti
         throw std::invalid_argument("Popup coordinates must be finite.");
     if (popup.GetContext() != this || &popup == &m_Root || popup.GetParent() != &m_Root)
         throw std::invalid_argument("Popups must be immediate owned children of this UI root.");
-    const WidgetRef reference(&popup);
+    if (options.m_Placement < PopupPlacement::Point || options.m_Placement > PopupPlacement::Left)
+        throw std::invalid_argument("Invalid popup placement.");
+    if (options.m_Modeless && options.m_Modal)
+        throw std::invalid_argument("A popup cannot be both modal and modeless.");
+    if (options.m_AllowOwnerInput && options.m_Modal)
+        throw std::invalid_argument("Modal popups cannot permit underlying owner input.");
+    if (options.m_AllowOwnerInput && LogicalParent(popup) == &m_Root)
+        throw std::invalid_argument("Owner input requires an owned popup with a non-root logical owner.");
+    if (options.m_AnchorWidget &&
+        (options.m_AnchorWidget->GetContext() != this || IsWithin(options.m_AnchorWidget, &popup)))
+        throw std::invalid_argument("A popup anchor must be outside the popup in the same context.");
+    if (options.m_Placement >= PopupPlacement::Below && !options.m_AnchorWidget)
+        throw std::invalid_argument("Directional popup placement requires an observed anchor.");
+    const WidgetRef reference(&popup), anchorWidget(options.m_AnchorWidget);
     WidgetRef parent(options.m_Parent);
     if (!parent.Get())
         for (const auto& owned : m_OwnedPopups)
@@ -794,6 +836,19 @@ PopupSession UiContext::ShowPopup(Widget& popup, Point anchor, PopupOptions opti
                         parent = entry->m_Widget;
                         break;
                     }
+    // A command/popover opened from the workspace may temporarily sit above a
+    // modeless tool. Its logical CSS owner remains independent of this stack parent.
+    if (!parent.Get() && !options.m_Modeless)
+        for (auto entry = m_Popups.rbegin(); entry != m_Popups.rend(); ++entry)
+        {
+            if (entry->m_Options.m_Modal)
+                break;
+            if (entry->m_Options.m_Modeless)
+            {
+                parent = entry->m_Widget;
+                break;
+            }
+        }
     std::size_t retain = 0;
     if (auto* target = parent.Get())
     {
@@ -836,7 +891,8 @@ PopupSession UiContext::ShowPopup(Widget& popup, Point anchor, PopupOptions opti
         return session;
     }
     options.m_Parent = nullptr;
-    m_Popups.push_back({reference, parent, m_Focus, options, anchor, session});
+    options.m_AnchorWidget = nullptr;
+    m_Popups.push_back({reference, parent, m_Focus, options, anchor, anchorWidget, session});
     const auto current = ++m_PopupRevision;
     popup.m_Overlay = true;
     popup.SetVisible(true);
@@ -911,6 +967,12 @@ void UiContext::PrunePopups()
             ClosePopupBranch(i, {popup ? PopupCloseReason::Hidden : PopupCloseReason::OwnerExpired, 0});
             return;
         }
+        if (m_Popups[i].m_Options.m_Placement >= PopupPlacement::Below &&
+            (!m_Popups[i].m_AnchorWidget.Get() || !m_Popups[i].m_AnchorWidget.Get()->IsVisible()))
+        {
+            ClosePopupBranch(i, {PopupCloseReason::OwnerExpired, 0});
+            return;
+        }
         for (const auto& owned : m_OwnedPopups)
             if (owned.m_Popup.Get() == popup)
                 if (auto* owner = owned.m_Owner.Get(); !owner || !owner->IsVisible() || !owner->IsEnabled())
@@ -932,7 +994,9 @@ void UiContext::ClosePopupBranch(std::size_t index, PopupResult result)
     m_Popups.resize(index);
     ++m_PopupRevision;
     const auto restore = closing.front().m_ReturnFocus;
-    const bool restoreFocus = closing.front().m_Options.m_RestoreFocus;
+    const bool restoreFocus =
+        closing.front().m_Options.m_RestoreFocus &&
+        (!closing.front().m_Options.m_Modeless || IsWithin(m_Focus.Get(), closing.front().m_Widget.Get()));
     const auto capture = m_Capture;
     bool cancelCapture = false;
     for (auto entry = closing.rbegin(); entry != closing.rend(); ++entry)
@@ -1028,6 +1092,16 @@ bool UiContext::IsPopupOpen(const Widget& popup) const
     VerifyAccess();
     return std::any_of(m_Popups.begin(), m_Popups.end(),
                        [&](const PopupEntry& entry) { return entry.m_Widget.Get() == &popup; });
+}
+
+PopupSession UiContext::GetPopupSession(const Widget& popup) const
+{
+    VerifyAccess();
+    popup.VerifyAccess();
+    for (const auto& entry : m_Popups)
+        if (entry.m_Widget.Get() == &popup)
+            return entry.m_Session;
+    return {};
 }
 
 std::size_t UiContext::GetPopupCount() const

@@ -83,6 +83,8 @@ WidgetGallery::WidgetGallery(Window& window, TabWidget& tabs, const std::filesys
     m_Text = std::make_unique<TextGallery>(window, tabs.AddTab("Text & fonts"));
     auto& essentialPage = tabs.AddTab("Essential widgets");
     m_Essential = std::make_unique<EssentialGallery>(window, essentialPage);
+    auto& commandPage = tabs.AddTab("Menus & dialogs");
+    m_Commands = std::make_unique<CommandGallery>(window, commandPage);
     if (auto* header = window.Ui().Root().FindById("themes"))
         header->Add<Button>("Platform services")
             .Clicked()
@@ -97,10 +99,10 @@ WidgetGallery::WidgetGallery(Window& window, TabWidget& tabs, const std::filesys
                         }
                 });
     if (auto* header = window.Ui().Root().FindById("themes"))
-        header->Add<Button>("Essential widgets")
+        header->Add<Button>("Menus & dialogs")
             .Clicked()
             .Connect(
-                [this, page = WidgetRef(&essentialPage)]
+                [this, page = WidgetRef(&commandPage)]
                 {
                     for (int index = 0; index < m_Tabs.GetTabCount(); ++index)
                         if (&m_Tabs.GetPage(index) == page.Get())
@@ -489,6 +491,7 @@ void WidgetGallery::Verify(const std::filesystem::path& assets, const std::files
     m_Platform->Verify(output);
     m_Text->Verify(assets, output);
     m_Essential->Verify(assets, output);
+    m_Commands->Verify(assets, output);
     m_Window.RenderFrame(ui.GetTime());
     std::ofstream report(output / "widgets-report.txt");
     report << "EStudioUI 0.3 widget integration: PASS\n"

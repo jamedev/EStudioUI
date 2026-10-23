@@ -1,0 +1,23 @@
+/* Rich presentation; all values compile before painting, with no permanent timelines. */
+.command-gallery { gap: 14px; }
+.command-gallery .command-heading { font-size: 25px; font-weight: 700; }
+.command-gallery .command-status { padding: 12px 15px; background: linear-gradient(110deg, #1d3855, #213245); color: #d4f3ff; border: 1px solid #416e88; border-radius: 9px; }
+.command-gallery menubar { background: linear-gradient(100deg, #243854, #192a41); border-color: #58789f; box-shadow: 0px 3px 10px rgba(0, 0, 0, 0.16); }
+.command-gallery menu-trigger { color: #eef5ff; transition: background-color 100ms ease; }
+.command-gallery menu-trigger.menu-open { background: #3a5d83; }
+.command-gallery contextmenu { width: 320px; background: linear-gradient(140deg, #2a3c55, #152439); border-color: #6988ac; border-radius: 11px; box-shadow: 0px 9px 20px rgba(0, 0, 0, 0.3); color: #f0f5ff; }
+.command-gallery contextmenu .menu-action { height: 36px; color: #f0f5ff; padding: 6px 9px; border-radius: 6px; }
+.command-gallery contextmenu .menu-action:hover, .command-gallery contextmenu .menu-action:focus { background: linear-gradient(90deg, #365b80, #314663); }
+.command-gallery contextmenu .menu-action::shortcut { font-size: 12px; color: #b1cee9; }
+.command-gallery contextmenu .menu-action::mark { color: #7fefc4; width: 2px; }
+.command-gallery contextmenu .menu-action::icon { color: #8de0f5; font-weight: 700; }
+.command-gallery contextmenu .menu-action::arrow { color: #adceef; width: 2px; }
+.command-gallery dialog, .command-gallery popup { background: linear-gradient(135deg, #263a55, #17283f); border: 1px solid #6988ac; color: #edf4ff; border-radius: 15px; box-shadow: 0px 14px 28px rgba(0, 0, 0, 0.34); }
+.command-gallery dialog-title { color: #f0f7ff; font-size: 21px; font-weight: 700; }
+.command-gallery dialog .dialog-editor { background: #0f2035; color: #f0f6ff; border-color: #6388ae; }
+.command-gallery dialog .dialog-editor:focus { border-color: #81caeb; box-shadow: 0px 0px 5px rgba(81, 182, 231, 0.4); }
+.command-gallery dialog .dialog-editor:intermediate, .command-gallery dialog .dialog-editor:invalid { border-color: #e2ad56; }
+.command-gallery dialogbuttonbox .dialog-accept { background: linear-gradient(110deg, #246989, #2d527e); color: #f3faff; border-color: #76bbdd; }
+.command-gallery dialogbuttonbox .dialog-destructive { background: linear-gradient(110deg, #8b4055, #6e354b); color: #fff0f3; border-color: #d28494; }
+.command-gallery dialogbuttonbox .dialog-default { box-shadow: 0px 0px 4px rgba(111, 195, 231, 0.5); }
+.command-gallery .message-question { border-color: #80b7dc; }

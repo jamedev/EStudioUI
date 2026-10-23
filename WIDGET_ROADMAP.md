@@ -20,7 +20,7 @@ ownership, CSS, and low idle-work requirements.
 F09 input/actions/focus is delivered in 0.14, including shared command presentations
 and nested menus on existing controls. The 0.16 F11 composition/virtual semantic implementation is documented in
 [PLATFORM.md](PLATFORM.md); F10a is delivered and automated Gate B integration is verified. The first
-common-control batch ships in 0.18; human native/composition/accessibility
+common-control batch ships in 0.18 and the command/dialog batch in 0.19; human native/composition/accessibility
 acceptance continues through the platform checklist. F10b document editing and
 W04/W05 remain a later dedicated track; basic forms and workspaces do not wait
 for a document engine. These are sequencing changes, not new shipped features.
@@ -32,7 +32,8 @@ single-line `TextBox`, `NumericInput`, `Slider`, `SplitToolButton`, `TabWidget`,
 `ToolBar`, `ContextMenu`, `ListWidget`, `TreeWidget`, `TableWidget`, `CanvasWidget`,
 `SketchWidget`, `OpenGLWidget`, `CheckBox`, `RadioButton`/`RadioGroup`, `ComboBox`,
 `ScrollArea`, `Splitter`, `GroupBox`, `Frame`, `Separator`, `ProgressBar`,
-`BusyIndicator`, `ToolTip`, and custom painting through `PaintWidget`/`Painter`.
+`BusyIndicator`, `ToolTip`, `MenuBar`, `MenuItem`, `Popup`, `Dialog`,
+`DialogButtonBox`, `MessageBox`, `InputDialog`, and custom painting through `PaintWidget`/`Painter`.
 
 Existing collections render viewport model entries rather than creating a widget
 per row. Table sorting, column resizing, and basic editing already work. The
@@ -41,11 +42,11 @@ scrolling container. The custom dial in the demo is not a public library `Dial`.
 
 Priority means: **Essential** for ordinary applications, **High** for a powerful
 engineering/CAD workspace, **Later** after the shared foundations and common
-controls. Entries marked **0.18** are delivered; the other catalog entries remain planned.
+controls. Entries marked **0.18** or **0.19** are delivered; the other catalog entries remain planned.
 
 F09 adds shared action presentations to the existing buttons, toolbars, split
 choosers, and context menus. Nested command menus are implemented through
-`ContextMenu::AddMenu`; W24 remains open for MenuBar and the rest of that family.
+`ContextMenu::AddMenu`; W24 adds MenuBar and MenuItem glyph icons/shortcut hints in 0.19.
 No other planned widget family is marked delivered by the input milestone.
 
 ## Input and display
@@ -89,11 +90,11 @@ only change appearance should share implementations and semantic roles.
 
 | ID | Widget/family | Scope | Priority |
 | --- | --- | --- | --- |
-| W24 | MenuBar / nested Menu | Submenus, icons, shortcut hints, checked actions; extend ContextMenu | Essential |
+| W24 | MenuBar / nested Menu | Submenus, glyph icons, shortcut hints, checked actions; extend ContextMenu | Essential — **0.19 delivered** |
 | W25 | ToolTip | Delayed pointer/focus help and reliable dismissal | Essential — **0.18 delivered** |
-| W26 | Popup / Popover | Shared anchored interactive content and dismissal/focus behavior | Essential |
-| W27 | Dialog | Modal/modeless operation, ownership, default/cancel actions | Essential |
-| W28 | MessageBox / InputDialog / DialogButtonBox | Reusable confirmation, errors, input requests, standard responses | Essential |
+| W26 | Popup / Popover | Shared anchored interactive content and dismissal/focus behavior | Essential — **0.19 delivered** |
+| W27 | Dialog | In-window modal/modeless operation, ownership, default/cancel actions | Essential — **0.19 delivered** |
+| W28 | MessageBox / InputDialog / DialogButtonBox | Reusable confirmation, errors, input requests, standard responses | Essential — **0.19 delivered** |
 | W29 | FileDialog / FolderPicker / FilePathEditor | Open/save/folder selection, filters, recent paths | Essential |
 | W30 | StatusBar | Messages, coordinates, contextual state, progress | High |
 | W31 | Banner / Toast / ValidationMessage | Nonmodal and field-level feedback with accessible announcements | High |
@@ -173,8 +174,10 @@ canvas/sketcher layer rather than becoming mandatory core form controls.
    [Contracts](COMMON_CONTROLS.md) and [evidence](verification/WIDGETS_0_18.md) record
    actual behavior, bounds and native/manual acceptance.
    Build the shared popup/scroll/grouping mechanisms once.
-3. Expand common application coverage: commands/menus, dialogs and native-service
-   widgets, then main windows, docking, property editing, and stronger data views.
+3. Command/dialog batch (0.19): W24, W26, W27 and W28. See
+   [contracts](COMMAND_DIALOGS.md) and [evidence](verification/COMMAND_DIALOGS_0_19.md).
+   Continue image/icon resources, standalone ScrollBar/StackedWidget and
+   native-service widgets, then main windows, docking, property editing and stronger data views.
    Develop F16 history/workspace services with their application consumers.
 4. After broad widget/workspace use establishes the boundaries, revisit F14 to
    extract reusable framework modules and prove installed UI/headless consumers.
@@ -200,7 +203,7 @@ visual variation.
 - [Current architecture](ARCHITECTURE.md), [CSS contract](CSS.md), and
   [0.8 verification](verification/WIDGET_STYLING_0_8.md).
 
-The 0.18 batch adds no new runtime dependency. Next catalog work can build on
+The 0.18 and 0.19 batches add no new runtime dependency. Next catalog work can build on
 these controls; document storage/editor families remain F10b and module extraction
 remains deferred. Image/icon resources, standalone scrolling/stacked containers
 and broader workspace controls retain their separate entries.

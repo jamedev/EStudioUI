@@ -169,3 +169,23 @@ labeled-number { gap: 8px; }
 #sketch-inspector textbox, #sketch-inspector toolbutton { height: 28px; padding: 3px 5px; font-size: 12px; }
 #sketch-inspector label { font-size: 12px; }
 #sketch-files textbox, .sketch-note textbox { height: 30px; padding: 5px 8px; }
+
+/* Asynchronous command/dialog controls. */
+menubar { background: #141e30; color: #eff4ff; padding: 4px 6px; border: 1px solid #3e557a; border-radius: 8px; }
+menu-trigger { height: 32px; padding: 5px 12px; background: transparent; color: #eff4ff; border: none; border-radius: 5px; }
+menu-trigger:hover, menu-trigger.menu-open { background: #263b5d; }
+menubar:focus { border-color: #4c8bdc; box-shadow: 0px 0px 3px #4c8bdc; }
+contextmenu .menu-action { height: auto; min-height: 32px; padding: 5px 8px; }
+contextmenu .menu-action::shortcut { font-size: 12px; opacity: 0.72; }
+contextmenu .menu-action::mark, contextmenu .menu-action::arrow { color: #4c8bdc; }
+dialog, popup { text-align: left; width: 460px; height: auto; padding: 18px 20px; gap: 15px; background: #141e30; color: #eff4ff; border: 1px solid #3e557a; border-radius: 12px; box-shadow: 0px 12px 28px rgba(0, 0, 0, 0.28); }
+popup { width: 300px; }
+dialog-title { font-size: 20px; font-weight: 700; height: auto; }
+dialog-close { padding: 2px; color: #eff4ff; background: transparent; border: none; border-radius: 5px; text-align: center; }
+dialog-close:hover, dialog-close:focus { background: #263b5d; }
+dialog-content { gap: 10px; }
+dialogbuttonbox button { height: 36px; padding: 7px 15px; }
+dialogbuttonbox .dialog-default { border-color: #4c8bdc; box-shadow: 0px 0px 3px #4c8bdc; }
+dialogbuttonbox .dialog-destructive { background: #8a3447; color: #ffffff; border-color: #c26575; }
+.message-warning { border-color: #c59039; }
+.message-error { border-color: #cf6878; }

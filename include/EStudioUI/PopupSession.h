@@ -36,6 +36,17 @@ struct PopupResult
     int m_Value = 0;
 };
 
+//! Placement resolved again after layout and every window resize.
+enum class PopupPlacement
+{
+    Point,
+    Center,
+    Below,
+    Above,
+    Right,
+    Left
+};
+
 //! Configuration copied when opening a popup; pointer arguments are observed, not retained.
 struct PopupOptions
 {
@@ -59,6 +70,18 @@ struct PopupOptions
 
     //! Excludes a decorative presentation from pointer hit testing.
     bool m_InputTransparent = false;
+
+    //! Keeps the surface open while allowing outside pointer/focus interaction; incompatible with Modal.
+    bool m_Modeless = false;
+
+    //! Positions relative to the viewport or observed anchor; Point preserves the supplied origin.
+    PopupPlacement m_Placement = PopupPlacement::Point;
+
+    //! Observes a same-context anchor for directional placement; never retains the widget.
+    Widget* m_AnchorWidget = nullptr;
+
+    //! Allows a nonmodal owned popup's logical owner subtree to receive pointer input.
+    bool m_AllowOwnerInput = false;
 
     //! Returns modal defaults that consume outside presses without dismissing.
     static PopupOptions Modal();

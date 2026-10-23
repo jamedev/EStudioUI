@@ -1,6 +1,6 @@
 #pragma once
 
-#include "ToolButton.h"
+#include "MenuItem.h"
 #include "PopupSession.h"
 
 namespace EStudioUI
@@ -16,10 +16,10 @@ class ContextMenu final : public Widget
     ~ContextMenu() override;
 
     //! Appends an action whose Clicked signal fires after the popup closes.
-    ToolButton& AddAction(std::string text, bool enabled = true);
+    MenuItem& AddAction(std::string text, bool enabled = true);
 
     //! Appends a shared command presentation that executes after menu-chain dismissal.
-    ToolButton& AddAction(std::shared_ptr<Action> action);
+    MenuItem& AddAction(std::shared_ptr<Action> action);
 
     //! Appends a lazily attached submenu with pointer and Right/Left keyboard navigation.
     ContextMenu& AddMenu(std::string text);
@@ -44,6 +44,9 @@ class ContextMenu final : public Widget
     bool OnKeyPreview(Key key, bool down, bool repeat, Modifiers modifiers) override;
 
   private:
+    friend class MenuBar;
+    //! Observes a containing menu bar for root-menu navigation and persistent command associations.
+    WidgetRef m_MenuBar;
     //! Attaches and opens a submenu below the current presentation.
     void OpenSubmenu(std::size_t index);
 

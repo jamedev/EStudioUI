@@ -1226,6 +1226,8 @@ void UiContext::Prepare(float width, float height)
         Restyle(m_Root, nullptr, m_FullStyleDirty);
     if (m_Root.m_ArrangeDirty || !m_Root.m_MeasureValid)
         Arrange();
+    else if (m_HitTestDirty && !m_Popups.empty())
+        ArrangePopups();
     m_HitTestDirty = false;
     if (RefreshHover())
     {
@@ -1234,6 +1236,8 @@ void UiContext::Prepare(float width, float height)
         m_FullStyleDirty = false;
         if (m_Root.m_ArrangeDirty || !m_Root.m_MeasureValid)
             Arrange();
+        else if (m_HitTestDirty && !m_Popups.empty())
+            ArrangePopups();
     }
     m_Dirty = m_FullStyleDirty || m_Root.m_SubtreeStyleDirty || m_Root.m_ArrangeDirty || !m_Root.m_MeasureValid ||
               m_HitTestDirty;
@@ -1255,15 +1259,68 @@ void UiContext::Arrange()
     }
     const PhaseScope phase(*this, UiPhase::Layout);
     Layout(m_Root, {0, 0, m_Width, m_Height}, {0, 0, m_Width, m_Height}, true, true);
+    ArrangePopups();
+}
+
+void UiContext::ArrangePopups()
+{
+    const PhaseScope phase(*this, UiPhase::Layout);
     for (const auto& entry : m_Popups)
         if (auto* popup = entry.m_Widget.Get(); popup && popup->IsVisible())
         {
-            const auto measured = Measure(*popup, {m_Width, m_Height}).m_Preferred;
-            const float popupWidth = std::min(m_Width, measured.m_X);
-            const float popupHeight = std::min(m_Height, measured.m_Y);
+            auto measured = Measure(*popup, {m_Width, m_Height});
+            const float popupWidth = std::max(measured.m_Minimum.m_X, std::min(m_Width, measured.m_Preferred.m_X));
+            if (popupWidth != measured.m_Preferred.m_X)
+                measured = Measure(*popup, {m_Width, m_Height}, {popupWidth, std::nullopt}, true, false);
+            const float popupHeight = std::max(measured.m_Minimum.m_Y, std::min(m_Height, measured.m_Preferred.m_Y));
+            Point origin = entry.m_Anchor;
+            const auto placement = entry.m_Options.m_Placement;
+            if (placement == PopupPlacement::Center)
+                origin = {(m_Width - popupWidth) * 0.5f, (m_Height - popupHeight) * 0.5f};
+            else if (const auto* anchor = entry.m_AnchorWidget.Get(); anchor && placement >= PopupPlacement::Below)
+            {
+                const auto b = anchor->GetBounds();
+                const std::array<Point, 4> corners{ToWindowPoint(*anchor, {b.m_X, b.m_Y}),
+                                                   ToWindowPoint(*anchor, {b.m_X + b.m_Width, b.m_Y}),
+                                                   ToWindowPoint(*anchor, {b.m_X, b.m_Y + b.m_Height}),
+                                                   ToWindowPoint(*anchor, {b.m_X + b.m_Width, b.m_Y + b.m_Height})};
+                float left = corners[0].m_X, right = left, top = corners[0].m_Y, bottom = top;
+                for (const auto point : corners)
+                {
+                    left = std::min(left, point.m_X);
+                    right = std::max(right, point.m_X);
+                    top = std::min(top, point.m_Y);
+                    bottom = std::max(bottom, point.m_Y);
+                }
+                switch (placement)
+                {
+                case PopupPlacement::Below:
+                    origin = {left, bottom};
+                    if (bottom + popupHeight > m_Height && top >= popupHeight)
+                        origin.m_Y = top - popupHeight;
+                    break;
+                case PopupPlacement::Above:
+                    origin = {left, top - popupHeight};
+                    if (origin.m_Y < 0 && bottom + popupHeight <= m_Height)
+                        origin.m_Y = bottom;
+                    break;
+                case PopupPlacement::Right:
+                    origin = {right, top};
+                    if (right + popupWidth > m_Width && left >= popupWidth)
+                        origin.m_X = left - popupWidth;
+                    break;
+                case PopupPlacement::Left:
+                    origin = {left - popupWidth, top};
+                    if (origin.m_X < 0 && right + popupWidth <= m_Width)
+                        origin.m_X = right;
+                    break;
+                default:
+                    break;
+                }
+            }
             Layout(*popup,
-                   {std::clamp(entry.m_Anchor.m_X, 0.0f, m_Width - popupWidth),
-                    std::clamp(entry.m_Anchor.m_Y, 0.0f, m_Height - popupHeight), popupWidth, popupHeight},
+                   {std::clamp(origin.m_X, 0.0f, std::max(0.0f, m_Width - popupWidth)),
+                    std::clamp(origin.m_Y, 0.0f, std::max(0.0f, m_Height - popupHeight)), popupWidth, popupHeight},
                    {0, 0, m_Width, m_Height});
         }
 }

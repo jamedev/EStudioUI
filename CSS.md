@@ -357,3 +357,23 @@ selectors and preserve logical popup ancestry. The tooltip itself is styled by
 and [essential-widgets.css](assets/essential-widgets.css) for working gradients,
 shadows, focus rings, state colors and transitions. Analytic checkmarks use line
 color/stroke width; other box-shaped parts share normal box paint properties.
+
+
+## Command and dialog controls (0.19)
+
+MenuBar exposes `menubar`, `menu-trigger`, and `.menu-open`. ContextMenu actions
+remain `toolbutton.menu-action` and add `::label`, `::icon`, `::shortcut`,
+`::mark`, `::arrow` parts. Glyph icons and formatted shortcut hints share the
+registered font service; check/arrow strokes use the part color and width.
+Part transforms affect their paint, while root transforms share ordinary hit
+geometry. Canonical `:checked`, `:hover`, `:focus` and `:disabled` states remain.
+
+Dialog/Popover nodes use `dialog`/`popup`. Dialog composition exposes
+`dialog-header`, `dialog-title`, `dialog-close`, `dialog-content`,
+`dialogbuttonbox`, `.dialog-default`, and response role classes. MessageBox adds
+`.message-box` and `.message-information`/`.message-question`/`.message-warning`/
+`.message-error`; InputDialog adds `.input-dialog`, `input-prompt` and
+`.dialog-editor`. Roots default to left-aligned text independently of a centered
+trigger caption. Both bundled themes provide base styling; rich examples are in
+[command-dialogs.css](assets/command-dialogs.css). Existing gradients, shadows,
+decorations and bounded CSS motion apply without extra paint-time selectors.

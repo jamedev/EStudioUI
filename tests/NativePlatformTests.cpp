@@ -4,6 +4,8 @@
 
 #include <EStudioUI/Button.h>
 #include <EStudioUI/CheckBox.h>
+#include <EStudioUI/MenuBar.h>
+#include <EStudioUI/InputDialog.h>
 #include <EStudioUI/ComboBox.h>
 #include <EStudioUI/ProgressBar.h>
 #include <EStudioUI/RadioButton.h>
@@ -760,6 +762,30 @@ void Accessibility(UiContext& ui, HWND window)
     auto radioGroup = std::make_shared<RadioGroup>();
     auto& radio = ui.Root().Add<RadioButton>("Native radio", radioGroup);
     radio.SetId("native-radio");
+    auto& menuBar = ui.Root().Add<MenuBar>();
+    menuBar.SetId("native-menubar");
+    auto& commandMenu = menuBar.AddMenu("Commands");
+    menuBar.GetButton(0).SetId("native-menu-trigger");
+    auto& menuToggle = commandMenu.AddAction("Native menu grid");
+    menuToggle.SetId("native-menu-toggle");
+    menuToggle.SetCheckable(true);
+    auto& promptButton = ui.Root().Add<Button>("Open native prompt");
+    promptButton.SetId("native-open-prompt");
+    auto& prompt = InputDialog::Create(promptButton, "Native prompt", "Project name", "Before");
+    prompt.SetId("native-prompt");
+    prompt.Editor().SetId("native-prompt-value");
+    prompt.Buttons().GetButton(StandardButton::Ok)->SetId("native-prompt-ok");
+    std::string acceptedPrompt;
+    const ScopedConnection promptConnection(promptButton.Clicked().Connect(
+        [&]
+        {
+            prompt.Open().OnFinished(
+                [&](InputDialogResult result)
+                {
+                    if (result.m_Text)
+                        acceptedPrompt = *result.m_Text;
+                });
+        }));
     auto& list = ui.Root().Add<ListWidget>();
     list.SetId("list");
     list.SetHeight(SizeRule::Fixed(100));
@@ -846,6 +872,67 @@ void Accessibility(UiContext& ui, HWND window)
                         "Obtain invoke pattern");
                 Require(invoke->Invoke(), "Native invoke action");
                 Trace("UI Automation invoke requested");
+                auto barElement = Find(*automation.Get(), *root.Get(), L"native-menubar");
+                CONTROLTYPEID controlType = 0;
+                Require(barElement->get_CurrentControlType(&controlType), "Read native menu-bar control type");
+                Check(controlType == UIA_MenuBarControlTypeId, "Native provider exposes a menu-bar role");
+                auto triggerElement = Find(*automation.Get(), *barElement.Get(), L"native-menu-trigger");
+                ComPtr<IUIAutomationExpandCollapsePattern> menuExpansion;
+                Require(triggerElement->GetCurrentPatternAs(UIA_ExpandCollapsePatternId, IID_PPV_ARGS(&menuExpansion)),
+                        "Obtain native top-level menu expansion");
+                Require(menuExpansion->Expand(), "Expand native top-level menu");
+                ExpandCollapseState expandedMenu = ExpandCollapseState_LeafNode;
+                Require(menuExpansion->get_CurrentExpandCollapseState(&expandedMenu), "Read native menu expansion");
+                Check(expandedMenu == ExpandCollapseState_Expanded, "Native menu expansion uses canonical popup state");
+                Require(menuExpansion->Collapse(), "Collapse native menu");
+                auto promptOpener = Find(*automation.Get(), *root.Get(), L"native-open-prompt");
+                ComPtr<IUIAutomationInvokePattern> openPrompt;
+                Require(promptOpener->GetCurrentPatternAs(UIA_InvokePatternId, IID_PPV_ARGS(&openPrompt)),
+                        "Obtain native prompt opener");
+                Require(openPrompt->Invoke(), "Open native input dialog through canonical button");
+                auto promptElement = Find(*automation.Get(), *promptOpener.Get(), L"native-prompt");
+                Require(promptElement->get_CurrentControlType(&controlType), "Read native dialog control type");
+                Check(controlType == UIA_WindowControlTypeId, "In-window dialog maps its semantic window type");
+                BOOL allowed = TRUE;
+                Require(invokeElement->get_CurrentIsEnabled(&allowed), "Read underlying modal availability");
+                Check(!allowed, "Native modal dialog disables underlying semantic controls");
+                ComPtr<IUIAutomationCondition> promptValueCondition;
+                VARIANT promptValueId{};
+                promptValueId.vt = VT_BSTR;
+                promptValueId.bstrVal = SysAllocString(L"native-prompt-value");
+                const auto conditionCode = automation->CreatePropertyCondition(UIA_AutomationIdPropertyId,
+                                                                               promptValueId, &promptValueCondition);
+                VariantClear(&promptValueId);
+                Require(conditionCode, "Create nested prompt editor condition");
+                ComPtr<IUIAutomationElement> promptValueElement;
+                Require(
+                    promptElement->FindFirst(TreeScope_Descendants, promptValueCondition.Get(), &promptValueElement),
+                    "Find nested native prompt editor");
+                if (!promptValueElement)
+                    throw std::runtime_error("Native prompt editor was not exposed");
+                ComPtr<IUIAutomationValuePattern> promptValue;
+                Require(promptValueElement->GetCurrentPatternAs(UIA_ValuePatternId, IID_PPV_ARGS(&promptValue)),
+                        "Obtain native prompt value");
+                Require(promptValue->SetValue(L"Accepted prompt"), "Set canonical native prompt text");
+                VARIANT promptOkId{};
+                promptOkId.vt = VT_BSTR;
+                promptOkId.bstrVal = SysAllocString(L"native-prompt-ok");
+                ComPtr<IUIAutomationCondition> promptOkCondition;
+                const auto okCode =
+                    automation->CreatePropertyCondition(UIA_AutomationIdPropertyId, promptOkId, &promptOkCondition);
+                VariantClear(&promptOkId);
+                Require(okCode, "Create nested prompt response condition");
+                ComPtr<IUIAutomationElement> promptOkElement;
+                Require(promptElement->FindFirst(TreeScope_Descendants, promptOkCondition.Get(), &promptOkElement),
+                        "Find native prompt OK");
+                if (!promptOkElement)
+                    throw std::runtime_error("Native prompt OK was not exposed");
+                ComPtr<IUIAutomationInvokePattern> acceptPrompt;
+                Require(promptOkElement->GetCurrentPatternAs(UIA_InvokePatternId, IID_PPV_ARGS(&acceptPrompt)),
+                        "Obtain native prompt acceptance");
+                Require(acceptPrompt->Invoke(), "Accept native prompt through its ordinary response");
+                Require(invokeElement->get_CurrentIsEnabled(&allowed), "Read restored modal availability");
+                Check(allowed, "Closing native prompt restores underlying semantic availability");
                 auto valueElement = Find(*automation.Get(), *root.Get(), L"value");
                 EventSubscriptions subscriptions(*automation.Get());
                 subscriptions.WatchEditor(*valueElement.Get());
@@ -1006,6 +1093,7 @@ void Accessibility(UiContext& ui, HWND window)
     Check(promptlyStopped, "Native automation client cleanup exceeded ten seconds");
     if (error)
         std::rethrow_exception(error);
+    Check(acceptedPrompt == "Accepted prompt", "Native dialog result carries owned canonical input");
     Check(invocations == 1 && text.GetText() == "After Ω" && slider.GetValue() == 12.5 && toggle.IsChecked(),
           "Real UI Automation client uses canonical control actions");
     Check(list.GetCurrentIndex() == 0 && table.GetCurrentCell() == std::pair{99, 1} && !tree.IsExpanded(branch),

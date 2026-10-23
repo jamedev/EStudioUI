@@ -560,3 +560,19 @@ splitter layouts, group/frame/separator structure, progress/idle policy and
 nonactivating deadline-based help. [COMMON_CONTROLS.md](COMMON_CONTROLS.md) and
 [0.18 evidence](verification/WIDGETS_0_18.md) define delivered scope and bounds.
 No document editor or module extraction is implied; F10b and F14 remain deferred.
+
+
+## Command/dialog integration (0.19)
+
+W24/W26/W27/W28 reuse the delivered action/input, popup/session, typography,
+layout and semantic contracts. New in-window dialogs are asynchronous;
+modeless surfaces preserve outside interaction without a nested event loop.
+Placement observes weak anchor identities and tracks resize/transform changes
+without invalidating unrelated intrinsic measurements. Accepted input results own
+their bytes before callbacks can remove editors. Menu commands remain available
+before their presentations are first opened. Relevant F12/F13/F15 work includes
+64 popup layers, 128 top-level menu entries, bounded command menus, validated
+button candidates, owner/phase checks and actual retained/full framebuffer gates.
+See [COMMAND_DIALOGS.md](COMMAND_DIALOGS.md) and
+[verification/COMMAND_DIALOGS_0_19.md](verification/COMMAND_DIALOGS_0_19.md).
+Human native acceptance, F10b and deferred F14 retain their separate scopes.

@@ -15,6 +15,7 @@
 #include "PlatformGallery.h"
 #include "TextGallery.h"
 #include "EssentialGallery.h"
+#include "CommandGallery.h"
 
 #include <EStudioUI/ContextMenu.h>
 #include <EStudioUI/ListWidget.h>
@@ -157,6 +158,8 @@ class WidgetGallery
 
     //! Owns the essential control demonstrations.
     std::unique_ptr<EssentialGallery> m_Essential;
+    //! Owns the command/dialog demonstration and framebuffer probes.
+    std::unique_ptr<CommandGallery> m_Commands;
     //! Observes the visible shortcut to a tab beyond a narrow tab strip.
     WidgetRef m_ConstraintShortcut;
 };
