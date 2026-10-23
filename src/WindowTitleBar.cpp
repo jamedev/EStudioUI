@@ -15,9 +15,11 @@ WindowTitleBar::WindowTitleBar(Window& window) : Widget("window-titlebar")
     auto& menuViewport = Add<Detail::OverflowStrip>("titlebar-menus");
     menuViewport.SetWidth(SizeRule::Fill(1, 0, 540));
     menuViewport.SetHeight(SizeRule::Fill());
+    menuViewport.SetWindowDragRegion(true);
     m_Menus = &menuViewport.Add<MenuBar>();
     m_Menus->SetWidth(SizeRule::Content());
     m_Menus->SetHeight(SizeRule::Fill());
+    m_Menus->SetWindowDragRegion(true);
     m_Content = &Add<Detail::OverflowStrip>("titlebar-content");
     m_Content->SetLayoutDirection(Axis::Horizontal);
     m_Content->SetWidth(SizeRule::Fill());

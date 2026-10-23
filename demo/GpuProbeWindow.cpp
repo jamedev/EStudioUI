@@ -172,6 +172,10 @@ int VerifyGpuProbeChrome(Window& owner, const std::filesystem::path& assets, con
     const auto caption = center(shell.TitleBar().Content().GetChildren().front()->GetBounds());
     check(SendMessageW(native, WM_NCHITTEST, 0, nativePoint(caption, true)) == HTCAPTION,
           "The painted title text retains native move and double-click semantics");
+    const auto menuViewport = shell.TitleBar().GetChildren().front()->GetBounds();
+    const Point blankMenu{menuViewport.m_X + menuViewport.m_Width - 2, menuViewport.m_Y + menuViewport.m_Height / 2};
+    check(SendMessageW(native, WM_NCHITTEST, 0, nativePoint(blankMenu, true)) == HTCAPTION,
+          "Unused title-menu space retains native window dragging");
     std::filesystem::create_directories(output);
     window->Graphics().SavePpm(output / "native-titlebar-restored.ppm");
     auto& close = button(WindowHitRegion::Close);

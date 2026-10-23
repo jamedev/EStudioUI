@@ -473,6 +473,10 @@ void WorkspaceGallery::Verify(const std::filesystem::path& assets, const std::fi
 #endif
     if (probe->IsHeadless())
     {
+        const auto menuViewport = shell.TitleBar().GetChildren().front()->GetBounds();
+        Check(shell.TitleBar().HitTest({menuViewport.m_X + menuViewport.m_Width - 2,
+                                       menuViewport.m_Y + menuViewport.m_Height / 2}) == WindowHitRegion::Caption,
+              "Unused menu-strip space remains a native window drag region");
         probe->Maximize();
         probe->RenderFrame(ui.GetTime());
         auto& semantics = ui.Semantics();
