@@ -12,7 +12,9 @@ are uninstrumented. Linux CI also passes Release and isolated TSan checks.
 Windows compiles with zero warnings; its first native run exposed a fixture issue:
 a hidden HWND correctly returns no visible text rectangles. The fixture now shows
 the HWND without activation before asserting two disjoint physical rectangles.
-Windows Release/Debug/native results are recorded after the corrected run.
+Windows Release: 38/38; Debug: 38/38; three extra native Debug runs: 83 checks
+each. No compiler warnings. Tested source/native fixture: a1ab5bd,
+[CI run](https://github.com/jamedev/EStudioUI/actions/runs/39877185004).
 
 FontText checks fallback identities/coverage, real variation/italic selection,
 Arabic glyph IDs against an independently configured HarfBuzz reference,

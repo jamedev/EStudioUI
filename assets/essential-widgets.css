@@ -1,0 +1,74 @@
+/* Ordinary selectors and named GPU paint parts; no widget-specific paint parser. */
+checkbox, radiobutton {
+    min-height: 36px; padding: 7px 10px; border-radius: 9px;
+    font-size: 15px; text-align: left;
+}
+checkbox:hover, radiobutton:hover { background: rgba(105, 135, 240, 0.12); }
+checkbox:focus, radiobutton:focus { box-shadow: 0px 0px 8px rgba(136, 180, 255, 0.45); }
+checkbox:disabled, radiobutton:disabled { opacity: 0.45; }
+checkbox::indicator, radiobutton::indicator {
+    width: 21px; height: 21px; border: 1px solid #56709e; border-radius: 6px;
+    background: linear-gradient(135deg, #283954, #142038);
+    box-shadow: inset 0px 1px 2px rgba(0, 0, 0, 0.3);
+    transition: background-color 140ms ease-out, border-color 140ms ease-out;
+}
+checkbox::indicator:checked, checkbox::indicator:indeterminate, radiobutton::indicator:checked {
+    background: linear-gradient(135deg, #69b8ff, #6955ee); border-color: #9cbfff;
+    box-shadow: 0px 2px 8px rgba(70, 100, 255, 0.25);
+}
+radiobutton::indicator { border-radius: 100px; }
+checkbox::mark { color: white; width: 2px; }
+radiobutton::mark { background: white; }
+groupbox, frame {
+    color: #dfe9ff;
+    padding: 14px; gap: 8px; border: 1px solid #344568; border-radius: 14px;
+    background: linear-gradient(135deg, #1a2943, #111c31);
+    box-shadow: 0px 4px 14px rgba(0, 0, 0, 0.12);
+}
+groupbox > group-title, groupbox > checkbox.group-title {
+    font-size: 17px; font-weight: 700; height: auto; padding: 2px 0px;
+}
+group-content { gap: 8px; }
+separator { background: linear-gradient(90deg, transparent, #6d86b7, transparent); }
+separator:horizontal { height: 1px; }
+separator:vertical { width: 1px; background: linear-gradient(0deg, transparent, #6d86b7, transparent); }
+combobox {
+    color: #dfe9ff;    height: 42px; min-width: 120px; border: 1px solid #435a86; border-radius: 10px;
+    background: linear-gradient(135deg, #223552, #142039); padding: 2px;
+}
+combobox:focus-within, combobox:expanded { border-color: #86b8ff; box-shadow: 0px 0px 8px rgba(80, 140, 255, 0.22); }
+combobox:disabled { opacity: 0.45; }
+combobox > textbox.combo-editor { color: #e2ecff; placeholder-color: #9cb0d2; caret-color: white; background: transparent; border-width: 0px; padding: 5px 9px; border-radius: 7px; font-size: 15px; }
+combobox > toolbutton.combo-arrow { color: white; background: linear-gradient(135deg, #5075be, #5f52a8); border-width: 0px; padding: 0px; border-radius: 7px; font-size: 22px; }
+combobox > toolbutton.combo-arrow:hover { background: linear-gradient(135deg, #638ad3, #7864cc); }
+combobox listwidget.combo-popup {
+    height: 260px; padding: 5px; row-height: 32px; border: 1px solid #6c89be;
+    border-radius: 11px; background: #142039; color: #e2ecff;
+    box-shadow: 0px 8px 22px rgba(0, 0, 0, 0.3);
+}
+combobox listwidget.combo-popup::item { padding: 4px 10px; border-radius: 6px; }
+combobox listwidget.combo-popup::item:hover { background: #293f63; }
+combobox listwidget.combo-popup::item:selected { background: linear-gradient(90deg, #385ca4, #594f9c); color: white; }
+scrollarea { color: #dfe9ff; padding: 4px; border: 1px solid #354b70; border-radius: 10px; background: #0e192c; }
+scroll-content { gap: 7px; padding: 7px; }
+scrollarea::scroll-track:horizontal { display: none; }
+scrollarea::scroll-track:vertical { width: 12px; padding: 3px; background: #101c30; }
+scrollarea::scroll-thumb { background: linear-gradient(0deg, #487ad0, #8b76de); border-radius: 5px; }
+scrollarea::scroll-thumb:hover { background: #9bbcf7; }
+splitter::handle { border-radius: 5px; background: linear-gradient(135deg, #293b5d, #405c89); }
+splitter::handle:horizontal { width: 10px; }
+splitter::handle:vertical { height: 10px; }
+splitter::handle:hover, splitter::handle:pressed { background: linear-gradient(135deg, #5c99df, #9a79ed); box-shadow: 0px 0px 8px rgba(110, 150, 250, 0.25); }
+splitter::handle:selected { border: 1px solid #98bdfb; }
+progressbar, busyindicator { height: 24px; border-radius: 12px; }
+progressbar::track, busyindicator::track { background: #0c1628; border: 1px solid #354867; border-radius: 12px; box-shadow: inset 0px 2px 4px rgba(0, 0, 0, 0.25); }
+progressbar::chunk, busyindicator::chunk { background: linear-gradient(90deg, #43b5de, #7c67f3); border-radius: 12px; box-shadow: inset 0px 1px 2px rgba(255, 255, 255, 0.2); }
+progressbar::label { color: white; font-size: 13px; font-weight: 700; }
+busyindicator { height: 8px; }
+tooltip { width: 280px; max-width: 360px; height: auto; padding: 10px 13px; font-size: 14px; color: #edf3ff; background: linear-gradient(135deg, #30466a, #202e49); border: 1px solid #7294c9; border-radius: 9px; box-shadow: 0px 5px 18px rgba(0, 0, 0, 0.3); }
+#essential-page { padding: 14px; gap: 10px; }
+#essential-page > label.essential-heading { font-size: 24px; font-weight: 700; height: auto; }
+#essential-page > label.essential-note { font-size: 14px; color: #a9bddc; height: auto; text-wrap: wrap; }
+#essential-page .essential-row { flex-direction: row; gap: 14px; height: auto; }
+#essential-page .essential-column { gap: 8px; }
+#essential-page .essential-pane-title { font-size: 17px; font-weight: 700; height: auto; }

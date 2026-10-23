@@ -77,7 +77,13 @@ enum class SemanticRole
     TreeItem,
     Row,
     Cell,
-    CanvasItem
+    CanvasItem,
+    RadioButton,
+    ComboBox,
+    ProgressBar,
+    Splitter,
+    Separator,
+    ToolTip
 };
 
 //! Supported interactions; advertised only when implemented by a semantic control.
@@ -128,6 +134,8 @@ struct SemanticInfo
     bool m_ReadOnly = false;
     //! Reports a persistent toggle state.
     bool m_Checked = false;
+    //! Reports a third toggle state distinct from checked and unchecked.
+    bool m_Indeterminate = false;
     //! Reports whether this item belongs to its container's selection.
     bool m_Selected = false;
     //! Reports support for simultaneous item selection.

@@ -374,6 +374,7 @@ void UiContext::SetTime(double time)
     m_CssMotion->Update(time);
     if (!m_Dirty)
         RefreshHover();
+    UpdateToolTip(time);
 }
 
 double UiContext::GetTime() const

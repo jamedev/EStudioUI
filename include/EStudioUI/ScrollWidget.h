@@ -16,7 +16,7 @@ class ScrollWidget : public Widget
     explicit ScrollWidget(std::string type);
 
     //! Sets a clamped logical-pixel scroll position.
-    void SetScrollOffset(Point offset);
+    virtual void SetScrollOffset(Point offset);
 
     //! Returns the current offset clamped against current geometry/model size.
     Point GetScrollOffset() const;

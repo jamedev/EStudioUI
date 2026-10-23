@@ -345,6 +345,25 @@ class UiContext
     //! Ends platform sessions before closing the owner queue or native window.
     void ClosePlatformServices();
 
+    //! Arms help for a changed hover or keyboard focus target.
+    void ArmToolTip(Widget* preferred = nullptr);
+    //! Cancels pending and visible help without moving focus.
+    void DismissToolTip();
+    //! Processes a due help deadline on the idle owner.
+    void UpdateToolTip(double time);
+    //! Returns the next help deadline, or minus one.
+    double NextToolTipDeadline() const;
+    //! Observes the help source without extending its lifetime.
+    WidgetRef m_ToolTipTarget;
+    //! Observes the owned top-layer help presentation.
+    WidgetRef m_ToolTipPopup;
+    //! Schedules delayed help without continuous rendering.
+    double m_ToolTipDeadline = -1;
+    //! Bounds the visible help interval.
+    double m_ToolTipHideAt = -1;
+    //! Prevents recursive arming while presenting help.
+    bool m_ToolTipOpening = false;
+
     //! Resolves the current hover path's inherited pointer shape without scanning the widget tree.
     CursorShape GetPointerCursor() const;
 

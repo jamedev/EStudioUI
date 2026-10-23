@@ -21,6 +21,7 @@ class TextBox;
 class NumericInput;
 class Slider;
 class ToolButton;
+class CheckBox;
 
 //! Selects whether a control also publishes its committed edits to the state.
 enum class BindingMode
@@ -200,7 +201,7 @@ namespace Detail
 //! Creates direct owner-side propagation with an optional pure target representability check.
 template <typename Target, typename T, typename Setter, typename Validator>
 std::pair<Binding, std::shared_ptr<BindingData>> MakeBinding(Target& target, State<T>& state, Setter setter,
-                                                         Validator validator)
+                                                             Validator validator)
 {
     static_assert(std::is_base_of_v<Widget, Target>);
     target.VerifyAccess();
@@ -211,8 +212,8 @@ std::pair<Binding, std::shared_ptr<BindingData>> MakeBinding(Target& target, Sta
     BindingAccess::VerifyTargetMutation(target);
     const auto targetHandle = context->GetHandle(target);
     const auto stateHandle = state.GetHandle();
-    auto data = std::make_shared<BindingData>(target, targetHandle.GetTargetStopToken(),
-                                            stateHandle.GetTargetStopToken());
+    auto data =
+        std::make_shared<BindingData>(target, targetHandle.GetTargetStopToken(), stateHandle.GetTargetStopToken());
     auto apply = [data, setter = std::move(setter)](const T& value) mutable
     {
         if (auto* live = dynamic_cast<Target*>(data->GetTarget()))
@@ -253,8 +254,8 @@ std::pair<Binding, std::shared_ptr<BindingData>> MakeBinding(Target& target, Sta
 
 //! Adds a weak-state writer; rejected edits restore the canonical value and remain inspectable.
 template <typename Target, typename T, typename SignalType, typename Setter, typename Getter>
-void AddBindingWriter(const std::shared_ptr<BindingData>& data, Target&, State<T>& state,
-                      SignalType& signal, Setter setter, Getter getter)
+void AddBindingWriter(const std::shared_ptr<BindingData>& data, Target&, State<T>& state, SignalType& signal,
+                      Setter setter, Getter getter)
 {
     const auto stateLifetime = state.GetHandle().GetTargetStopToken();
     auto* statePointer = &state;
@@ -290,8 +291,7 @@ void AddBindingWriter(const std::shared_ptr<BindingData>& data, Target&, State<T
         if (error)
             data->ReportError(std::move(error));
     };
-    auto write = [data, statePointer, stateLifetime, getter,
-                  restore = std::move(restore)]() mutable
+    auto write = [data, statePointer, stateLifetime, getter, restore = std::move(restore)]() mutable
     {
         if (!data->IsConnected() || data->m_Restoring || stateLifetime.stop_requested())
             return;
@@ -340,6 +340,9 @@ Binding BindValue(Slider& target, State<double>& state, BindingMode mode = Bindi
 
 //! Binds persistent checked state; configure ToolButton::SetCheckable for user activation.
 Binding BindChecked(ToolButton& target, State<bool>& state, BindingMode mode = BindingMode::TwoWay);
+
+//! Binds a checkbox boolean value; indeterminate maps to false.
+Binding BindChecked(CheckBox& target, State<bool>& state, BindingMode mode = BindingMode::TwoWay);
 
 //! Binds the widget's local programmatic enabled flag in one direction.
 Binding BindEnabled(Widget& target, State<bool>& state);

@@ -2,7 +2,8 @@
 
 A C++20 application framework prototype, currently centered on GLFW windows,
 analytic GPU shapes and text, typed signals, and CSS styling. Controls include
-buttons, single-line UTF-8 text boxes, tabs, lists, trees,
+buttons, checkboxes/radio groups, read-only/editable combos, scrolling forms, splitters,
+progress/help controls, single-line UTF-8 text boxes, tabs, lists, trees,
 editable tables, toolbars/tool buttons, popup menus, and embedded 3D surfaces. Dependencies are managed with a pinned vcpkg
 manifest; no Qt or commercial SDK is required.
 
@@ -14,11 +15,27 @@ The [developer experience principles](DEVELOPER_EXPERIENCE.md) make simple,
 safe application code an acceptance requirement for every foundation change.
 
 F09 input/actions/focus, F11 platform contracts, and F10a essential control text
-are implemented. The next increment adds the first common-control batch and
-application workspaces. F10b document editing is a later track. F14 module extraction and SDK
+are implemented. The first common-control batch is delivered in 0.18. Remaining widget families
+and application workspaces continue through the roadmap. F10b document editing is a later track. F14 module extraction and SDK
 packaging are deferred until that use informs reusable boundaries, including
 services for applications without a UI. Standalone modules are planned, not
 current package capabilities; see the roadmaps for acceptance criteria.
+
+## Essential widgets and rich CSS (0.18)
+
+The demo opens **Essential widgets**: working three-state checkboxes, exclusive
+radio groups, read-only/editable combos, scrolling forms, splitters, titled/checkable
+groups, frames/separators, progress/busy indicators and delayed tooltips. Rich CSS
+styles the actual control parts through the existing GPU renderer. The searchable
+popup is virtualized and tested with 100,000 records; static controls retain their
+pixels and stopped/hidden busy indicators stop requesting frames.
+
+See [COMMON_CONTROLS.md](COMMON_CONTROLS.md), the compiled
+[small example](examples/CommonControls.cpp), and
+[verification](verification/WIDGETS_0_18.md). On Windows, `.\Build.ps1 -Run`
+installs the pinned dependencies, builds, runs the selected checks and opens the gallery.
+
+![Essential controls drawn by EStudioUI](verification/essential-widgets-0-18.png)
 
 ## Control typography and bidirectional text (0.17)
 

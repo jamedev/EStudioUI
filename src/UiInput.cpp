@@ -78,7 +78,7 @@ bool UiContext::IsWithin(const Widget* widget, const Widget* ancestor) const
 Widget& UiContext::InputRoot() const
 {
     for (auto i = m_Popups.rbegin(); i != m_Popups.rend(); ++i)
-        if (auto* popup = i->m_Widget.Get())
+        if (auto* popup = i->m_Widget.Get(); popup && (i->m_Options.m_TakeFocus || i->m_Options.m_Modal))
             return *popup;
     return const_cast<Widget&>(m_Root);
 }
@@ -87,6 +87,8 @@ Widget* UiContext::InputHitTest(Point position) const
 {
     for (auto i = m_Popups.rbegin(); i != m_Popups.rend(); ++i)
     {
+        if (i->m_Options.m_InputTransparent)
+            continue;
         if (auto* popup = i->m_Widget.Get())
             if (auto* target = HitTest(*popup, position))
                 return target;
@@ -111,6 +113,16 @@ bool UiContext::DispatchInput(const InputEvent& event)
     const InputEvent input = event;
     const Detail::InputDispatchScope inputScope;
     const FlagScope scope(m_DispatchingInput);
+    const auto* help = m_ToolTipPopup.Get();
+    const bool helpWasVisible = help && IsPopupOpen(*help);
+    if (!std::holds_alternative<PointerEvent>(input) || std::get<PointerEvent>(input).m_Type != PointerEventType::Move)
+    {
+        DismissToolTip();
+        m_ToolTipTarget = {};
+        if (const auto* key = std::get_if<KeyboardEvent>(&input);
+            helpWasVisible && key && key->m_Down && key->m_Key == Key::Escape)
+            return true;
+    }
     PrepareInput();
     if (const auto* key = std::get_if<KeyboardEvent>(&input))
         return RouteKey(*key);
@@ -348,15 +360,17 @@ bool UiContext::DispatchComposition(const TextCompositionEvent& event)
         (!state.m_Active && event.m_Kind != TextCompositionKind::Cancel))
         return false;
     const auto target = m_Focus;
+    auto owned = event;
     const Detail::InputDispatchScope inputScope;
     const FlagScope scope(m_DispatchingInput);
+    DismissToolTip();
+    m_ToolTipTarget = {};
     PrepareInput();
     if (!target.Get() || target.Get() != m_Focus.Get() || m_TextInputEpoch != state.m_Epoch)
         return false;
     auto* client = dynamic_cast<TextInputClient*>(target.Get());
     if (!client)
         return false;
-    auto owned = event;
     owned.m_Client = state.m_Client;
     owned.m_Epoch = state.m_Epoch;
     if (event.m_Kind != TextCompositionKind::Preedit)
@@ -470,6 +484,7 @@ bool UiContext::RefreshHover()
         node->SetState(Hover, true);
         m_HoverPath.emplace_back(node);
     }
+    ArmToolTip();
     return true;
 }
 
@@ -661,6 +676,10 @@ void UiContext::SetFocus(Widget* widget)
     if (m_Focus.Get() == widget)
         return;
     const WidgetRef next(widget);
+    DismissToolTip();
+    m_ToolTipTarget = {};
+    if (widget && !next.Get())
+        return;
     const auto previousFocus = m_Focus;
     CancelTextComposition();
     if (previousFocus.Get() != m_Focus.Get())
@@ -678,7 +697,24 @@ void UiContext::SetFocus(Widget* widget)
     {
         current->SetState(Focus, true);
         current->OnFocus(true);
+        if (next.Get() && m_Focus.Get() == next.Get())
+        {
+            std::vector<WidgetRef> ancestors;
+            for (auto* parent = next.Get()->GetParent(); parent; parent = parent->GetParent())
+                ancestors.emplace_back(parent);
+            for (const auto& reference : ancestors)
+            {
+                auto* live = reference.Get();
+                auto* focused = next.Get();
+                if (!focused || m_Focus.Get() != focused)
+                    break;
+                if (live)
+                    live->OnDescendantFocused(*focused);
+            }
+        }
     }
+    if (m_Focus.Get() == next.Get() && next.Get())
+        ArmToolTip(next.Get());
 }
 
 void UiContext::FocusNext(bool backwards)
@@ -769,6 +805,11 @@ PopupSession UiContext::ShowPopup(Widget& popup, Point anchor, PopupOptions opti
     }
     if (retain >= 64)
         throw std::length_error("The popup stack is limited to 64 presentations.");
+    if (!m_ToolTipOpening)
+    {
+        DismissToolTip();
+        m_ToolTipTarget = {};
+    }
     auto session = PopupSession::Create();
     const auto revision = m_PopupRevision;
     if (retain < m_Popups.size())
@@ -801,7 +842,7 @@ PopupSession UiContext::ShowPopup(Widget& popup, Point anchor, PopupOptions opti
     popup.SetVisible(true);
     Invalidate(m_Root, Invalidation::Selector | Invalidation::Arrange | Invalidation::Paint);
     PrepareInput();
-    if (reference.Get() && session.IsPending() && current == m_PopupRevision)
+    if (options.m_TakeFocus && reference.Get() && session.IsPending() && current == m_PopupRevision)
     {
         SetFocus(reference.Get());
         if (!m_Focus.Get() && session.IsPending() && current == m_PopupRevision)
@@ -997,6 +1038,8 @@ std::size_t UiContext::GetPopupCount() const
 
 void UiContext::Deactivate()
 {
+    DismissToolTip();
+    m_ToolTipTarget = {};
     const auto ownerLifetime = RetainOwner();
     VerifyDispatchPhase();
     const FlagScope deactivating(m_Deactivating);

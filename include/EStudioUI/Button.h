@@ -19,7 +19,7 @@ class Button : public Label
     Signal<>& Clicked();
 
     //! Associates shared text/enabled/visible state and window-scoped shortcuts; null unbinds.
-    void SetAction(std::shared_ptr<Action> action);
+    virtual void SetAction(std::shared_ptr<Action> action);
 
     //! Returns the associated command, or null for a standalone button.
     std::shared_ptr<Action> GetAction() const;

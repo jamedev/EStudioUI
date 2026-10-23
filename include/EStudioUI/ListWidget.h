@@ -61,6 +61,9 @@ class ListWidget final : public ScrollWidget
     //! Exposes Enter and double-click activation.
     Signal<int>& Activated();
 
+    //! Reports a completed single pointer click on an enabled row.
+    Signal<int>& ItemClicked();
+
     //! Participates in Tab navigation.
     bool IsFocusable() const override;
 
@@ -188,5 +191,8 @@ class ListWidget final : public ScrollWidget
 
     //! Reports explicit activation.
     Signal<int> m_Activated;
+
+    //! Publishes completed pointer clicks independently of keyboard preview.
+    Signal<int> m_ItemClicked;
 };
 } // namespace EStudioUI

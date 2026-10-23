@@ -642,6 +642,10 @@ struct Window::Impl : std::enable_shared_from_this<Window::Impl>
             return wake;
         }
 
+        m_Ui->UpdateToolTip(GuiTime());
+        const double helpDeadline = m_Ui->NextToolTipDeadline();
+        if (helpDeadline >= 0 && (wake < 0 || helpDeadline - m_TimeOffset < wake))
+            wake = helpDeadline - m_TimeOffset;
         const auto* editor = dynamic_cast<TextBox*>(m_Ui->GetFocus());
         if (editor && !editor->IsReadOnly())
         {

@@ -442,9 +442,11 @@ void ListWidget::OnPointerMove(const PointerEvent& event)
 
 void ListWidget::OnPointerUp(const PointerEvent& event)
 {
+    const int clicked = m_Pressed >= 0 && event.m_InsideClip && ItemAt(event.m_Position) == m_Pressed && ItemEnabled(m_Pressed) ? m_Pressed : -1;
     m_Pressed = -1;
     SetState(Pressed, false);
     ScrollWidget::OnPointerUp(event);
+    if (clicked >= 0) m_ItemClicked.Emit(clicked);
 }
 
 void ListWidget::OnCaptureLost()
@@ -690,3 +692,12 @@ std::optional<SemanticKey> ListWidget::GetSemanticFocus() const
 }
 
 } // namespace EStudioUI
+
+namespace EStudioUI
+{
+Signal<int>& ListWidget::ItemClicked()
+{
+    VerifyAccess();
+    return m_ItemClicked;
+}
+}

@@ -233,7 +233,7 @@ class Demo
             });
         if (!LoadCss(m_CurrentCss))
             throw std::runtime_error("Initial CSS could not be loaded.");
-        m_Tabs->SetCurrentIndex(13);
+        m_Tabs->SetCurrentIndex(m_Tabs->GetTabCount() - 1);
     }
 
     ~Demo()
@@ -255,16 +255,18 @@ class Demo
         std::ifstream rich(m_Assets / "rich-buttons.css", std::ios::binary);
         std::ifstream widgets(m_Assets / "rich-widgets.css", std::ios::binary);
         std::ifstream textStyles(m_Assets / "text-controls.css", std::ios::binary);
+        std::ifstream essentialStyles(m_Assets / "essential-widgets.css", std::ios::binary);
         bool loaded = false;
-        if (theme && animation && rich && widgets && textStyles)
+        if (theme && animation && rich && widgets && textStyles && essentialStyles)
             loaded = m_Window.Ui().SetStyleSheet(std::string(std::istreambuf_iterator<char>(theme), {}) + "\n" +
                                                      std::string(std::istreambuf_iterator<char>(animation), {}) + "\n" +
                                                      std::string(std::istreambuf_iterator<char>(rich), {}) + "\n" +
                                                      std::string(std::istreambuf_iterator<char>(widgets), {}) + "\n" +
-                                                     std::string(std::istreambuf_iterator<char>(textStyles), {}),
+                                                     std::string(std::istreambuf_iterator<char>(textStyles), {}) + "\n" +
+                                                     std::string(std::istreambuf_iterator<char>(essentialStyles), {}),
                                                  error);
         else
-            error = "Cannot read theme, animation-start.css, rich-buttons.css, rich-widgets.css, or text-controls.css.";
+            error = "Cannot read theme, animation-start.css, rich-buttons.css, rich-widgets.css, text-controls.css, or essential-widgets.css.";
         if (!loaded)
         {
             m_Message->AddClass("error");

@@ -14,6 +14,7 @@
 #include "InputGallery.h"
 #include "PlatformGallery.h"
 #include "TextGallery.h"
+#include "EssentialGallery.h"
 
 #include <EStudioUI/ContextMenu.h>
 #include <EStudioUI/ListWidget.h>
@@ -153,6 +154,9 @@ class WidgetGallery
 
     //! Owns mixed-script typography and visual editing examples.
     std::unique_ptr<TextGallery> m_Text;
+
+    //! Owns the essential control demonstrations.
+    std::unique_ptr<EssentialGallery> m_Essential;
     //! Observes the visible shortcut to a tab beyond a narrow tab strip.
     WidgetRef m_ConstraintShortcut;
 };

@@ -3,8 +3,7 @@
 Recorded: 2026-10-22. Baseline: EStudioUI 0.8.0, commit `dc14170`.
 
 This is the agreed widget coverage roadmap within EStudioUI's complete C++
-application framework. Entries below describe planned work, not shipped
-APIs. Complete the applicable gates in [FOUNDATIONS_ROADMAP.md](FOUNDATIONS_ROADMAP.md)
+application framework. Entries below distinguish delivered increments from remaining work. Complete the applicable gates in [FOUNDATIONS_ROADMAP.md](FOUNDATIONS_ROADMAP.md)
 before expanding the catalog. Update an entry only with implementation and
 verification evidence; a styled demonstration alone does not complete a library
 control.
@@ -20,9 +19,9 @@ ownership, CSS, and low idle-work requirements.
 
 F09 input/actions/focus is delivered in 0.14, including shared command presentations
 and nested menus on existing controls. The 0.16 F11 composition/virtual semantic implementation is documented in
-[PLATFORM.md](PLATFORM.md); native acceptance and F10a remain prerequisites.
-Continue its native/composition/accessibility acceptance work and F10a essential
-text/input for controls. F10b document editing and
+[PLATFORM.md](PLATFORM.md); F10a is delivered and automated Gate B integration is verified. The first
+common-control batch ships in 0.18; human native/composition/accessibility
+acceptance continues through the platform checklist. F10b document editing and
 W04/W05 remain a later dedicated track; basic forms and workspaces do not wait
 for a document engine. These are sequencing changes, not new shipped features.
 
@@ -31,7 +30,9 @@ for a document engine. These are sequencing changes, not new shipped features.
 The library already includes `Widget`, `Label`, `Button`, `ToolButton`,
 single-line `TextBox`, `NumericInput`, `Slider`, `SplitToolButton`, `TabWidget`,
 `ToolBar`, `ContextMenu`, `ListWidget`, `TreeWidget`, `TableWidget`, `CanvasWidget`,
-`SketchWidget`, `OpenGLWidget`, and custom painting through `PaintWidget`/`Painter`.
+`SketchWidget`, `OpenGLWidget`, `CheckBox`, `RadioButton`/`RadioGroup`, `ComboBox`,
+`ScrollArea`, `Splitter`, `GroupBox`, `Frame`, `Separator`, `ProgressBar`,
+`BusyIndicator`, `ToolTip`, and custom painting through `PaintWidget`/`Painter`.
 
 Existing collections render viewport model entries rather than creating a widget
 per row. Table sorting, column resizing, and basic editing already work. The
@@ -40,7 +41,7 @@ scrolling container. The custom dial in the demo is not a public library `Dial`.
 
 Priority means: **Essential** for ordinary applications, **High** for a powerful
 engineering/CAD workspace, **Later** after the shared foundations and common
-controls. All catalog entries below are **planned** at this baseline.
+controls. Entries marked **0.18** are delivered; the other catalog entries remain planned.
 
 F09 adds shared action presentations to the existing buttons, toolbars, split
 choosers, and context menus. Nested command menus are implemented through
@@ -51,13 +52,13 @@ No other planned widget family is marked delivered by the input milestone.
 
 | ID | Widget/family | Scope | Priority |
 | --- | --- | --- | --- |
-| W01 | CheckBox | Two-state and indeterminate state, label/icon, keyboard operation | Essential |
-| W02 | RadioButton and grouping | Exclusive selection and reusable grouping policy | Essential |
-| W03 | ComboBox | Read-only/editable modes, virtualized popup, keyboard search, completion hooks | Essential |
+| W01 | CheckBox | Two-state and indeterminate state, label/icon, keyboard operation | Essential — **0.18 delivered** |
+| W02 | RadioButton and grouping | Exclusive selection and reusable grouping policy | Essential — **0.18 delivered** |
+| W03 | ComboBox | Read-only/editable modes, virtualized popup, keyboard search, completion hooks | Essential — **0.18 delivered** |
 | W04 | PlainTextEditor | Multiline text, wrapping, cross-line selection, scrolling, history, search/replace | Later document track; essential there |
 | W05 | RichTextEditor / RichTextView | Editable/read-only presentations of one structured document model | Later document track; essential there |
 | W06 | ImageView / image and icon display | Aspect fit/fill, alignment, scaling, DPI-aware resources | Essential |
-| W07 | ProgressBar / BusyIndicator | Determinate/indeterminate progress; hidden indicators stop requesting frames | Essential |
+| W07 | ProgressBar / BusyIndicator | Determinate/indeterminate progress; hidden indicators stop requesting frames | Essential — **0.18 delivered** |
 | W08 | SearchBox / CompletionPopup | Search/clear actions, reusable suggestions, cancellable asynchronous results | High |
 | W09 | Switch / SegmentedControl | Boolean/exclusive selection presentations sharing normal control semantics | High |
 | W10 | MultiSelectComboBox / TagEditor | Checkable choices, removable tags, keyboard interaction | High |
@@ -73,11 +74,11 @@ only change appearance should share implementations and semantic roles.
 
 | ID | Widget/family | Scope | Priority |
 | --- | --- | --- | --- |
-| W14 | ScrollArea | Scroll arbitrary child controls/forms with consistent clipping and focus reveal | Essential |
+| W14 | ScrollArea | Scroll arbitrary child controls/forms with consistent clipping and focus reveal | Essential — **0.18 delivered** |
 | W15 | ScrollBar | Standalone reusable horizontal/vertical control sharing collection scrollbar logic | Essential |
-| W16 | Splitter | Nested user-resizable panes, hard minima, saved positions | Essential |
+| W16 | Splitter | Nested user-resizable panes, hard minima, saved positions | Essential — **0.18 delivered** |
 | W17 | StackedWidget | Persistent pages without requiring a visible tab strip | Essential |
-| W18 | GroupBox / Frame / Separator | Titled/checkable groups and reusable visual structure | Essential |
+| W18 | GroupBox / Frame / Separator | Titled/checkable groups and reusable visual structure | Essential — **0.18 delivered** |
 | W19 | CollapsiblePanel / Accordion / ToolBox | Expandable inspector sections and categorized tools | High |
 | W20 | MainWindow | Central workspace plus menus, toolbars, status area, owned windows | High |
 | W21 | DockWidget / DockManager | Dock, float, tabify, rearrange, and restore panels | High |
@@ -89,7 +90,7 @@ only change appearance should share implementations and semantic roles.
 | ID | Widget/family | Scope | Priority |
 | --- | --- | --- | --- |
 | W24 | MenuBar / nested Menu | Submenus, icons, shortcut hints, checked actions; extend ContextMenu | Essential |
-| W25 | ToolTip | Delayed pointer/focus help and reliable dismissal | Essential |
+| W25 | ToolTip | Delayed pointer/focus help and reliable dismissal | Essential — **0.18 delivered** |
 | W26 | Popup / Popover | Shared anchored interactive content and dismissal/focus behavior | Essential |
 | W27 | Dialog | Modal/modeless operation, ownership, default/cancel actions | Essential |
 | W28 | MessageBox / InputDialog / DialogButtonBox | Reusable confirmation, errors, input requests, standard responses | Essential |
@@ -168,7 +169,9 @@ canvas/sketcher layer rather than becoming mandatory core form controls.
    Gate B evidence in [FOUNDATIONS_ROADMAP.md](FOUNDATIONS_ROADMAP.md). Carry the
    relevant F12 resource limits, F13 diagnostics, and F15 checks with each feature.
    Deferred F14 packaging and F10b document editing are not prerequisites.
-2. First common-control batch: W01, W02, W03, W14, W16, W18, W07, W25.
+2. Delivered first common-control batch (0.18): W01, W02, W03, W14, W16, W18, W07, W25.
+   [Contracts](COMMON_CONTROLS.md) and [evidence](verification/WIDGETS_0_18.md) record
+   actual behavior, bounds and native/manual acceptance.
    Build the shared popup/scroll/grouping mechanisms once.
 3. Expand common application coverage: commands/menus, dialogs and native-service
    widgets, then main windows, docking, property editing, and stronger data views.
@@ -196,3 +199,8 @@ visual variation.
   virtualized providers, broader patterns and real assistive-technology evidence.
 - [Current architecture](ARCHITECTURE.md), [CSS contract](CSS.md), and
   [0.8 verification](verification/WIDGET_STYLING_0_8.md).
+
+The 0.18 batch adds no new runtime dependency. Next catalog work can build on
+these controls; document storage/editor families remain F10b and module extraction
+remains deferred. Image/icon resources, standalone scrolling/stacked containers
+and broader workspace controls retain their separate entries.

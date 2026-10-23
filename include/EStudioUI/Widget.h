@@ -175,6 +175,12 @@ class Widget
     //! Delivers owned file-drop values after opt-in acceptance.
     Signal<const FileDropEvent&>& FilesDropped();
 
+    //! Assigns bounded pointer/focus help with a scheduler delay in seconds.
+    void SetToolTip(std::string text, double delay = 0.6);
+
+    //! Returns this control's help text.
+    const std::string& GetToolTip() const;
+
     //! Sets a pointer shape; nullopt inherits the nearest logical ancestor's choice.
     void SetCursor(std::optional<CursorShape> shape);
 
@@ -243,6 +249,8 @@ class Widget
     friend class SemanticTree;
     friend class WidgetRef;
     friend class ConstraintItem;
+    friend class RadioGroup;
+    friend class Splitter;
     friend class Detail::BindingAccess;
 
     //! Rejects tree mutation during style, measurement, layout, surfaces, or painting.
@@ -302,6 +310,9 @@ class Widget
     //! Measures content at allocated content dimensions; overrides must be pure and flag width dependence.
     virtual MeasureResult MeasureConstrained(FontFace& font, const MeasureConstraints& constraints) const;
 
+    //! Returns a borrowed last layout report until the next arrangement.
+    const LayoutReport& GetPreparedLayoutReport() const;
+
     //! Returns this widget's last prepared intrinsic size without invoking its measurement hook.
     Point GetIntrinsicSize() const;
 
@@ -338,6 +349,9 @@ class Widget
     //! Cancels an outstanding capture, for example after window deactivation.
     virtual void OnCaptureLost();
 
+    //! Responds after a descendant receives keyboard focus.
+    virtual void OnDescendantFocused(Widget& descendant);
+
     //! Updates internal child geometry before children are arranged.
     virtual void OnLayout();
 
@@ -362,6 +376,9 @@ class Widget
     //! Requests only the derived work described by the supplied impacts.
     void Invalidate(Invalidation flags);
 
+    //! Invalidates an immediate composition child after an external strategy input changes.
+    void InvalidateChild(Widget& child, Invalidation flags);
+
     //! Requests painting without repeating style resolution or layout.
     void RequestRepaint();
 
@@ -377,6 +394,11 @@ class Widget
 
   private:
     friend class CssMotion;
+
+    //! Stores optional delayed help text.
+    std::string m_ToolTip;
+    //! Stores the delayed help interval in seconds.
+    double m_ToolTipDelay = 0.6;
 
     //! Captures the owner before any widget state is initialized.
     ThreadAffinity m_Affinity;

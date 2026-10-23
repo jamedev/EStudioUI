@@ -35,7 +35,7 @@ command history, geometry, and persistence; these are not promised modules or
 current standalone SDKs. Public API usability and supported extension points
 remain acceptance criteria throughout.
 
-## Implementation status: 0.17, control typography
+## Implementation status: 0.18, common controls on verified foundations
 
 The 0.14.1 maintenance increment fixes retained native window closure, stable
 GPU capture after presentation, and MSVC conversion warnings before the initial F11 increment.
@@ -49,7 +49,7 @@ contracts, concurrency tests, and actual multiwindow/framebuffer probes.
 measured evidence and platform limits. The original illustrative `Task::ThenOnUi`
 proposal became receiver-bound `BackgroundTasks::Run` / `RunLatest`.
 
-**The first F05/F07 slice is implemented; Gate B remains open.** Typed state,
+**The first F05/F07 slice is implemented and now has the later Gate B integration evidence.** Typed state,
 coherent transactions, built-in/custom bindings, and targeted invalidation now
 have public APIs. [STATE.md](STATE.md) documents their delivered contracts and
 examples. [verification/STATE_0_10.md](verification/STATE_0_10.md) records the
@@ -97,7 +97,9 @@ records CPU, framebuffer, sanitizer and platform evidence with explicit limits.
 This adds private header-only Kiwi under permissive licenses; Box/Grid/Form/Flow
 remain independent of the strategy. Continue F11 platform/accessibility services
 and F10a essential control text/input.
-Gate B remains open and broad widget expansion remains gated.
+F10a and automated Gate B integration are verified. The user-authorized first
+common-control batch is delivered in 0.18; human platform acceptance remains
+separate F15 work.
 
 **F09 is implemented in 0.14.** [INPUT.md](INPUT.md) documents the delivered APIs
 and migration contracts; [examples/InputActions.cpp](examples/InputActions.cpp)
@@ -130,7 +132,8 @@ input-method/assistive-technology/mixed-monitor checks. Windows Release and Debu
 each pass 37/37 suites, followed by three 80-check native Debug repetitions.
 Implementation and automated acceptance are complete. Interactive acceptance
 remains open, so protocol tests alone do not establish application readiness. Gate B remains
-open for F10a and the relevant integration evidence.
+verified for the F10a/common-control automated integration; human native
+acceptance remains explicitly tracked.
 
 ## Original assessment of the 0.8 implementation
 
@@ -467,7 +470,8 @@ stable IDs, with migration and malformed-state handling.
 ## Delivery gates and evidence
 
 These are acceptance fixtures; the status/evidence above records Gate A results
-and the verified first F05/F07 implementation slice. Gate B remains open.
+and the verified first F05/F07 implementation slice. Shared widget contracts now
+have automated Gate B integration evidence; human native acceptance continues.
 Record observed work and named hardware; avoid arbitrary FPS claims.
 
 | Gate | Work to close | Acceptance evidence | Widget work unlocked |
@@ -542,3 +546,17 @@ use. A dedicated render thread remains subject to measured need.
 - [Qt object threading and queued connections](https://doc.qt.io/qt-6/threads-qobject.html).
 - [Qt threading technologies](https://doc.qt.io/qt-6/threads-technologies.html).
 - [Baseline CI result](https://github.com/jamedev/EStudioUI/actions/runs/39721394003).
+
+## First common-control integration (0.18)
+
+F10a source and native fixture are published at cb60e5d / a1ab5bd. Windows Release
+and Debug each pass 38 tests, plus three native Debug repetitions of 83 checks
+with zero compiler warnings. Linux Release/software GL, local ASan/UBSan and
+isolated TSan evidence are recorded in [TEXT_0_17](verification/TEXT_0_17.md).
+
+The first catalog batch now reuses those contracts: checkbox/radio state,
+virtual/editable combos, arbitrary scrolling content and focus reveal, bounded
+splitter layouts, group/frame/separator structure, progress/idle policy and
+nonactivating deadline-based help. [COMMON_CONTROLS.md](COMMON_CONTROLS.md) and
+[0.18 evidence](verification/WIDGETS_0_18.md) define delivered scope and bounds.
+No document editor or module extraction is implied; F10b and F14 remain deferred.

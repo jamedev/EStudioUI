@@ -48,6 +48,7 @@ void ParsePseudo(std::string word, unsigned& required, unsigned& forbidden)
                                                                      {"read-only", ReadOnly},
                                                                      {"selected", Selected},
                                                                      {"checked", Selected},
+                                                                     {"indeterminate", Indeterminate},
                                                                      {"focus-within", FocusWithin},
                                                                      {"valid", Valid},
                                                                      {"invalid", Invalid},
@@ -1479,7 +1480,35 @@ Style StyleSheet::Compute(const StyleNode& node, const Style* inherited, int pse
 
     if (pseudoElement == 0)
     {
-        if (node.m_Type == "toolbar")
+        if (node.m_Type == "checkbox" || node.m_Type == "radiobutton")
+        {
+            style.m_Padding = {6, 8, 6, 8};
+            style.m_Radius = 6;
+        }
+        else if (node.m_Type == "combobox")
+        {
+            style.m_Height = {Length::Unit::Pixels, 44};
+            style.m_Padding = {2, 2, 2, 2};
+            style.m_BorderWidth = 1;
+            style.m_Radius = 7;
+            style.m_Background = {0.12f, 0.16f, 0.25f, 1};
+            style.m_BorderColor = {0.3f, 0.4f, 0.6f, 1};
+        }
+        else if (node.m_Type == "tooltip")
+        {
+            style.m_Width = {Length::Unit::Pixels, 280};
+            style.m_MaxWidth = 360;
+            style.m_Padding = {10, 12, 10, 12};
+            style.m_Radius = 7;
+            style.m_BorderWidth = 1;
+            style.m_Background = {0.08f, 0.12f, 0.2f, 1};
+            style.m_Color = {0.93f, 0.96f, 1, 1};
+            style.m_BorderColor = {0.35f, 0.45f, 0.65f, 1};
+            style.m_FontSize = 14;
+        }
+        else if (node.m_Type == "progressbar" || node.m_Type == "busyindicator")
+            style.m_Radius = 6;
+        else if (node.m_Type == "toolbar")
             style.m_Gap = 6;
         else if (node.m_Type == "contextmenu" || node.m_Type == "numericinput")
             style.m_Gap = 3;
@@ -1487,7 +1516,19 @@ Style StyleSheet::Compute(const StyleNode& node, const Style* inherited, int pse
             style.m_Gap = 4;
         for (const auto& name : node.m_Classes)
         {
-            if (name == "toolbar-separator")
+            if (name == "combo-editor")
+            {
+                style.m_Padding = {5, 9, 5, 9};
+                style.m_BorderWidth = 0;
+                style.m_Background = {};
+            }
+            else if (name == "combo-arrow")
+            {
+                style.m_Padding = {};
+                style.m_BorderWidth = 0;
+                style.m_Radius = 5;
+            }
+            else if (name == "toolbar-separator")
                 style.m_Width = {Length::Unit::Pixels, 1};
             else if (name == "menu-separator")
                 style.m_Height = {Length::Unit::Pixels, 1};

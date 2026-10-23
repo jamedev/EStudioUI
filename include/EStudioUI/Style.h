@@ -32,7 +32,8 @@ enum PseudoState : unsigned
     Alternate = 8192,
     Expanded = 16384,
     Sorted = 32768,
-    Empty = 65536
+    Empty = 65536,
+    Indeterminate = 131072
 };
 
 //! Describes the identity and states visible to CSS selectors.

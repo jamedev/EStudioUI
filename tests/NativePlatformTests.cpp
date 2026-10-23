@@ -3,6 +3,10 @@
 #include "WindowsSupport.h"
 
 #include <EStudioUI/Button.h>
+#include <EStudioUI/CheckBox.h>
+#include <EStudioUI/ComboBox.h>
+#include <EStudioUI/ProgressBar.h>
+#include <EStudioUI/RadioButton.h>
 #include <EStudioUI/ListWidget.h>
 #include <EStudioUI/MemoryPlatformServices.h>
 #include <EStudioUI/NumericInput.h>
@@ -743,6 +747,19 @@ void Accessibility(UiContext& ui, HWND window)
     auto& toggle = ui.Root().Add<ToolButton>("Grid");
     toggle.SetId("toggle");
     toggle.SetCheckable(true);
+    auto& tri = ui.Root().Add<CheckBox>("Mixed native choice");
+    tri.SetId("tri-state");
+    tri.SetTristate(true);
+    tri.SetCheckState(CheckState::Indeterminate);
+    auto& combo = ui.Root().Add<ComboBox>();
+    combo.SetId("native-combo");
+    combo.SetItems({"First", "Second", "Third"});
+    auto& progress = ui.Root().Add<ProgressBar>();
+    progress.SetId("native-progress");
+    progress.SetValue(65);
+    auto radioGroup = std::make_shared<RadioGroup>();
+    auto& radio = ui.Root().Add<RadioButton>("Native radio", radioGroup);
+    radio.SetId("native-radio");
     auto& list = ui.Root().Add<ListWidget>();
     list.SetId("list");
     list.SetHeight(SizeRule::Fixed(100));
@@ -860,6 +877,48 @@ void Accessibility(UiContext& ui, HWND window)
                 if (SUCCEEDED(range->SetValue(100)))
                     throw std::runtime_error("Out of range native value was accepted");
                 Trace("UI Automation range committed");
+                auto triElement = Find(*automation.Get(), *root.Get(), L"tri-state");
+                ComPtr<IUIAutomationTogglePattern> triPattern;
+                Require(triElement->GetCurrentPatternAs(UIA_TogglePatternId, IID_PPV_ARGS(&triPattern)),
+                        "Obtain native tri-state toggle pattern");
+                ToggleState triState = ToggleState_Off;
+                Require(triPattern->get_CurrentToggleState(&triState), "Read native indeterminate state");
+                Check(triState == ToggleState_Indeterminate, "Native checkbox exposes the third toggle state");
+                Require(triPattern->Toggle(), "Toggle native indeterminate checkbox");
+                Require(triPattern->get_CurrentToggleState(&triState), "Read native checkbox after activation");
+                Check(triState == ToggleState_Off, "Native toggle uses the canonical three-state cycle");
+                auto comboElement = Find(*automation.Get(), *root.Get(), L"native-combo");
+                ComPtr<IUIAutomationExpandCollapsePattern> comboPattern;
+                Require(comboElement->GetCurrentPatternAs(UIA_ExpandCollapsePatternId, IID_PPV_ARGS(&comboPattern)),
+                        "Obtain native combo expansion pattern");
+                Require(comboPattern->Expand(), "Expand native virtual combo popup");
+                ExpandCollapseState comboState = ExpandCollapseState_LeafNode;
+                Require(comboPattern->get_CurrentExpandCollapseState(&comboState), "Read native combo expansion");
+                Check(comboState == ExpandCollapseState_Expanded, "Native combo expansion shares popup state");
+                Require(comboPattern->Collapse(), "Collapse native combo popup");
+                ComPtr<IUIAutomationValuePattern> comboValue;
+                Require(comboElement->GetCurrentPatternAs(UIA_ValuePatternId, IID_PPV_ARGS(&comboValue)),
+                        "Obtain read-only native combo value");
+                BSTR comboText = nullptr;
+                Require(comboValue->get_CurrentValue(&comboText), "Read native combo value");
+                const bool firstChoice = comboText && std::wstring_view(comboText) == L"First";
+                SysFreeString(comboText);
+                Check(firstChoice, "Read-only combo still exposes its textual value");
+                auto progressElement = Find(*automation.Get(), *root.Get(), L"native-progress");
+                ComPtr<IUIAutomationRangeValuePattern> progressPattern;
+                Require(progressElement->GetCurrentPatternAs(UIA_RangeValuePatternId, IID_PPV_ARGS(&progressPattern)),
+                        "Obtain native progress range");
+                BOOL progressReadOnly = FALSE;
+                Require(progressPattern->get_CurrentIsReadOnly(&progressReadOnly), "Read native progress policy");
+                Check(progressReadOnly, "Native progress reports a read-only range");
+                auto radioElement = Find(*automation.Get(), *root.Get(), L"native-radio");
+                ComPtr<IUIAutomationSelectionItemPattern> radioPattern;
+                Require(radioElement->GetCurrentPatternAs(UIA_SelectionItemPatternId, IID_PPV_ARGS(&radioPattern)),
+                        "Obtain native radio selection pattern");
+                Require(radioPattern->Select(), "Select native radio through its group");
+                BOOL radioSelected = FALSE;
+                Require(radioPattern->get_CurrentIsSelected(&radioSelected), "Read native radio selection");
+                Check(radioSelected, "Native radio shares canonical group selection");
                 auto toggleElement = Find(*automation.Get(), *root.Get(), L"toggle");
                 ComPtr<IUIAutomationTogglePattern> toggler;
                 Require(toggleElement->GetCurrentPatternAs(UIA_TogglePatternId, IID_PPV_ARGS(&toggler)),

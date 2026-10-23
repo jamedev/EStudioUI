@@ -640,6 +640,10 @@ void Widget::OnCaptureLost()
     VerifyAccess();
 }
 
+void Widget::OnDescendantFocused(Widget&)
+{
+}
+
 void Widget::OnLayout()
 {
     VerifyAccess();
@@ -851,7 +855,7 @@ void Widget::SetAccessibleDescription(std::optional<std::string> description)
 void Widget::SetAccessibleRole(std::optional<SemanticRole> role)
 {
     VerifyStructuralMutation();
-    if (role && (*role < SemanticRole::Group || *role > SemanticRole::CanvasItem))
+    if (role && (*role < SemanticRole::Group || *role > SemanticRole::ToolTip))
         throw std::invalid_argument("Invalid accessible role.");
     m_AccessibleRole = role;
     NotifySemanticsChanged();
@@ -865,5 +869,51 @@ void Widget::NotifySemanticsChanged()
         m_Context->m_Semantics->Changed();
         m_Context->m_Dispatcher.PostLatest("semantic-wake:" + std::to_string(m_Context->m_Root.m_TargetKey), [] {});
     }
+}
+} // namespace EStudioUI
+
+namespace EStudioUI
+{
+const LayoutReport& Widget::GetPreparedLayoutReport() const
+{
+    VerifyAccess();
+    return m_LayoutReport;
+}
+} // namespace EStudioUI
+
+namespace EStudioUI
+{
+void Widget::SetToolTip(std::string text, double delay)
+{
+    VerifyStructuralMutation();
+    if (!std::isfinite(delay) || delay < 0 || delay > 60 || text.size() > 4096)
+        throw std::invalid_argument("Tooltips require at most 4,096 UTF-8 bytes and a delay in [0,60] seconds.");
+    ValidatePlatformText(text);
+    m_ToolTip = std::move(text);
+    m_ToolTipDelay = delay;
+    if (m_Context && m_Context->m_ToolTipTarget.Get() == this)
+    {
+        m_Context->DismissToolTip();
+        m_Context->m_ToolTipTarget = {};
+        m_Context->ArmToolTip(this);
+    }
+}
+
+const std::string& Widget::GetToolTip() const
+{
+    VerifyAccess();
+    return m_ToolTip;
+}
+} // namespace EStudioUI
+
+namespace EStudioUI
+{
+void Widget::InvalidateChild(Widget& child, Invalidation flags)
+{
+    VerifyStructuralMutation();
+    child.VerifyAccess();
+    if (child.GetParent() != this)
+        throw std::invalid_argument("Composition invalidation requires an immediate owned child.");
+    child.Invalidate(flags);
 }
 } // namespace EStudioUI

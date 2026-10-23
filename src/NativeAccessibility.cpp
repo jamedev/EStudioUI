@@ -56,6 +56,18 @@ CONTROLTYPEID ControlType(SemanticRole role)
         return UIA_TextControlTypeId;
     case SemanticRole::Button:
         return UIA_ButtonControlTypeId;
+    case SemanticRole::RadioButton:
+        return UIA_RadioButtonControlTypeId;
+    case SemanticRole::ComboBox:
+        return UIA_ComboBoxControlTypeId;
+    case SemanticRole::ProgressBar:
+        return UIA_ProgressBarControlTypeId;
+    case SemanticRole::Splitter:
+        return UIA_ThumbControlTypeId;
+    case SemanticRole::Separator:
+        return UIA_SeparatorControlTypeId;
+    case SemanticRole::ToolTip:
+        return UIA_ToolTipControlTypeId;
     case SemanticRole::CheckBox:
         return UIA_CheckBoxControlTypeId;
     case SemanticRole::TextBox:
@@ -447,13 +459,15 @@ class Provider final : public IRawElementProviderSimple,
             *result = static_cast<IToggleProvider*>(this);
         else if (pattern == UIA_SelectionPatternId && IsSelectionContainer(node))
             *result = static_cast<ISelectionProvider*>(this);
-        else if (pattern == UIA_SelectionItemPatternId && node.m_SelectionContainer)
+        else if (pattern == UIA_SelectionItemPatternId &&
+                 (node.m_SelectionContainer || node.m_Info.m_Role == SemanticRole::RadioButton))
             *result = static_cast<ISelectionItemProvider*>(this);
         else if (pattern == UIA_GridPatternId && node.m_Info.m_RowCount && node.m_Info.m_ColumnCount)
             *result = static_cast<IGridProvider*>(this);
         else if (pattern == UIA_GridItemPatternId && node.m_GridContainer && node.m_Info.m_Row && node.m_Info.m_Column)
             *result = static_cast<IGridItemProvider*>(this);
-        else if (pattern == UIA_ExpandCollapsePatternId && node.m_Info.m_Role == SemanticRole::TreeItem)
+        else if (pattern == UIA_ExpandCollapsePatternId &&
+                 (node.m_Info.m_Role == SemanticRole::TreeItem || node.m_Info.m_Role == SemanticRole::ComboBox))
             *result = static_cast<IExpandCollapseProvider*>(this);
         else if (pattern == UIA_ScrollItemPatternId && HasSemanticAction(actions, SemanticAction::ScrollIntoView))
             *result = static_cast<IScrollItemProvider*>(this);
@@ -799,7 +813,9 @@ class Provider final : public IRawElementProviderSimple,
         SemanticNode node;
         const auto code = m_State->Node(m_Id, node);
         if (SUCCEEDED(code))
-            *result = node.m_Info.m_Checked ? ToggleState_On : ToggleState_Off;
+            *result = node.m_Info.m_Indeterminate ? ToggleState_Indeterminate
+                      : node.m_Info.m_Checked     ? ToggleState_On
+                                                  : ToggleState_Off;
         return code;
     }
 
@@ -1037,6 +1053,7 @@ class Provider final : public IRawElementProviderSimple,
     static bool IsValueControl(const SemanticNode& node)
     {
         return node.m_Info.m_Role == SemanticRole::TextBox || node.m_Info.m_Role == SemanticRole::Cell ||
+               node.m_Info.m_Role == SemanticRole::ComboBox ||
                HasSemanticAction(node.m_Info.m_Actions, SemanticAction::SetText);
     }
 
@@ -1488,12 +1505,17 @@ struct NativeAccessibility::Impl
                 after.dblVal = *node->m_Info.m_Number;
                 changed(UIA_RangeValueValuePropertyId, before, after);
             }
-            if (old.m_Info.m_Checked != node->m_Info.m_Checked)
+            if ((old.m_Info.m_Checked != node->m_Info.m_Checked ||
+                 old.m_Info.m_Indeterminate != node->m_Info.m_Indeterminate))
             {
                 VARIANT before{}, after{};
                 before.vt = after.vt = VT_I4;
-                before.lVal = old.m_Info.m_Checked ? ToggleState_On : ToggleState_Off;
-                after.lVal = node->m_Info.m_Checked ? ToggleState_On : ToggleState_Off;
+                before.lVal = old.m_Info.m_Indeterminate ? ToggleState_Indeterminate
+                              : old.m_Info.m_Checked     ? ToggleState_On
+                                                         : ToggleState_Off;
+                after.lVal = node->m_Info.m_Indeterminate ? ToggleState_Indeterminate
+                             : node->m_Info.m_Checked     ? ToggleState_On
+                                                          : ToggleState_Off;
                 changed(UIA_ToggleToggleStatePropertyId, before, after);
             }
             if (old.m_Info.m_Selected != node->m_Info.m_Selected)

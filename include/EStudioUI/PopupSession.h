@@ -54,6 +54,12 @@ struct PopupOptions
     //! Restores the previous eligible focus target after closure.
     bool m_RestoreFocus = true;
 
+    //! Takes keyboard focus when shown; false supports nonactivating help.
+    bool m_TakeFocus = true;
+
+    //! Excludes a decorative presentation from pointer hit testing.
+    bool m_InputTransparent = false;
+
     //! Returns modal defaults that consume outside presses without dismissing.
     static PopupOptions Modal();
 };

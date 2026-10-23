@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.24)
-project(EStudioUI VERSION 0.17.0 LANGUAGES C CXX)
+project(EStudioUI VERSION 0.18.0 LANGUAGES C CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -85,6 +85,9 @@ target_include_directories(EStudioUIGl PUBLIC third_party/glad/include)
 add_library(EStudioUI STATIC
     src/Style.cpp src/TextBuffer.cpp src/FontFace.cpp src/FontResource.cpp src/TextLayout.cpp src/TextShaper.cpp src/Renderer.cpp
     src/Widget.cpp src/UiContext.cpp src/Label.cpp src/Button.cpp src/TextBox.cpp src/Window.cpp
+    src/CheckBox.cpp src/RadioButton.cpp src/RadioGroup.cpp src/ComboBox.cpp
+    src/ProgressBar.cpp src/BusyIndicator.cpp src/Frame.cpp src/Separator.cpp src/GroupBox.cpp
+    src/ScrollArea.cpp src/Splitter.cpp src/ToolTip.cpp src/UiToolTip.cpp
     src/SizeRule.cpp src/Layout.cpp src/ToolButton.cpp src/ToolBar.cpp src/TabWidget.cpp
     src/InputEvent.cpp src/Shortcut.cpp src/Action.cpp src/PopupSession.cpp src/UiInput.cpp
     src/SemanticTypes.cpp src/SemanticTree.cpp src/NativeAccessibility.cpp src/NativeAccessibilityText.cpp
@@ -134,12 +137,14 @@ if(ESTUDIOUI_BUILD_DEMO)
         demo/CustomWidgetGallery.cpp demo/PainterProbe.cpp demo/InputControlsProbe.cpp
         demo/WidgetStylesGallery.cpp demo/WidgetStylesProbe.cpp demo/ApplicationProbe.cpp demo/FoundationGallery.cpp
         demo/StateGallery.cpp demo/ModelGallery.cpp demo/LayoutGallery.cpp demo/ConstraintGallery.cpp demo/InputGallery.cpp demo/PlatformGallery.cpp
-        demo/PlatformSemanticProbe.cpp demo/TextGallery.cpp)
+        demo/PlatformSemanticProbe.cpp demo/TextGallery.cpp demo/EssentialGallery.cpp)
     target_link_libraries(EStudioUIDemo PRIVATE EStudioUI::EStudioUI EStudioUIGl glfw)
     add_executable(EStudioUIConstraintExample examples/ConstraintLayout.cpp)
     target_link_libraries(EStudioUIConstraintExample PRIVATE EStudioUI::EStudioUI)
     add_executable(EStudioUIInputExample examples/InputActions.cpp)
     target_link_libraries(EStudioUIInputExample PRIVATE EStudioUI::EStudioUI)
+    add_executable(EStudioUIControlsExample examples/CommonControls.cpp)
+    target_link_libraries(EStudioUIControlsExample PRIVATE EStudioUI::EStudioUI)
     add_executable(EStudioUITextExample examples/ControlText.cpp)
     target_link_libraries(EStudioUITextExample PRIVATE EStudioUI::EStudioUI)
     if(MSVC)
@@ -219,7 +224,7 @@ if(ESTUDIOUI_BUILD_TESTS)
     foreach(suite CanvasScene CanvasGeometry SketchDocument CanvasWidget InputControls SplitToolButton Painter
                   StyleParts StyledCollections StyledScroll CompositeStyle
                   Dispatch ThreadAffinity Task QueuedSignal ControlAffinity ServiceAffinity
-                  State Binding Invalidation ControlUpdate Model ModelView Layout ConstraintLayout InputFoundation ActionDomain Platform Semantic TextInput FontText)
+                  State Binding Invalidation ControlUpdate Model ModelView Layout ConstraintLayout InputFoundation ActionDomain Platform Semantic TextInput FontText EssentialWidgets)
         add_executable(EStudioUI${suite}Tests tests/${suite}Tests.cpp)
         target_link_libraries(EStudioUI${suite}Tests PRIVATE EStudioUI::EStudioUI)
         target_compile_definitions(EStudioUI${suite}Tests PRIVATE

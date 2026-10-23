@@ -505,3 +505,26 @@ cosmetic sizes and gaps are pre-cascade defaults, while explicit application
 contracts still win. Owned popup selector ancestry follows the logical owner,
 independently of root overlay layout, clipping, focus routing, and lifetime
 pruning. See [WIDGET_STYLING.md](WIDGET_STYLING.md).
+
+## Common-control composition (0.18)
+
+ComboBox composes the existing TextBox and a nonfocusable analytic arrow button.
+Its ListWidget popup shares canonical model storage with independent preview
+selection; a bounded Unicode prefix index and numeric enabled-row index avoid
+model scans per key or frame. Candidate validation precedes model publication.
+The popup uses existing owner lifetime, logical styling and asynchronous sessions.
+
+ScrollArea composes a clipping viewport and ordinary content widget. A scroll
+change explicitly invalidates the child strategy input through InvalidateChild;
+this preserves intrinsic caches while rearranging translated descendants. Focus
+reveal uses the common ancestor hook and transformed coordinate conversion.
+Splitter assigns lifetime-keyed stretch weights through the shared allocator;
+hard fixed/min/max rules remain authoritative. Prepared reports are borrowed in
+paint and copied only through the public owned diagnostics API.
+
+Choice controls commit persistent state before notification; radio groups update
+all members coherently and observe widgets weakly. Progress reuses the paint-only
+invalidation path. Tooltip deadlines join the window scheduler, rather than
+requesting animation frames. Nonactivating/input-transparent popup options retain
+normal defaults, modal ancestry and shared input reentrancy/focus guards. See
+[COMMON_CONTROLS.md](COMMON_CONTROLS.md) for limits and public usage.

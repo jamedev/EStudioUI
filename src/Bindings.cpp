@@ -1,3 +1,4 @@
+#include <EStudioUI/CheckBox.h>
 #include <EStudioUI/Bindings.h>
 #include <EStudioUI/Label.h>
 #include <EStudioUI/NumericInput.h>
@@ -222,6 +223,16 @@ Binding BindChecked(ToolButton& target, State<bool>& state, BindingMode mode)
     if (mode == BindingMode::TwoWay && data->IsConnected())
         Detail::AddBindingWriter(data, target, state, target.Toggled(), setter,
                                  [](const ToolButton& live) { return live.IsChecked(); });
+    return binding;
+}
+
+Binding BindChecked(CheckBox& target, State<bool>& state, BindingMode mode)
+{
+    const auto setter = [](CheckBox& live, bool checked) { live.SetChecked(checked); };
+    auto [binding, data] = Detail::MakeBinding(target, state, setter, [](CheckBox&, bool) {});
+    if (mode == BindingMode::TwoWay && data->IsConnected())
+        Detail::AddBindingWriter(data, target, state, target.Toggled(), setter,
+                                 [](const CheckBox& live) { return live.IsChecked(); });
     return binding;
 }
 

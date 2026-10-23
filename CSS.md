@@ -344,3 +344,16 @@ resizing and style animation. See [LAYOUT.md](LAYOUT.md) for the exact rules,
 extension API, allocation reports and costs.
 
 Font resolution, fallback, visual editing and resource limits are documented in [TEXT.md](TEXT.md).
+
+## Essential control parts (0.18)
+
+CheckBox/RadioButton register indicator, mark and label parts; `:checked` and
+`:indeterminate` reflect canonical state. Progress/BusyIndicator register track,
+chunk and label. Splitter registers orientation/hover/pressed/selected handles,
+with transformed paint and hit geometry clipped to the reserved gap. ScrollArea
+reuses existing scrollbar parts. Composite combo/group children use ordinary
+selectors and preserve logical popup ancestry. The tooltip itself is styled by
+`tooltip`. See [COMMON_CONTROLS.md](COMMON_CONTROLS.md) for the complete hook table
+and [essential-widgets.css](assets/essential-widgets.css) for working gradients,
+shadows, focus rings, state colors and transitions. Analytic checkmarks use line
+color/stroke width; other box-shaped parts share normal box paint properties.
