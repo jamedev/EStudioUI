@@ -105,7 +105,9 @@ F10b. Inline binary/text editors deliberately accept smaller drafts (32/64 KiB).
 A reserved per-request result slot and owner idle turn deliver source completion
 even when the ordinary dispatcher queue is full. Superseded reads cannot replace
 a newer request. Mutation admission rejects traversal/transaction use before I/O.
-Dropping a model cancels requests and settles sessions without joining the external
+Worker completion retains only CPU inbox data, so it cannot move UI-state
+destruction onto a worker during owner retirement. Dropping a model cancels
+requests and settles sessions without joining the external
 application executor. That executor and the context must outlive the model.
 
 ## Confirmed editing and extension

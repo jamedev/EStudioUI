@@ -196,7 +196,7 @@ struct AdapterModel::Data : std::enable_shared_from_this<Data>
     RequestScope m_ReadScope;
     Task m_Job;
     std::shared_ptr<Slot> m_Slot;
-    std::atomic_bool m_Ready = false;
+    std::shared_ptr<std::atomic_bool> m_Ready = std::make_shared<std::atomic_bool>(false);
     std::unordered_map<std::string, ItemId> m_Ids;
     std::unordered_map<ItemId, std::string> m_Rows;
     ModelEditSession m_Edit;
@@ -368,7 +368,7 @@ struct AdapterModel::Data : std::enable_shared_from_this<Data>
 
     void Pump()
     {
-        if (!m_Owner || m_Pumping || !m_Ready.exchange(false, std::memory_order_acq_rel))
+        if (!m_Owner || m_Pumping || !m_Ready->exchange(false, std::memory_order_acq_rel))
         {
             return;
         }
@@ -504,11 +504,12 @@ struct AdapterModel::Data : std::enable_shared_from_this<Data>
         status.m_Error.clear();
         const auto weak = weak_from_this();
         const auto dispatcher = m_Dispatcher;
+        const auto ready = m_Ready;
         // The result has a reserved slot before admission. Normal task delivery is
         // merely an optimization; the existing idle turn also consumes the slot.
         m_Job = m_Workers.RunLatest(
             m_ReadScope, m_Owner->GetHandle(),
-            [slot, weak, dispatcher, work = std::move(work)](std::stop_token stop)
+            [slot, ready, dispatcher, work = std::move(work)](std::stop_token stop)
             {
                 try
                 {
@@ -526,10 +527,9 @@ struct AdapterModel::Data : std::enable_shared_from_this<Data>
                     const std::lock_guard lock(slot->m_Mutex);
                     slot->m_Ready = true;
                 }
-                if (const auto live = weak.lock())
-                {
-                    live->m_Ready.store(true, std::memory_order_release);
-                }
+                // A producer must not retain Data: its State members have UI-only
+                // destruction. This CPU flag can outlive owner/context retirement.
+                ready->store(true, std::memory_order_release);
                 dispatcher.Wake();
                 return true;
             },
@@ -540,7 +540,7 @@ struct AdapterModel::Data : std::enable_shared_from_this<Data>
                     live->Pump();
                 }
             });
-        if (m_Job.IsReady() && !m_Ready.load(std::memory_order_acquire))
+        if (m_Job.IsReady() && !m_Ready->load(std::memory_order_acquire))
         {
             const auto state = m_Job.GetStatus();
             if (state == TaskStatus::Rejected || state == TaskStatus::Failed || state == TaskStatus::Cancelled ||

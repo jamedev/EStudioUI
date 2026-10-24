@@ -6,6 +6,7 @@
 #include <EStudioUI/UiContext.h>
 #include <EStudioUI/FontFace.h>
 #include <deque>
+#include <atomic>
 #include <iostream>
 #include <thread>
 #include <limits>
@@ -310,6 +311,40 @@ void Lifetime()
     Check(runtime.m_Provider->m_Writes == 0, "An unstarted owner-expired write is suppressed");
 }
 
+void ConcurrentRetirement()
+{
+    FontFace font(ESTUDIOUI_FONT_PATH);
+    BackgroundTasks workers({2, 256});
+    auto ui = std::make_unique<UiContext>(font);
+    auto adapter = std::make_shared<SnapshotModelAdapter>("empty", ModelSnapshot{});
+    for (unsigned round = 0; round < 512; ++round)
+    {
+        auto model = AdapterModel::Create(*ui, adapter, workers);
+        if (round % 8 == 0)
+        {
+            ui->PumpPlatformServices();
+        }
+        else
+        {
+            std::this_thread::yield();
+        }
+        model.reset();
+    }
+    // Producers may finish after both their model and the containing UI are gone.
+    ui.reset();
+    const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(5);
+    while (workers.GetStats().m_Running || workers.GetStats().m_Queued)
+    {
+        if (std::chrono::steady_clock::now() >= deadline)
+        {
+            throw std::runtime_error("Retired adapter work did not quiesce.");
+        }
+        std::this_thread::sleep_for(std::chrono::milliseconds(1));
+    }
+    Check(workers.GetStats().m_Accepted > 0 && workers.GetStats().m_Running == 0,
+          "Real workers finish after rapid model/context retirement without retaining or destroying UI state");
+}
+
 void SnapshotProvider()
 {
     ModelColumn text = Column("Name", ModelValueType::Text);
@@ -351,6 +386,7 @@ int main()
     {
         Bridge();
         Lifetime();
+        ConcurrentRetirement();
         SnapshotProvider();
         std::cout << "Adapter models: " << s_Checks << " checks passed\n";
         return 0;
