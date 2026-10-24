@@ -2,6 +2,8 @@
 #include <EStudioUI/ThreadAffinity.h>
 
 #include <stdexcept>
+#include <utility>
+#include <vector>
 
 namespace EStudioUI
 {

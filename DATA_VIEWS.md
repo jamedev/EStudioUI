@@ -46,8 +46,10 @@ Derive from `ModelAdapter`, not from a widget:
 Provider methods run on application workers, may overlap, and must cooperate with
 cancellation. Do not capture GUI objects in provider metadata/callbacks. Formatting,
 parsing and validation policies must be pure and safe on their documented callers.
+The page contract is flat. Hierarchy views bind a hierarchical ItemModel directly,
+as in the playground; lazy per-branch provider fetching is separate work.
 The default `Commit` is read-only. `SnapshotModelAdapter` adapts existing immutable
-C++ snapshots to the same query/page contract. It deliberately performs a complete
+C++ snapshots to the same query/page contract, flattening stored records. It deliberately performs a complete
 worker-side filter/sort scan; it does not turn an in-memory scan into indexed I/O.
 
 [examples/ModelAdapter.cpp](examples/ModelAdapter.cpp) is a compiled custom provider
@@ -112,7 +114,11 @@ application executor. That executor and the context must outlive the model.
 synchronously; adapter models settle after confirmed worker persistence and page
 publication. A table keeps a disabled draft while pending, restores it on failure,
 and closes it on success. Do not use synchronous `SetValue`/`SetCell` to write an
-asynchronous adapter. Derived models can implement `RequestEdit` using protected
+asynchronous adapter. Persistence rules belong in the backend transaction. A
+presentation/publication failure can occur after persistence succeeded; the edit
+then remains Committed with a diagnostic, while the bridge retains its old page
+and reports an error until a successful refresh.
+Derived models can implement `RequestEdit` using protected
 `BeginEditSession` and `CompleteEditSession`; a session can outlive a view.
 
 Set `ModelColumn::m_EditorType`, `m_Nullable` and/or `m_Choices` to use composed

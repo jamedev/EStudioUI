@@ -1,5 +1,6 @@
 #include <EStudioUI/SnapshotModelAdapter.h>
 #include <algorithm>
+#include <stdexcept>
 
 namespace EStudioUI
 {
