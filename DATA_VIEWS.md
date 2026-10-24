@@ -125,7 +125,9 @@ Derived models can implement `RequestEdit` using protected
 
 Set `ModelColumn::m_EditorType`, `m_Nullable` and/or `m_Choices` to use composed
 editors: exact signed integers, numeric input, checkbox, combo choice, color,
-text and hexadecimal binary. Nullable fields have an explicit NULL toggle; empty
+text and hexadecimal binary. Extreme finite real values use exact scientific
+text rather than being clamped to the numeric spin control range. Nullable fields
+have an explicit NULL toggle; empty
 text and empty binary stay distinct. SQLite Any fields follow their actual storage
 type, with declared-type hints for NULL; declared BOOLEAN values 0/1 use a checkbox
 while retaining integer storage. Nonstandard boolean values keep an integer editor.

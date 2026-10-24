@@ -90,6 +90,8 @@ class TypedEditor final : public CellEditor
             m_Null->AddClass("cell-null");
             m_Null->SetChecked(!value.index());
         }
+        const auto* real = std::get_if<double>(&value);
+        const bool useNumericInput = !real || (*real >= -1e300 && *real <= 1e300);
         if (!m_Column.m_Choices.empty())
         {
             m_Choice = &Add<ComboBox>();
@@ -122,7 +124,7 @@ class TypedEditor final : public CellEditor
                 m_Color->SetColor(*color);
             }
         }
-        else if (m_Type == ModelValueType::Real)
+        else if (m_Type == ModelValueType::Real && useNumericInput)
         {
             const double initial = std::holds_alternative<double>(value) ? std::get<double>(value) : 0;
             m_Number = &Add<NumericInput>();

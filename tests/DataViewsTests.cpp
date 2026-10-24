@@ -197,6 +197,15 @@ void Editors()
     tree.CommitEdit();
     Check(std::get<double>(f.m_Model->GetSnapshot().GetValue(item, 2)) == 9.125,
           "Typed numeric values reach canonical data");
+    const auto extreme = std::numeric_limits<double>::max();
+    f.m_Model->SetValue(item, 2, extreme);
+    tree.BeginEdit(0, 2);
+    Check(tree.GetCellEditor() && !Find<NumericInput>(*tree.GetCellEditor()) &&
+              Find<TextBox>(*tree.GetCellEditor())->GetText() == FormatModelValue(extreme),
+          "Extreme finite reals use exact scientific text instead of a clamping spin control");
+    tree.CommitEdit();
+    Check(std::get<double>(f.m_Model->GetSnapshot().GetValue(item, 2)) == extreme,
+          "Accepting an unchanged extreme real cannot silently change the canonical value");
     tree.BeginEdit(0, 3);
     auto* boolean = Find<CheckBox>(*tree.GetCellEditor());
     boolean->Trigger();
