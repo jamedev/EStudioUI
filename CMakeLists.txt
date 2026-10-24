@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.24)
-project(EStudioUI VERSION 0.26.0 LANGUAGES C CXX)
+project(EStudioUI VERSION 0.26.1 LANGUAGES C CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -88,7 +88,7 @@ add_library(EStudioUIGl STATIC third_party/glad/src/gl.c)
 target_include_directories(EStudioUIGl PUBLIC third_party/glad/include)
 
 add_library(EStudioUI STATIC
-    src/CommonControlBindings.cpp src/UiTimer.cpp src/CompletionPopup.cpp src/SearchBox.cpp src/CommandPalette.cpp
+    src/FontCacheCapacityError.cpp src/FontSelection.cpp src/CommonControlBindings.cpp src/UiTimer.cpp src/CompletionPopup.cpp src/SearchBox.cpp src/CommandPalette.cpp
     src/ValidationMessage.cpp src/NotificationCenter.cpp src/LogSink.cpp src/LogView.cpp
     src/SegmentedControl.cpp src/MultiSelectComboBox.cpp src/TagEditor.cpp src/RangeSlider.cpp
     src/SelectableLabel.cpp src/LinkLabel.cpp src/FontEditor.cpp src/FontPicker.cpp
@@ -253,7 +253,7 @@ if(ESTUDIOUI_BUILD_DEMO)
         demo/CustomWidgetGallery.cpp demo/PainterProbe.cpp demo/InputControlsProbe.cpp
         demo/WidgetStylesGallery.cpp demo/WidgetStylesProbe.cpp demo/ApplicationProbe.cpp demo/FoundationGallery.cpp
         demo/StateGallery.cpp demo/ModelGallery.cpp demo/LayoutGallery.cpp demo/ConstraintGallery.cpp demo/InputGallery.cpp demo/PlatformGallery.cpp
-        demo/PlatformSemanticProbe.cpp demo/TextGallery.cpp demo/EssentialGallery.cpp demo/CommandGallery.cpp
+        demo/PlatformSemanticProbe.cpp demo/TextGallery.cpp demo/TextReadiness.cpp benchmarks/TextCorpus.cpp demo/EssentialGallery.cpp demo/CommandGallery.cpp
         demo/GpuProbeWindow.cpp demo/RenderingProfile.cpp demo/ImageGallery.cpp demo/ScrollStackGallery.cpp demo/WorkspaceGallery.cpp demo/DocumentGallery.cpp demo/ProductivityGallery.cpp)
     target_link_libraries(EStudioUIDemo PRIVATE EStudioUI::EStudioUI EStudioUIGl glfw)
     target_compile_definitions(EStudioUIDemo PRIVATE ESTUDIOUI_DEMO_BUILD_CONFIGURATION="$<CONFIG>")
@@ -314,7 +314,7 @@ endif()
 
 if(ESTUDIOUI_BUILD_TESTS)
     enable_testing()
-    foreach(suite SearchFeedback CommonControls PropertyEditing UiDocument Theme UndoHistory DocumentWorkspace AdapterModel DataViews)
+    foreach(suite TextReadiness SearchFeedback CommonControls PropertyEditing UiDocument Theme UndoHistory DocumentWorkspace AdapterModel DataViews)
         add_executable(EStudioUI${suite}Tests tests/${suite}Tests.cpp)
         target_link_libraries(EStudioUI${suite}Tests PRIVATE EStudioUI::EStudioUI)
         target_compile_definitions(EStudioUI${suite}Tests PRIVATE ESTUDIOUI_FONT_PATH="${CMAKE_CURRENT_SOURCE_DIR}/third_party/fonts/NotoSans.ttf")
@@ -323,6 +323,7 @@ if(ESTUDIOUI_BUILD_TESTS)
         endif()
         add_test(NAME ${suite} COMMAND EStudioUI${suite}Tests)
     endforeach()
+    target_sources(EStudioUITextReadinessTests PRIVATE benchmarks/TextCorpus.cpp)
     if(TARGET EStudioUISqlite)
         add_executable(EStudioUISqliteAdapterTests tests/SqliteAdapterTests.cpp)
         target_link_libraries(EStudioUISqliteAdapterTests PRIVATE EStudioUI::Sqlite unofficial::sqlite3::sqlite3)

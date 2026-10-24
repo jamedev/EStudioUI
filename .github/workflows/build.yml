@@ -57,7 +57,7 @@ jobs:
       - name: Parse build scripts with PowerShell 7
         shell: pwsh
         run: |
-          foreach ($path in @('Build.ps1', 'scripts/Profile-Rendering.ps1')) {
+          foreach ($path in @('Build.ps1', 'scripts/Profile-Rendering.ps1', 'scripts/Test-TextReadiness.ps1')) {
             $tokens = $null
             $errors = $null
             [System.Management.Automation.Language.Parser]::ParseFile((Join-Path $pwd $path), [ref]$tokens, [ref]$errors) | Out-Null
@@ -66,9 +66,14 @@ jobs:
       - name: Install, build, and test Release
         shell: powershell
         run: |
+          $tokens = $null
+          $errors = $null
+          [System.Management.Automation.Language.Parser]::ParseFile((Join-Path $pwd 'scripts/Test-TextReadiness.ps1'), [ref]$tokens, [ref]$errors) | Out-Null
+          if ($errors.Count) { throw ($errors | Out-String) }
           New-Item -ItemType Directory -Path $env:VCPKG_DEFAULT_BINARY_CACHE -Force | Out-Null
           $checkout = Join-Path $env:RUNNER_TEMP 'estudioui-vcpkg'
           ./Build.ps1 -VcpkgRoot $checkout -Configuration Release -SkipGpuTest
+          ./scripts/Test-TextReadiness.ps1 -SkipBuild -PrepareOnly -OutputDirectory 'build/windows-vcpkg/verification/text-acceptance-scaffold'
       - name: Run native Windows framebuffer integration with software OpenGL
         shell: powershell
         timeout-minutes: 5
@@ -97,6 +102,8 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw "Native database browser framebuffer self-test failed with exit code $LASTEXITCODE." }
           ./scripts/Profile-Rendering.ps1 -SkipBuild -ExecutablePath (Join-Path $stage 'EStudioUIDemo.exe') -Frames 12 -Warmup 4 -Rate 0 -OutputDirectory 'build/windows-vcpkg/verification/native-profile-smoke'
           if ($LASTEXITCODE -ne 0) { throw "Native rendering profile smoke failed with exit code $LASTEXITCODE." }
+          & (Join-Path $stage 'EStudioUIDemo.exe') --text-profile --output 'build/windows-vcpkg/verification/native-text-profile'
+          if ($LASTEXITCODE -ne 0) { throw "Native text profile failed with exit code $LASTEXITCODE." }
       - name: Build and test Debug
         shell: powershell
         run: |

@@ -35,6 +35,24 @@ command history, geometry, and persistence; these are not promised modules or
 current standalone SDKs. Public API usability and supported extension points
 remain acceptance criteria throughout.
 
+## Implementation status: 0.26.1, text readiness before documents
+
+The focused pre-F10b milestone shares typography validation across CSS, shaping
+and font controls, completes preview direction/language, and adds bounded visible
+GPU glyph admission with automatic safe compaction. Typed capacity errors and
+pre-submission abort preserve the last completed target. A deterministic text
+corpus, readback-free profile and real retained/full framebuffer churn checks
+exercise these contracts. The native acceptance runner creates explicit
+NotTested human records; it does not infer IME, Narrator, mixed-DPI or hardware
+performance results. See [TEXT_READINESS.md](TEXT_READINESS.md).
+
+F10b starts with separate document storage/edit commands and incremental
+paragraph layout, then a multiline editor. Oversized control paragraphs still
+reshape rather than entering the short-run LRU, and Wrap computes the requested
+paragraph; the new measurements make those document-layer requirements explicit.
+Rich text, embedded content and multiline accessibility follow that foundation.
+F14 remains deferred.
+
 ## Implementation status: 0.26, search/feedback and common controls
 
 The next two catalog priorities are implemented using the delivered foundations.
@@ -488,9 +506,10 @@ Add a render thread only if measured workloads justify the synchronization cost.
 
 Introduce explicit CPU/GPU font/image/cache budgets, live-use accounting,
 eviction/rebuild policy, safe resource retirement, and diagnostics. Existing
-collection and canvas caches are bounded, while GPU glyph data accumulates until
-the texture-buffer limit. Multi-font and long-running applications need a policy
-before resource demand expands.
+collection and canvas caches are bounded. The 0.26.1 text-readiness increment adds
+bounded visible GPU glyph admission and safe automatic retirement/compaction;
+oversized visible sets remain diagnosed instead of silently growing storage.
+Broader streaming/suballocation and resource recovery remain feature-driven work.
 
 Zero submitted GPU instances does not mean zero CPU work: PaintTree still records
 visible widgets and the renderer compares paint records. Measure recording,

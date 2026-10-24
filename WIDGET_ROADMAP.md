@@ -38,6 +38,12 @@ detach tabs, unsaved indicators and asynchronous Save/Discard/Cancel workflows.
 Reusable bounded `UndoHistory` now serves the gallery and Creator. F16 versioned
 application-session restore and F10b document editing remain separate work.
 
+The 0.26.1 [text-readiness milestone](TEXT_READINESS.md) hardens shared font
+validation and bounded GPU glyph churn, adds deterministic text profiles and a
+focused Windows acceptance runner. F10b begins with separate multiline document
+storage and incremental paragraph layout before rich editor widgets; physical
+IME/AT/DPI acceptance remains explicitly recorded human work.
+
 ## Current coverage
 
 The library already includes `Widget`, `Label`, `Button`, `ToolButton`,

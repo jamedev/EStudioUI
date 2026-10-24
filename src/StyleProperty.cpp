@@ -1,3 +1,4 @@
+#include <EStudioUI/FontSelection.h>
 #include <EStudioUI/StyleProperty.h>
 
 #include <array>
@@ -80,27 +81,6 @@ const PropertyInfo& Info(StyleProperty property)
     return s_Properties[index];
 }
 
-bool ValidFamilies(std::string_view value)
-{
-    if (value.empty() || value.size() > 1024 || value.find_first_of("\r\n\0", 0, 3) != std::string_view::npos)
-        return false;
-    char quote = 0;
-    std::size_t first = 0, count = 0;
-    for (std::size_t i = 0; i <= value.size(); ++i)
-    {
-        const char c = i == value.size() ? ',' : value[i];
-        if ((c == '\'' || c == '"') && (!quote || quote == c))
-            quote = quote ? 0 : c;
-        else if (c == ',' && !quote)
-        {
-            const auto family = value.substr(first, i - first);
-            if (family.find_first_not_of(" \t\"'") == std::string_view::npos || ++count > 16)
-                return false;
-            first = i + 1;
-        }
-    }
-    return !quote && count > 0;
-}
 
 float Finite(float value, float minimum = 0, float maximum = 1000000)
 {
@@ -260,19 +240,12 @@ void SetStyleValue(Style& style, StyleProperty property, const StyleValue& value
             else if constexpr (std::is_same_v<Value, std::string>)
             {
                 const bool valid =
-                    property == StyleProperty::FontFamily ? ValidFamilies(*typed)
+                    property == StyleProperty::FontFamily ? FontSelection::IsValidFamilyList(*typed)
                     : property == StyleProperty::FontStyle
                         ? (*typed == "normal" || *typed == "italic" || *typed == "oblique")
                     : property == StyleProperty::TextDirection
                         ? (*typed == "auto" || *typed == "ltr" || *typed == "rtl")
-                    : property == StyleProperty::Language
-                        ? (!typed->empty() && typed->size() <= 63 &&
-                           std::all_of(typed->begin(), typed->end(),
-                                       [](unsigned char c)
-                                       {
-                                           return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') ||
-                                                  (c >= '0' && c <= '9') || c == '-';
-                                       }))
+                    : property == StyleProperty::Language ? FontSelection::IsValidLanguage(*typed)
                     : property == StyleProperty::ObjectFit
                         ? (*typed == "contain" || *typed == "cover" || *typed == "fill" || *typed == "none" ||
                            *typed == "scale-down")

@@ -22,6 +22,8 @@ class FontEditor : public Widget
     void SetPreviewText(std::string text);
     //! Returns the family chooser for advanced completion configuration.
     ComboBox& GetFamilyEditor() const;
+    //! Returns the ordinary preview label with the complete requested typography.
+    Label& GetPreview() const;
     //! Reports complete requested font selections.
     Signal<FontSelection>& FontChanged();
     //! Validates bounds and supported CSS font values without changing UI.

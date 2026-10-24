@@ -11,6 +11,7 @@
 #include "ApplicationProbe.h"
 #include "GpuProbeWindow.h"
 #include "RenderingProfile.h"
+#include "TextReadiness.h"
 
 #include <EStudioUI/Button.h>
 #include <EStudioUI/TextBox.h>
@@ -588,6 +589,8 @@ int main(int argc, char** argv)
         bool profile = false;
         bool profileCanvas = false;
         bool profileRendering = false;
+        bool textReadiness = false;
+        bool textProfile = false;
         bool renderingOptionsProvided = false;
         RenderingProfileOptions renderingOptions;
         for (int i = 1; i < argc; ++i)
@@ -617,6 +620,14 @@ int main(int argc, char** argv)
                 profileCanvas = true;
             else if (argument == "--profile-rendering")
                 profileRendering = true;
+            else if (argument == "--text-readiness")
+            {
+                textReadiness = true;
+            }
+            else if (argument == "--text-profile")
+            {
+                textProfile = true;
+            }
             else if (argument == "--profile-frames")
                 numericValue(renderingOptions.m_Frames);
             else if (argument == "--profile-warmup")
@@ -642,7 +653,7 @@ int main(int argc, char** argv)
                              "[--profile-canvas] "
                              "[--profile-rendering] [--profile-case CASE] [--profile-frames N] "
                              "[--profile-warmup N] [--profile-rate HZ] "
-                             "[--headless] "
+                             "[--text-readiness] [--text-profile] [--headless] "
                              "[--output DIR]\n"
                           << "Rendering cases: all, rich-css, widget-styles, isolated-slider, text, baseline.\n"
                           << "Rendering defaults: 180 measured / 30 warmup / 60 Hz; rate 0 selects unpaced mode.\n"
@@ -654,6 +665,15 @@ int main(int argc, char** argv)
         }
         if (renderingOptionsProvided && !profileRendering)
             throw std::runtime_error("Rendering profile options require --profile-rendering.");
+        if ((textReadiness || textProfile) &&
+            (selfTest || benchmark || profile || profileCanvas || profileRendering || (textReadiness && textProfile)))
+        {
+            throw std::runtime_error("Choose one text acceptance, text profile, or gallery mode per invocation.");
+        }
+        if (textReadiness && options.m_Headless)
+        {
+            throw std::runtime_error("Text acceptance requires a visible native window.");
+        }
         if (profileRendering && (profile || profileCanvas || benchmark))
             throw std::runtime_error("Choose one profiling or benchmark mode per invocation.");
         if (profileCanvas)
@@ -665,6 +685,16 @@ int main(int argc, char** argv)
             VerifyApplication(assets, output, options.m_Headless);
         TextGallery::AddFonts(options, assets, font);
         Window window(options, font);
+        if (textProfile)
+        {
+            ProfileTextReadiness(window, output);
+            return 0;
+        }
+        if (textReadiness)
+        {
+            BuildTextReadiness(window);
+            return window.Run();
+        }
         Demo demo(window, assets, css);
         if (selfTest)
         {

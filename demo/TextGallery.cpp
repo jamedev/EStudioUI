@@ -1,4 +1,5 @@
 #include "TextGallery.h"
+#include "TextReadiness.h"
 
 #include <EStudioUI/Button.h>
 #include <EStudioUI/TextBox.h>
@@ -210,13 +211,14 @@ void TextGallery::Verify(const std::filesystem::path& assets, const std::filesys
     {
         rejected = true;
     }
-    gpu.EndFrame();
-    Check(rejected && gpu.GetStats().m_FontBytes <= 1024, "GPU cache admission enforces its configured byte budget");
+    gpu.AbortFrame();
+    Check(rejected && gpu.GetFontCacheLimit() == 1024, "GPU cache admission enforces its configured byte budget");
     gpu.SetFontCacheLimit(32 * 1024 * 1024);
     std::ofstream report(output / "text-foundation-0-17.txt");
     report << "F10a actual GPU text checks: PASS\n"
            << "Mixed scripts and fallback; disjoint bidi selection pixels; retained/full redraw equality;\n"
            << "preedit/cancel equality; actual font/glyph cache identities; budget admission and cache retirement.\n"
            << "Driver: " << gpu.GetDriverDescription() << '\n';
+    VerifyTextReadiness(m_Window, assets, output);
 }
 } // namespace EStudioUI

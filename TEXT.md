@@ -75,8 +75,13 @@ Wrapping can reshape candidate lines and is bounded rather than constant-time.
 Renderer font buffers default to 32 MiB and 65,536 admitted font/glyph pairs.
 `SetFontCacheLimit` and `ClearFontCache` are between-frame operations. Registry
 changes retire GPU font storage at the next BeginFrame; the retained paint history
-is invalidated. Overflow is diagnosed before submission rather than growing an
-unbounded atlas. Other renderer/resource budgets remain feature-driven F12 work.
+is invalidated. In 0.26.1, only visible glyphs are admitted; unused residency is
+automatically compacted under pressure, preserving and relocating current-frame
+pins. An oversized visible working set returns `FontCacheCapacityError` before
+submission; `AbortFrame` permits explicit recovery while preserving the last
+completed target. See [text readiness](TEXT_READINESS.md) for shared typography
+validation, counters, stress profiles and the focused Windows acceptance script.
+Other renderer/resource budgets remain feature-driven F12 work.
 
 Native installed-language IME, assistive technology, mixed-monitor DPI and hardware
 performance require the separate [acceptance checklist](verification/PLATFORM_ACCEPTANCE.md).

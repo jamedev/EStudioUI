@@ -34,7 +34,8 @@ Declarations sort by `!important`, then ID/class/type specificity, then source
 order. Specificity is encoded as ID=10000, class/pseudo-class=100, type=1, with a
 32-part selector limit. It is suitable for this subset rather than an unbounded
 browser implementation. Longhands and shorthands follow declaration order after
-the cascade. Only `color`, `font-size`, and `text-align` inherit.
+the cascade. Color, text alignment and typography (family, size, weight, style,
+direction and language) inherit.
 
 ## Properties
 
@@ -55,8 +56,8 @@ sizes include padding and borders: the model is **border-box**.
 | `inset`, `top/right/bottom/left` | Decorative offsets: signed pixels, percentages, or `auto` |
 | `border` | `2px solid #abcdef`, `none`, or `0` |
 | `border-color`, `border-width`, `border-radius` | A color or nonnegative pixel length |
-| `font-family`, `font-weight`, `font-style` | Ordered registered family names; normal/bold or numeric 1..1000; normal/italic |
-| `direction`, `language` | auto/ltr/rtl; shaping language tag; inherited with typography |
+| `font-family`, `font-weight`, `font-style` | 1–16 nonempty UTF-8 family names, at most 1,024 bytes; normal/bold or numeric 1..1000; normal/italic/oblique |
+| `direction`, `language` | auto/ltr/rtl; 1–63 ASCII letters/digits/hyphens for the shaping language hint; inherited with typography |
 | `font-size` | Pixel size clamped to 0..512; zero hides text |
 | `text-align` | `left`, `center`, `right` |
 | `object-fit` | ImageView scaling: `contain`, `cover`, `fill`, `none`, `scale-down` |

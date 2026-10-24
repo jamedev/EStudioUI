@@ -103,8 +103,7 @@ struct FontFace::Impl
 
     TextLayout Shape(std::string_view text, const FontSelection& selection, bool editable) const
     {
-        if (!std::isfinite(selection.m_Size) || !std::isfinite(selection.m_Weight))
-            throw std::invalid_argument("Font size and weight must be finite.");
+        selection.Validate();
         const ShapeLookup lookup{text, selection, editable};
         if (auto entry = m_Cache.find(lookup); entry != m_Cache.end())
         {
@@ -182,6 +181,7 @@ std::vector<TextLayout> FontFace::Wrap(std::string_view text, const Style& style
 {
     VerifyAccess();
     const auto selection = Detail::SelectFont(style, style.m_FontSize);
+    selection.Validate();
     auto lines =
         Detail::ShapeControlText(text, selection, false, Detail::ResolveFonts(m_Impl->m_Faces, selection), width);
     for (auto& line : lines)

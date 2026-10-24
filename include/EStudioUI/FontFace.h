@@ -1,6 +1,7 @@
 #pragma once
 
 #include "Types.h"
+#include "FontSelection.h"
 #include "ThreadAffinity.h"
 
 #include <filesystem>
@@ -32,25 +33,6 @@ struct FontSource
     bool m_Italic = false;
     //! Face index within a font collection.
     int m_FaceIndex = 0;
-};
-
-//! Exact requested typography, retained with a shaped result for cache validation.
-struct FontSelection
-{
-    //! Ordered CSS family list.
-    std::string m_Family = "sans-serif";
-    //! Logical pixel size, independent of framebuffer scaling.
-    float m_Size = 16;
-    //! Requested CSS weight.
-    float m_Weight = 400;
-    //! Normal, italic or oblique presentation.
-    std::string m_Style = "normal";
-    //! Auto, ltr or rtl paragraph direction.
-    std::string m_Direction = "auto";
-    //! BCP-47 language hint passed to shaping and line breaking.
-    std::string m_Language = "und";
-    //! Compares all shaping inputs without relying on hash equality.
-    bool operator==(const FontSelection&) const = default;
 };
 
 //! Font and text resource admission limits, including resources retained by old layouts.

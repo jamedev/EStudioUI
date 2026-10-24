@@ -391,6 +391,8 @@ struct Renderer::Impl
         int m_Start = 0;
         int m_Count = 1;
         Float4 m_Transform{};
+        std::size_t m_CurveFirst = 0, m_CurveSize = 0, m_BandFirst = 0, m_BandSize = 0;
+        std::uint64_t m_LastRecording = 0;
     };
 
     struct State
@@ -455,6 +457,10 @@ struct Renderer::Impl
 
     void Record(Instance instance)
     {
+        if (m_AdmissionError)
+        {
+            std::rethrow_exception(m_AdmissionError);
+        }
         m_PaintKeys.push_back(NextPaintKey(static_cast<std::size_t>(instance.m_Data[3])));
         m_Instances.push_back(instance);
     }
@@ -1145,6 +1151,11 @@ struct Renderer::Impl
     std::size_t m_FontCacheLimit = 32 * 1024 * 1024;
     std::uint64_t m_FontRevision = 0;
     bool m_Recording = false;
+    bool m_HasCompletedTarget = false;
+    std::exception_ptr m_AdmissionError;
+    std::uint64_t m_RecordingSerial = 0;
+    std::size_t m_PinnedCurves = 0, m_PinnedBands = 0, m_PinnedGlyphs = 0;
+    std::size_t m_FontEvictions = 0, m_FontCompactions = 0;
     RenderStats m_Stats;
 
     explicit Impl(FontFace& font) : m_Font(font)
@@ -1192,48 +1203,45 @@ struct Renderer::Impl
         Record({Values(bounds), params, color, border, Values(scissor), {}, {0, 0, 0, kind}, effects});
     }
 
-    const GpuGlyph& Glyph(const TextLayout& layout, const PositionedGlyph& positioned)
+    struct PackedGlyph
     {
-        const GlyphKey id{layout.m_Fonts.empty() ? m_Font.GetIdentity() : layout.GetFontIdentity(positioned.m_FontSlot),
-                          positioned.m_Id};
-        if (const auto found = m_GlyphCache.find(id); found != m_GlyphCache.end())
-            return found->second;
-        if (m_GlyphCache.size() >= 65536)
-            throw std::length_error("GPU glyph cache is limited to 65,536 actual font/glyph pairs.");
-        const auto& geometry = layout.m_Fonts.empty() ? m_Font.GetGlyph(positioned.m_Id) : layout.GetGlyph(positioned);
-        const auto oldCurves = m_Curves.size(), oldBands = m_Bands.size();
-        GpuGlyph glyph;
+        GpuGlyph m_Glyph;
+        std::vector<Float4> m_Curves;
+        std::vector<UInt2> m_Bands;
+    };
+
+    static PackedGlyph PackGlyph(const GlyphGeometry& geometry)
+    {
+        PackedGlyph packed;
+        auto& glyph = packed.m_Glyph;
         glyph.m_Bounds.m_MinX = geometry.m_MinX;
         glyph.m_Bounds.m_MinY = geometry.m_MinY;
         glyph.m_Bounds.m_MaxX = geometry.m_MaxX;
         glyph.m_Bounds.m_MaxY = geometry.m_MaxY;
         if (geometry.m_Curves.empty())
-            return m_GlyphCache.emplace(id, std::move(glyph)).first->second;
-
-        std::vector<std::uint32_t> locations;
+        {
+            return packed;
+        }
         for (const auto& curve : geometry.m_Curves)
         {
-            locations.push_back(static_cast<std::uint32_t>(m_Curves.size()));
-            m_Curves.push_back({curve.m_P0.m_X, curve.m_P0.m_Y, curve.m_P1.m_X, curve.m_P1.m_Y});
-            m_Curves.push_back({curve.m_P2.m_X, curve.m_P2.m_Y, 0, 0});
+            packed.m_Curves.push_back({curve.m_P0.m_X, curve.m_P0.m_Y, curve.m_P1.m_X, curve.m_P1.m_Y});
+            packed.m_Curves.push_back({curve.m_P2.m_X, curve.m_P2.m_Y, 0, 0});
         }
         const int count = std::clamp(static_cast<int>(std::sqrt(geometry.m_Curves.size())), 1, 16);
-        glyph.m_Start = static_cast<int>(m_Bands.size());
         glyph.m_Count = count;
         const float width = std::max(0.000001f, geometry.m_MaxX - geometry.m_MinX);
         const float height = std::max(0.000001f, geometry.m_MaxY - geometry.m_MinY);
-        const float bandCount = static_cast<float>(count);
+        const auto bandCount = static_cast<float>(count);
         glyph.m_Transform = {bandCount / width, bandCount / height, -geometry.m_MinX * bandCount / width,
                              -geometry.m_MinY * bandCount / height};
-        m_Bands.resize(m_Bands.size() + static_cast<std::size_t>(2 * count));
+        packed.m_Bands.resize(static_cast<std::size_t>(2 * count));
         for (int direction = 0; direction < 2; ++direction)
-        {
             for (int band = 0; band < count; ++band)
             {
                 const float minimum = direction == 0 ? geometry.m_MinY : geometry.m_MinX;
                 const float extent = direction == 0 ? height : width;
-                const float lower = minimum + extent * static_cast<float>(band) / bandCount - 1.0f / 1024.0f;
-                const float upper = minimum + extent * static_cast<float>(band + 1) / bandCount + 1.0f / 1024.0f;
+                const float lower = minimum + extent * static_cast<float>(band) / bandCount - 1.0f / 1024;
+                const float upper = minimum + extent * static_cast<float>(band + 1) / bandCount + 1.0f / 1024;
                 std::vector<std::size_t> candidates;
                 const auto maxParallel = [&](std::size_t index)
                 {
@@ -1249,26 +1257,195 @@ struct Renderer::Impl
                     const float d = direction == 0 ? c.m_P2.m_Y : c.m_P2.m_X;
                     if (std::max({a, b, d}) >= lower && std::min({a, b, d}) <= upper &&
                         std::max({a, b, d}) - std::min({a, b, d}) > 0.00000001f)
+                    {
                         candidates.push_back(i);
+                    }
                 }
                 std::sort(candidates.begin(), candidates.end(),
                           [&](auto a, auto b) { return maxParallel(a) > maxParallel(b); });
-                m_Bands[static_cast<std::size_t>(glyph.m_Start + direction * count + band)] = {
-                    static_cast<std::uint32_t>(candidates.size()), static_cast<std::uint32_t>(m_Bands.size())};
-                for (auto index : candidates)
-                    m_Bands.push_back({locations[index], 0});
+                packed.m_Bands[static_cast<std::size_t>(direction * count + band)] = {
+                    static_cast<std::uint32_t>(candidates.size()), static_cast<std::uint32_t>(packed.m_Bands.size())};
+                for (const auto index : candidates)
+                {
+                    packed.m_Bands.push_back({static_cast<std::uint32_t>(index * 2), 0});
+                }
+            }
+        glyph.m_CurveSize = packed.m_Curves.size();
+        glyph.m_BandSize = packed.m_Bands.size();
+        return packed;
+    }
+
+    void PinGlyph(GpuGlyph& glyph)
+    {
+        if (glyph.m_LastRecording == m_RecordingSerial)
+        {
+            return;
+        }
+        glyph.m_LastRecording = m_RecordingSerial;
+        m_PinnedCurves += glyph.m_CurveSize;
+        m_PinnedBands += glyph.m_BandSize;
+        ++m_PinnedGlyphs;
+    }
+
+    [[noreturn]] void RejectGlyph(FontCacheCapacityReason reason, std::size_t required, std::size_t glyphs)
+    {
+        m_AdmissionError = std::make_exception_ptr(FontCacheCapacityError(reason, required, m_FontCacheLimit, glyphs));
+        std::rethrow_exception(m_AdmissionError);
+    }
+
+    void CompactGlyphs()
+    {
+        // Existing frame instances contain atlas addresses. Keep every referenced
+        // glyph, relocate its self-contained band/curve ranges, then patch those
+        // instances atomically before any GL submission. Old framebuffer pixels
+        // are retained physically, while damage history is invalidated once.
+        std::vector<std::pair<GlyphKey, const GpuGlyph*>> live;
+        for (const auto& [key, glyph] : m_GlyphCache)
+        {
+            if (glyph.m_LastRecording == m_RecordingSerial)
+            {
+                live.emplace_back(key, &glyph);
             }
         }
-        if (m_Curves.size() * sizeof(Float4) + m_Bands.size() * sizeof(UInt2) > m_FontCacheLimit ||
-            m_GlyphCache.size() >= 65536)
+        std::sort(live.begin(), live.end(),
+                  [](const auto& a, const auto& b) { return a.second->m_Start < b.second->m_Start; });
+        std::vector<Float4> curves{{0, 0, 0, 0}};
+        std::vector<UInt2> bands{{0, 0}};
+        curves.reserve(m_PinnedCurves + 1);
+        bands.reserve(m_PinnedBands + 1);
+        std::unordered_map<GlyphKey, GpuGlyph, GlyphHash> cache;
+        std::unordered_map<int, int> addresses;
+        cache.reserve(live.size());
+        addresses.reserve(live.size());
+        for (const auto& [key, source] : live)
         {
-            m_Curves.resize(oldCurves);
-            m_Bands.resize(oldBands);
-            throw std::length_error(
-                "GPU glyph cache budget reached; retire unused text layouts and clear the font cache between frames.");
+            auto glyph = *source;
+            const auto curveFirst = curves.size(), bandFirst = bands.size();
+            curves.insert(curves.end(), m_Curves.begin() + static_cast<std::ptrdiff_t>(source->m_CurveFirst),
+                          m_Curves.begin() + static_cast<std::ptrdiff_t>(source->m_CurveFirst + source->m_CurveSize));
+            for (std::size_t i = 0; i < source->m_BandSize; ++i)
+            {
+                auto band = m_Bands[source->m_BandFirst + i];
+                if (i < static_cast<std::size_t>(2 * source->m_Count))
+                {
+                    band[1] = static_cast<std::uint32_t>(band[1] - source->m_BandFirst + bandFirst);
+                }
+                else
+                {
+                    band[0] = static_cast<std::uint32_t>(band[0] - source->m_CurveFirst + curveFirst);
+                }
+                bands.push_back(band);
+            }
+            glyph.m_CurveFirst = curveFirst;
+            glyph.m_BandFirst = bandFirst;
+            glyph.m_Start = static_cast<int>(bandFirst);
+            addresses.emplace(source->m_Start, glyph.m_Start);
+            cache.emplace(key, std::move(glyph));
+        }
+        for (const auto& instance : m_Instances)
+        {
+            if (instance.m_Data[3] == 1 && !addresses.contains(instance.m_Data[0]))
+            {
+                throw std::logic_error("A recorded glyph lost its pinned atlas range.");
+            }
+        }
+        for (auto& instance : m_Instances)
+        {
+            if (instance.m_Data[3] == 1)
+            {
+                instance.m_Data[0] = addresses.at(instance.m_Data[0]);
+            }
+        }
+        m_FontEvictions += m_GlyphCache.size() - cache.size();
+        ++m_FontCompactions;
+        m_Curves.swap(curves);
+        m_Bands.swap(bands);
+        m_GlyphCache.swap(cache);
+        m_FontDirty = true;
+        m_HistoryValid = false;
+    }
+
+    const GpuGlyph& Glyph(const TextLayout& layout, const PositionedGlyph& positioned)
+    {
+        if (m_AdmissionError)
+        {
+            std::rethrow_exception(m_AdmissionError);
+        }
+        const GlyphKey key{layout.m_Fonts.empty() ? m_Font.GetIdentity()
+                                                  : layout.GetFontIdentity(positioned.m_FontSlot),
+                           positioned.m_Id};
+        if (const auto found = m_GlyphCache.find(key); found != m_GlyphCache.end())
+        {
+            PinGlyph(found->second);
+            return found->second;
+        }
+        const auto& geometry = layout.m_Fonts.empty() ? m_Font.GetGlyph(positioned.m_Id) : layout.GetGlyph(positioned);
+        auto packed = PackGlyph(geometry);
+        const auto bytes = packed.m_Curves.size() * sizeof(Float4) + packed.m_Bands.size() * sizeof(UInt2);
+        constexpr auto baseBytes = sizeof(Float4) + sizeof(UInt2);
+        const auto required = baseBytes + (m_PinnedCurves + packed.m_Curves.size()) * sizeof(Float4) +
+                              (m_PinnedBands + packed.m_Bands.size()) * sizeof(UInt2);
+        if (bytes + baseBytes > m_FontCacheLimit)
+        {
+            RejectGlyph(FontCacheCapacityReason::SingleGlyph, bytes + baseBytes, 1);
+        }
+        if (required > m_FontCacheLimit)
+        {
+            RejectGlyph(FontCacheCapacityReason::VisibleWorkingSet, required, m_PinnedGlyphs + 1);
+        }
+        if (m_PinnedGlyphs >= 65536)
+        {
+            RejectGlyph(FontCacheCapacityReason::GlyphCount, required, m_PinnedGlyphs + 1);
+        }
+        const auto hardware = static_cast<std::size_t>(std::max(0, m_MaxBufferSize));
+        if (m_PinnedCurves + packed.m_Curves.size() + 1 > hardware ||
+            m_PinnedBands + packed.m_Bands.size() + 1 > hardware)
+        {
+            RejectGlyph(FontCacheCapacityReason::Hardware, required, m_PinnedGlyphs + 1);
+        }
+        if ((m_Curves.size() * sizeof(Float4) + m_Bands.size() * sizeof(UInt2)) + bytes > m_FontCacheLimit ||
+            m_GlyphCache.size() >= 65536 || m_Curves.size() + packed.m_Curves.size() > hardware ||
+            m_Bands.size() + packed.m_Bands.size() > hardware)
+        {
+            CompactGlyphs();
+        }
+        const auto curveFirst = m_Curves.size(), bandFirst = m_Bands.size();
+        // Amortize admission without allowing staging capacities to grow unbounded.
+        // Reserving exactly one new outline on every miss would copy the entire
+        // arena repeatedly while scrolling through a previously unseen alphabet.
+        const auto reserve = [](auto& storage, std::size_t requiredSize, std::size_t maximum)
+        {
+            if (requiredSize > storage.capacity())
+            {
+                storage.reserve(
+                    std::max(requiredSize, std::min(maximum, std::max<std::size_t>(64, storage.capacity() * 2))));
+            }
+        };
+        reserve(m_Curves, curveFirst + packed.m_Curves.size(), std::min(hardware, m_FontCacheLimit / sizeof(Float4)));
+        reserve(m_Bands, bandFirst + packed.m_Bands.size(), std::min(hardware, m_FontCacheLimit / sizeof(UInt2)));
+        auto glyph = packed.m_Glyph;
+        glyph.m_CurveFirst = curveFirst;
+        glyph.m_BandFirst = bandFirst;
+        glyph.m_Start = static_cast<int>(bandFirst);
+        auto [entry, inserted] = m_GlyphCache.emplace(key, std::move(glyph));
+        (void)inserted;
+        m_Curves.insert(m_Curves.end(), packed.m_Curves.begin(), packed.m_Curves.end());
+        for (std::size_t i = 0; i < packed.m_Bands.size(); ++i)
+        {
+            auto band = packed.m_Bands[i];
+            if (i < static_cast<std::size_t>(2 * entry->second.m_Count))
+            {
+                band[1] += static_cast<std::uint32_t>(bandFirst);
+            }
+            else
+            {
+                band[0] += static_cast<std::uint32_t>(curveFirst);
+            }
+            m_Bands.push_back(band);
         }
         m_FontDirty = true;
-        return m_GlyphCache.emplace(id, std::move(glyph)).first->second;
+        PinGlyph(entry->second);
+        return entry->second;
     }
 
     static void FloatAttribute(unsigned location, GLsizei stride, std::size_t offset)
@@ -1332,6 +1509,12 @@ void Renderer::ClearFontCache()
     glBufferData(GL_TEXTURE_BUFFER, static_cast<GLsizeiptr>(sizeof(UInt2)), self.m_Bands.data(), GL_DYNAMIC_DRAW);
 }
 
+std::size_t Renderer::GetFontCacheLimit() const
+{
+    m_Affinity.VerifyAccess("Renderer::GetFontCacheLimit");
+    return m_Impl->m_FontCacheLimit;
+}
+
 void Renderer::SetFontCacheLimit(std::size_t bytes)
 {
     m_Affinity.VerifyAccess("Renderer::SetFontCacheLimit");
@@ -1373,6 +1556,11 @@ void Renderer::BeginFrame(float width, float height, int framebufferWidth, int f
         self.m_FontRevision = self.m_Font.GetRevision();
     }
     self.m_Recording = true;
+    self.m_AdmissionError = {};
+    self.m_FrameReady = false;
+    ++self.m_RecordingSerial;
+    self.m_PinnedCurves = self.m_PinnedBands = self.m_PinnedGlyphs = 0;
+    self.m_FontEvictions = self.m_FontCompactions = 0;
     self.m_Clear = clear;
     self.m_Width = std::max(1.0f, width);
     self.m_Height = std::max(1.0f, height);
@@ -1398,6 +1586,30 @@ void Renderer::BeginFrame(float width, float height, int framebufferWidth, int f
     glDisable(GL_SCISSOR_TEST);
     glEnable(GL_BLEND);
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+}
+
+void Renderer::AbortFrame()
+{
+    m_Affinity.VerifyAccess("Renderer::AbortFrame");
+    auto& self = *m_Impl;
+    self.m_Recording = false;
+    self.m_AdmissionError = {};
+    self.m_Instances.clear();
+    self.m_PaintKeys.clear();
+    self.m_OwnerCounters.clear();
+    self.m_Images.clear();
+    self.m_ManagedImages.clear();
+    self.m_States.clear();
+    self.m_FrameReady = self.m_HasCompletedTarget;
+    if (self.m_FrameReady)
+    {
+        self.m_Width = self.m_PreviousWidth;
+        self.m_Height = self.m_PreviousHeight;
+        self.m_FramebufferWidth = self.m_RetainedWidth;
+        self.m_FramebufferHeight = self.m_RetainedHeight;
+        glBindFramebuffer(GL_FRAMEBUFFER, 0);
+        glViewport(0, 0, self.m_FramebufferWidth, self.m_FramebufferHeight);
+    }
 }
 
 void Renderer::PushState(Affine local)
@@ -1642,8 +1854,14 @@ void Renderer::DrawText(const TextLayout& layout, Point baseline, Color color, R
     const float size = layout.m_FontSize;
     for (const auto& positioned : layout.m_Glyphs)
     {
-        const auto& glyph = self.Glyph(layout, positioned);
-        const auto& bounds = glyph.m_Bounds;
+        const Impl::GlyphKey key{layout.m_Fonts.empty() ? self.m_Font.GetIdentity()
+                                                        : layout.GetFontIdentity(positioned.m_FontSlot),
+                                 positioned.m_Id};
+        const auto cached = self.m_GlyphCache.find(key);
+        const auto& bounds =
+            cached != self.m_GlyphCache.end()
+                ? cached->second.m_Bounds
+                : (layout.m_Fonts.empty() ? self.m_Font.GetGlyph(positioned.m_Id) : layout.GetGlyph(positioned));
         if (bounds.m_MaxX <= bounds.m_MinX || bounds.m_MaxY <= bounds.m_MinY)
             continue;
         const Rect rect{baseline.m_X + positioned.m_X + bounds.m_MinX * size - paddingX,
@@ -1652,10 +1870,12 @@ void Renderer::DrawText(const TextLayout& layout, Point baseline, Color color, R
                         (bounds.m_MaxY - bounds.m_MinY) * size + 2 * paddingY};
         if (!self.Visible(rect, scissor))
             continue;
+        const Float4 coordinates{bounds.m_MinX - paddingX / size, bounds.m_MaxY + paddingY / size, rect.m_Width / size,
+                                 -rect.m_Height / size};
+        const auto& glyph = self.Glyph(layout, positioned);
         ++self.m_GlyphCount;
         self.Record({Values(rect),
-                     {bounds.m_MinX - paddingX / size, bounds.m_MaxY + paddingY / size, rect.m_Width / size,
-                      -rect.m_Height / size},
+                     coordinates,
                      color,
                      {},
                      Values(scissor),
@@ -1754,7 +1974,16 @@ void Renderer::EndFrame()
 {
     m_Affinity.VerifyAccess("Renderer::EndFrame");
     auto& self = *m_Impl;
+    if (self.m_AdmissionError)
+    {
+        std::rethrow_exception(self.m_AdmissionError);
+    }
+    if (!self.m_Recording)
+    {
+        throw std::logic_error("EndFrame requires an active recording.");
+    }
     self.m_FrameReady = false;
+    self.m_HasCompletedTarget = false;
     self.m_Recording = false;
     self.EnsureRetainedTarget();
     self.PrepareImages();
@@ -1773,6 +2002,7 @@ void Renderer::EndFrame()
     self.StartTimer();
     self.UploadImages();
     glBindVertexArray(self.m_Vao);
+    std::size_t fontUploadBytes = 0;
     if (submitted && self.m_FontDirty)
     {
         glBindBuffer(GL_TEXTURE_BUFFER, self.m_CurveBuffer);
@@ -1785,6 +2015,7 @@ void Renderer::EndFrame()
                      self.m_Bands.data(), GL_DYNAMIC_DRAW);
         glBindTexture(GL_TEXTURE_BUFFER, self.m_BandTexture);
         glTexBuffer(GL_TEXTURE_BUFFER, GL_RG32UI, self.m_BandBuffer);
+        fontUploadBytes = self.m_Curves.size() * sizeof(Float4) + self.m_Bands.size() * sizeof(UInt2);
         self.m_FontDirty = false;
     }
     if (submitted)
@@ -1860,6 +2091,10 @@ void Renderer::EndFrame()
     stats.m_Glyphs = self.m_GlyphCount;
     stats.m_CachedGlyphs = self.m_GlyphCache.size();
     stats.m_FontBytes = self.m_Curves.size() * sizeof(Float4) + self.m_Bands.size() * sizeof(UInt2);
+    stats.m_FontEvictions = self.m_FontEvictions;
+    stats.m_FontCompactions = self.m_FontCompactions;
+    stats.m_FontUploadBytes = fontUploadBytes;
+    stats.m_VisibleGlyphs = self.m_PinnedGlyphs;
     stats.m_Images = self.m_ManagedImages.size();
     stats.m_CachedImages = self.m_ImageCache.size();
     stats.m_ImageBytes = self.m_ImageBytes;
@@ -1901,6 +2136,7 @@ void Renderer::EndFrame()
         throw std::runtime_error("OpenGL error after rendering: " + std::to_string(error));
     }
     self.m_FrameReady = true;
+    self.m_HasCompletedTarget = true;
     self.m_ManagedImages.clear();
 }
 

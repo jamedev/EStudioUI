@@ -7,10 +7,27 @@
 
 namespace EStudioUI
 {
+namespace
+{
+class FamilyValidator final : public InputValidator
+{
+  public:
+    ValidationState Validate(std::string_view text) const override
+    {
+        if (text.size() > FontSelection::s_MaxFamilyBytes)
+        {
+            return ValidationState::Invalid;
+        }
+        return FontSelection::IsValidFamilyList(text) ? ValidationState::Acceptable : ValidationState::Intermediate;
+    }
+};
+} // namespace
 FontEditor::FontEditor() : Widget("fonteditor")
 {
     m_Family = &Add<ComboBox>();
     m_Family->SetEditable(true);
+    m_Family->GetEditor().SetMaxBytes(FontSelection::s_MaxFamilyBytes);
+    m_Family->GetEditor().SetValidator(std::make_shared<FamilyValidator>());
     m_Family->SetItems({"sans-serif"});
     m_Family->SetWidth(SizeRule::Fill());
     m_Family->SetAccessibleName("Font family");
@@ -61,14 +78,10 @@ FontEditor::FontEditor() : Widget("fonteditor")
 
 void FontEditor::Validate(const FontSelection& font)
 {
-    if (font.m_Family.empty() || font.m_Family.size() > 4096 || !std::isfinite(font.m_Size) || font.m_Size < 1 ||
-        font.m_Size > 512 || !std::isfinite(font.m_Weight) || font.m_Weight < 1 || font.m_Weight > 1000 ||
-        (font.m_Style != "normal" && font.m_Style != "italic" && font.m_Style != "oblique") ||
-        (font.m_Direction != "auto" && font.m_Direction != "ltr" && font.m_Direction != "rtl") ||
-        font.m_Language.size() > 256)
+    font.Validate();
+    if (font.m_Size < 1 || font.m_Size > 512)
     {
-        throw std::invalid_argument(
-            "Font selection requires a family, size 1–512 px, weight 1–1000 and supported style/direction.");
+        throw std::invalid_argument("Font editor sizes must be between 1 and 512 logical pixels.");
     }
 }
 
@@ -128,6 +141,12 @@ ComboBox& FontEditor::GetFamilyEditor() const
     return *m_Family;
 }
 
+Label& FontEditor::GetPreview() const
+{
+    VerifyAccess();
+    return *m_Preview;
+}
+
 Signal<FontSelection>& FontEditor::FontChanged()
 {
     VerifyAccess();
@@ -162,13 +181,15 @@ void FontEditor::Refresh()
     m_Preview->SetStyleProperty(StyleProperty::FontSize, m_Font.m_Size);
     m_Preview->SetStyleProperty(StyleProperty::FontWeight, m_Font.m_Weight);
     m_Preview->SetStyleProperty(StyleProperty::FontStyle, m_Font.m_Style);
+    m_Preview->SetStyleProperty(StyleProperty::TextDirection, m_Font.m_Direction);
+    m_Preview->SetStyleProperty(StyleProperty::Language, m_Font.m_Language);
 }
 
 void FontEditor::Edited()
 {
     auto font = m_Font;
     font.m_Family = m_Family->GetCurrentText();
-    if (font.m_Family.empty())
+    if (!FontSelection::IsValidFamilyList(font.m_Family))
     {
         return;
     }

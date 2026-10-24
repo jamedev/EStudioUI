@@ -166,16 +166,18 @@ draws, shapes, glyphs, instance/effect upload bytes, gradients, and shadows, plu
 actual repainted pixels, submitted instances, and replayed glyphs. Recorded
 glyph/shape counts describe the paint stream; submitted counts describe GPU work.
 
-Each label/editor caches natural shaping until text or CSS font size changes.
-Wrapped labels additionally retain at most three width-specific line layouts,
-using space/hyphen breaks and grapheme-safe fallback in the current LTR service. FreeType
-loads unhinted outlines only once per glyph ID. Curves use em-space coordinates;
+Each label/editor caches natural shaping against text, complete typography and
+font-registry revision. Wrapped labels additionally retain at most three
+width-specific line layouts using Unicode breaks and paragraph direction.
+FreeType loads unhinted outlines into a bounded actual-font/glyph cache. Curves use em-space coordinates;
 TrueType quadratics remain exact. CFF cubic curves are recursively approximated
 with quadratic segments to a 0.00005 em control-point tolerance, bounded at depth
 12. HarfBuzz uses the font's OpenType tables without optional external integrations.
-Editable runs disable `liga`/`clig` to simplify grapheme caret placement. Cluster
-caret positions interpolate when a shaped cluster spans multiple graphemes.
-Only left-to-right runs are currently supported.
+Editable runs disable optional `liga`/`clig`. SheenBidi and HarfBuzz supply mixed
+direction/script shaping; logical UTF-8 grapheme positions map to visual spans
+and caret affinity. GDEF caret positions are used when available, with an evenly
+partitioned fallback. FontSelection supplies shared validation before font
+resolution. See [TEXT.md](TEXT.md) for the control-text boundary.
 
 ## GPU representation
 
@@ -225,9 +227,16 @@ in the instance. Effect values are bounded (eight gradient stops/shadows/transfo
 operations, 32 complex clip levels). Gradient directions, extents, radial centers,
 inverse radii, and premultiplied stop colors are prepared on the CPU rather than
 recomputed for every fragment. No effect creates a widget or its own offscreen
-render pass. Cached font buffers upload only after new glyphs are encountered; per-frame
-instance data uses GL buffer orphaning/upload. Existing vector capacities are
-reused. Texture-buffer limits are checked and diagnosed; eviction is future work.
+render pass. Cached font buffers upload after new glyphs or compaction when
+drawing is required; unchanged text uploads no font data. Per-frame instance data
+uses GL buffer orphaning/upload. Visible glyphs are pinned per recording; unused
+residency is compacted under budget pressure, relocating band/curve addresses
+and already recorded glyph instances before submission. Relocation invalidates
+retained damage history. Configured byte/count and hardware texture-buffer limits
+are enforced without growing the budget; FontCacheCapacityError and AbortFrame
+provide explicit pre-submission recovery. Font upload/eviction/compaction and
+unique-visible counters expose the work. [TEXT_READINESS.md](TEXT_READINESS.md)
+documents current whole-arena uploads and future document-layout boundaries.
 
 The renderer retains one RGBA8 framebuffer for the entire window (four bytes per
 physical pixel). It compares exact paint values, transforms, clip chains, effects,

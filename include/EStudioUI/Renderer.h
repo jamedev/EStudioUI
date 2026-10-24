@@ -1,6 +1,7 @@
 #pragma once
 
 #include "FontFace.h"
+#include "FontCacheCapacityError.h"
 #include "Icon.h"
 #include "Style.h"
 #include "ThreadAffinity.h"
@@ -54,6 +55,18 @@ struct RenderStats
 
     //! Bytes of outline and band data currently cached on the GPU.
     std::size_t m_FontBytes = 0;
+
+    //! Glyphs retired automatically under cache pressure during this frame.
+    std::size_t m_FontEvictions = 0;
+
+    //! Safe CPU buffer compactions performed before submission.
+    std::size_t m_FontCompactions = 0;
+
+    //! Outline/band bytes uploaded in this frame; unchanged text uploads nothing.
+    std::size_t m_FontUploadBytes = 0;
+
+    //! Unique visible glyphs pinned by this frame, independent of repeated character count.
+    std::size_t m_VisibleGlyphs = 0;
 
     //! Number of managed image instances recorded in the frame.
     std::size_t m_Images = 0;
@@ -156,6 +169,9 @@ class Renderer
     //! Retires glyph buffers between frames and invalidates retained framebuffer history.
     void ClearFontCache();
 
+    //! Returns the configured hard GPU outline/band budget.
+    std::size_t GetFontCacheLimit() const;
+
     //! Sets a hard GPU outline/band budget, retiring existing cached glyphs.
     void SetFontCacheLimit(std::size_t bytes);
 
@@ -167,6 +183,9 @@ class Renderer
 
     //! Starts recording a logical-pixel frame for retained rendering.
     void BeginFrame(float width, float height, int framebufferWidth, int framebufferHeight, Color clear);
+
+    //! Discards unsubmitted drawing after an admission failure; preserves the last completed target when available.
+    void AbortFrame();
 
     //! Saves drawing state and composes a visual transform.
     void PushState(Affine local = {});

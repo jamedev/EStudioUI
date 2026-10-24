@@ -219,16 +219,11 @@ std::vector<TextLayout> ShapeControlText(std::string_view text, const FontSelect
                                          std::optional<float> width)
 {
     ValidateControlText(text);
-    if (!std::isfinite(selection.m_Size) || selection.m_Size < 0 || selection.m_Size > 4096 ||
-        !std::isfinite(selection.m_Weight) || selection.m_Weight < 1 || selection.m_Weight > 1000 ||
-        selection.m_Family.size() > 1024 || selection.m_Language.empty() || selection.m_Language.size() > 63 ||
-        !std::all_of(
-            selection.m_Language.begin(), selection.m_Language.end(), [](unsigned char c)
-            { return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '-'; }) ||
-        (selection.m_Direction != "auto" && selection.m_Direction != "ltr" && selection.m_Direction != "rtl") ||
-        (selection.m_Style != "normal" && selection.m_Style != "italic" && selection.m_Style != "oblique") ||
-        (width && (!std::isfinite(*width) || *width < 0)))
-        throw std::invalid_argument("Invalid control typography or wrapping width.");
+    selection.Validate();
+    if (width && (!std::isfinite(*width) || *width < 0))
+    {
+        throw std::invalid_argument("Wrapping width must be finite and nonnegative.");
+    }
     if (text.empty())
     {
         TextLayout empty;
