@@ -32,7 +32,8 @@ and Creator has an Appearance inspector. See [THEMES.md](THEMES.md).
 Creator also offers widget palette icons, drag into nested content containers,
 container/sibling snapping with optional persistent constraints, reusable session
 compositions and complete editable C++ class exports (`.h`/`.cpp`). The generated
-class compiles directly and needs no runtime JSON. See [CREATOR.md](CREATOR.md).
+class compiles directly and needs no runtime JSON. See [CREATOR.md](CREATOR.md)
+and [test results and renderer captures](verification/THEMES_CREATOR.md).
 
 ## Property editing and EStudioUICreator (0.23)
 

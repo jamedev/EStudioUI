@@ -1,0 +1,20 @@
+[
+  {
+    "file": "verification/theme-minimal-light.png",
+    "width": 1440,
+    "height": 1000,
+    "rgb_sha256": "d9c3099807051178146b842f8927dfd99ed662a00bdc58d5164b0a081a277280"
+  },
+  {
+    "file": "verification/theme-minimal-dark.png",
+    "width": 1440,
+    "height": 1000,
+    "rgb_sha256": "cf25ab5c7a89deeeeff11cd86df8e9745a73c874a4952931ca28ef7381b95266"
+  },
+  {
+    "file": "verification/creator-snap-guides.png",
+    "width": 1440,
+    "height": 1000,
+    "rgb_sha256": "168e4fab86c8130178eb2f5d78fb21a379d629b3aaf5f4d9e88d7150f5ffb43c"
+  }
+]

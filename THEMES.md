@@ -54,7 +54,10 @@ structural CSS, generated theme, application/document overrides. This is ordinar
 CSS specificity and cascade order, not an unconditional priority override. Scoped
 application selectors remain the recommended way to customize individual areas.
 An unchanged generated source does not parse or increment the stylesheet revision.
-Changing the theme preserves widget objects, models, focus and bindings.
+Changing the theme preserves widget objects, models, focus and bindings. Each
+window owns its configuration. Owned windows retain the existing initial
+stylesheet-copy behavior; configure their own controller explicitly when they
+need to follow subsequent preference changes independently.
 
 Calling `UiContext::SetStyleSheet()` directly explicitly hands stylesheet ownership
 to the application. Subsequent OS notifications update the controller's owned
