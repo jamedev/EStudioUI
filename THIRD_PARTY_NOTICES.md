@@ -26,12 +26,13 @@ its vcpkg copyright file includes both authoritative upstream texts.
 | utf8proc | 2.10.0 | MIT and permissive Unicode data notice | Grapheme boundaries |
 | stb_image | stb 2024-07-29#1, upstream `f75e8d1cad7d90d72ef7a4661f1b994ef78b4e31` | MIT alternative | Bounded PNG/JPEG decoding; compiled into EStudioUI |
 | nlohmann/json | 3.11.3#1 | MIT | Private header-only JSON parser/serializer for open UI documents |
+| SQLite | 3.49.1, pinned vcpkg baseline; omit-load-extension | Public domain (SPDX blessing) | Optional reusable database adapter and browser |
 | Generated GLAD loader | glad2 2.0.8, generated GL 3.3 core | CC0-1.0 alternative and Apache-2.0 API definitions | GL entry points |
 | Slug reference shader | EricLengyel/Slug, retrieved 2026-10-21 | MIT alternative | Analytic outline coverage |
 | Noto Sans | google/fonts/ofl/notosans, retrieved 2026-10-21 | SIL OFL 1.1 | Primary demo font |
 | Noto Sans Arabic, Hebrew, Devanagari; Noto Sans Italic | google/fonts commit `45e3d5269e4a17d823f6d84470bc084dc5ae46f6` | SIL OFL 1.1 | Demo fallback and actual italic faces |
 
-All nine vcpkg dependencies disable default features. HarfBuzz does not enable
+All ten vcpkg dependencies disable default features. HarfBuzz does not enable
 GLib, ICU, Cairo, Graphite, or platform shapers; FreeType does not enable external
 image/compression libraries. The Windows triplet builds static dependencies with
 the dynamic MSVC runtime. vcpkg may download build-only tools such as Meson,
@@ -66,3 +67,7 @@ The additional demo/test fonts are fetched by `cmake/ControlFonts.cmake` at the
 pinned google/fonts revision above, with a SHA-256 per file. They are copied next
 to the demo with their OFL notices. Library-only builds do not fetch these fonts.
 For offline builds, prepopulate `ESTUDIOUI_CONTROL_FONT_DIR` with these exact files.
+
+SQLite is dedicated to the public domain, including commercial use. Its blessing
+notice is retained in `licenses/sqlite3-vcpkg-copyright.txt`; the browser also
+stages the installed port notice beside its executable.

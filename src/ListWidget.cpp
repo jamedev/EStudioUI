@@ -9,6 +9,106 @@
 
 namespace EStudioUI
 {
+void ListWidget::SetRowsMovable(bool enabled)
+{
+    VerifyStructuralMutation();
+    m_RowsMovable = enabled;
+    if (enabled)
+    {
+        EnsureDragDrop();
+    }
+    else if (m_DragDrop)
+    {
+        m_DragDrop->Cancel();
+    }
+}
+
+void ListWidget::SetRowDropHandler(std::function<void(const ModelDragData&, const ModelDropTarget&)> handler)
+{
+    VerifyStructuralMutation();
+    EnsureDragDrop().SetDropHandler(std::move(handler));
+}
+
+Signal<ModelDragData, ModelDropTarget>& ListWidget::RowsDropped()
+{
+    return EnsureDragDrop().Dropped();
+}
+
+Signal<std::string>& ListWidget::DropRejected()
+{
+    return EnsureDragDrop().Rejected();
+}
+
+ItemDragDrop& ListWidget::EnsureDragDrop()
+{
+    VerifyStructuralMutation();
+    if (!m_DragDrop)
+    {
+        const WidgetRef self(this);
+        m_DragDrop = std::make_unique<ItemDragDrop>(
+            *this,
+            [self]
+            {
+                auto* owner = dynamic_cast<ListWidget*>(self.Get());
+                return owner ? owner->GetModel() : nullptr;
+            },
+            [self]
+            {
+                auto* owner = dynamic_cast<ListWidget*>(self.Get());
+                const auto selection = owner ? owner->GetSelectionModel() : nullptr;
+                if (!selection)
+                {
+                    return std::vector<ItemId>{};
+                }
+                const auto selected = selection->GetSnapshot();
+                if (selected->m_Items.size() > 4096)
+                {
+                    throw std::length_error("A drag accepts at most 4096 selected records.");
+                }
+                return std::vector<ItemId>(selected->m_Items.begin(), selected->m_Items.end());
+            },
+            [self](Point point) -> std::optional<ModelDropTarget>
+            {
+                auto* owner = dynamic_cast<ListWidget*>(self.Get());
+                return owner && owner->m_RowsMovable ? owner->GetRowDropTarget(point) : std::nullopt;
+            });
+    }
+    return *m_DragDrop;
+}
+
+std::optional<ModelDropTarget> ListWidget::GetRowDropTarget(Point point) const
+{
+    if (!GetModel() || !GetViewport().Contains(point))
+    {
+        return {};
+    }
+    const auto viewport = GetViewport();
+    const int row = ItemAt(point);
+    if (row < 0)
+    {
+        return ModelDropTarget{
+            0,
+            0,
+            {viewport.m_X,
+             viewport.m_Y + static_cast<float>(GetItemCount()) * GetStyle().m_RowHeight - GetScrollOffset().m_Y,
+             viewport.m_Width, 2},
+            false};
+    }
+    const auto snapshot = GetModel()->GetSnapshot();
+    const auto item = snapshot.GetItem(static_cast<std::size_t>(row));
+    const float y = viewport.m_Y + static_cast<float>(row) * GetStyle().m_RowHeight - GetScrollOffset().m_Y;
+    if (point.m_Y < y + GetStyle().m_RowHeight * .5f)
+    {
+        return ModelDropTarget{0, item, {viewport.m_X, y, viewport.m_Width, 2}, false};
+    }
+    const auto source = GetModel()->GetRootModel()->GetSnapshot();
+    const auto next = *source.GetPosition(item) + 1;
+    return ModelDropTarget{0,
+                           next < source.GetRowCount() ? source.GetItem(next) : 0,
+                           {viewport.m_X, y + GetStyle().m_RowHeight, viewport.m_Width, 2},
+                           false};
+}
+
 ListWidget::ListWidget() : ScrollWidget("listwidget")
 {
     RegisterStylePart("item", Hover | Pressed | Selected | Alternate,
@@ -411,6 +511,10 @@ void ListWidget::Paint(Renderer& renderer, FontFace& font, double time, float op
     }
     renderer.PopState();
     PaintScrollBars(renderer, opacity);
+    if (m_DragDrop)
+    {
+        m_DragDrop->Paint(renderer, opacity);
+    }
 }
 
 void ListWidget::OnPointerDown(const PointerEvent& event)
@@ -423,13 +527,30 @@ void ListWidget::OnPointerDown(const PointerEvent& event)
     m_Pressed = index;
     SetState(Pressed, true);
     const WidgetRef self(this);
-    SelectIndex(index, event.m_Modifiers);
+    const bool retainSelection = m_RowsMovable && m_View && !event.m_Modifiers.m_Control &&
+                                 !event.m_Modifiers.m_Shift &&
+                                 m_View->GetSelectionModel()->IsSelected(
+                                     m_View->GetModel()->GetSnapshot().GetItem(static_cast<std::size_t>(index)));
+    m_RetainedRowSelection = retainSelection;
+    if (!retainSelection)
+    {
+        SelectIndex(index, event.m_Modifiers);
+    }
+    if (self.Get() && m_RowsMovable && m_View)
+    {
+        EnsureDragDrop().Press(m_View->GetModel()->GetSnapshot().GetItem(static_cast<std::size_t>(index)),
+                               GetContext()->ToWindowPoint(*this, event.m_Position));
+    }
     if (self.Get() && event.m_Clicks == 2)
         m_Activated.Emit(index);
 }
 
 void ListWidget::OnPointerMove(const PointerEvent& event)
 {
+    if (m_DragDrop && m_DragDrop->Move(GetContext()->ToWindowPoint(*this, event.m_Position)))
+    {
+        return;
+    }
     ScrollWidget::OnPointerMove(event);
     m_HoverPosition = event.m_Position;
     const int hover = ItemAt(event.m_Position);
@@ -442,15 +563,35 @@ void ListWidget::OnPointerMove(const PointerEvent& event)
 
 void ListWidget::OnPointerUp(const PointerEvent& event)
 {
+    const WidgetRef self(this);
+    const bool dragged = m_DragDrop && m_DragDrop->Release(GetContext()->ToWindowPoint(*this, event.m_Position));
+    if (!self.Get())
+    {
+        return;
+    }
     const int clicked = m_Pressed >= 0 && event.m_InsideClip && ItemAt(event.m_Position) == m_Pressed && ItemEnabled(m_Pressed) ? m_Pressed : -1;
     m_Pressed = -1;
     SetState(Pressed, false);
     ScrollWidget::OnPointerUp(event);
-    if (clicked >= 0) m_ItemClicked.Emit(clicked);
+    if (!dragged && clicked >= 0)
+    {
+        if (m_RetainedRowSelection)
+        {
+            SelectIndex(clicked, {});
+        }
+        if (self.Get())
+        {
+            m_ItemClicked.Emit(clicked);
+        }
+    }
 }
 
 void ListWidget::OnCaptureLost()
 {
+    if (m_DragDrop)
+    {
+        m_DragDrop->Cancel();
+    }
     m_Pressed = -1;
     SetState(Pressed, false);
     ScrollWidget::OnCaptureLost();

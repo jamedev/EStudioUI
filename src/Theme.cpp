@@ -178,6 +178,7 @@ button:selected, toolbutton:selected { background: @selected@; color: @fg@; bord
 button:disabled, toolbutton:disabled, textbox:disabled, combobox:disabled { opacity: .45; }
 button.primary, .dialog-accept { background: @accent@; color: @onaccent@; border-color: @accent@; }
 button.primary:hover, .dialog-accept:hover { background: @accent-hover@; color: @onaccent@; }
+cell-editor { background: @input@; padding: 0px; gap: 2px; }
 textbox { height: @height@px; padding: 5px 9px; background: @input@; placeholder-color: @muted@; caret-color: @fg@; selection-background-color: @accent@; selection-color: @onaccent@; }
 textbox:hover { border-color: @muted@; }
 textbox:focus, textbox:focus-within, numericinput:focus-within, combobox:focus-within { border: 1px solid @accent@; background: @input@; box-shadow: none; }

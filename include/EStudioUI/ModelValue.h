@@ -7,27 +7,40 @@
 #include <string>
 #include <string_view>
 #include <variant>
+#include <vector>
 
 namespace EStudioUI
 {
+//! Owns exact binary bytes without formatting them as text.
+using ModelBlob = std::vector<std::uint8_t>;
+
 //! Owns a typed cell value without UI, font, or graphics resources.
-using ModelValue = std::variant<std::monostate, bool, std::int64_t, double, std::string, Color>;
+using ModelValue = std::variant<std::monostate, bool, std::int64_t, double, std::string, Color, ModelBlob>;
 
 //! Names the raw value alternatives accepted by one column.
 enum class ModelValueType
 {
+
     //! Accepts any owned value alternative.
     Any,
+
     //! Stores a logical true/false value.
     Boolean,
+
     //! Stores an exact signed 64-bit integer.
     Integer,
+
     //! Stores a finite double-precision value.
     Real,
+
     //! Stores owned UTF-8 text.
     Text,
+
     //! Stores finite RGBA components.
-    Color
+    Color,
+
+    //! Stores exact binary bytes.
+    Blob
 };
 
 //! Identifies semantic data independently of CSS presentation.
@@ -45,6 +58,7 @@ enum class ModelRole
 //! Describes one model field and its pure formatting, parsing, and validation policies.
 struct ModelColumn
 {
+
     //! Human-readable UTF-8 field name.
     std::string m_Title;
 
@@ -65,7 +79,22 @@ struct ModelColumn
 
     //! Rejects a candidate by throwing before model publication.
     std::function<void(const ModelValue&)> m_Validate;
+
+    //! Allows a null value independently of the declared non-null type.
+    bool m_Nullable = false;
+
+    //! Opts into a built-in typed editor; Any follows the actual cell value.
+    std::optional<ModelValueType> m_EditorType;
+
+    //! Optional owned choices for a combo editor; empty leaves the declared editor type.
+    std::vector<ModelValue> m_Choices;
 };
+
+//! Encodes exact bytes as hexadecimal for bounded application editors.
+std::string EncodeModelBlob(const ModelBlob& value);
+
+//! Parses exact hexadecimal, accepting an optional 0x prefix.
+ModelBlob DecodeModelBlob(std::string_view text);
 
 //! Formats an owned value without locale-dependent numeric conversion.
 std::string FormatModelValue(const ModelValue& value);

@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.24)
-project(EStudioUI VERSION 0.24.0 LANGUAGES C CXX)
+project(EStudioUI VERSION 0.25.0 LANGUAGES C CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -8,6 +8,8 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 option(ESTUDIOUI_BUILD_TESTS "Build core and GPU integration checks" ON)
 option(ESTUDIOUI_BUILD_CREATOR "Build the EStudioUICreator authoring application" ON)
+option(ESTUDIOUI_BUILD_DATABASE_BROWSER "Build the SQLite database browser" ON)
+option(ESTUDIOUI_BUILD_SQLITE "Build the reusable SQLite model adapter" ON)
 option(ESTUDIOUI_BUILD_DEMO "Build the interactive widget gallery" ON)
 option(ESTUDIOUI_GPU_TESTS "Enable Linux OSMesa integration checks in CTest" ON)
 option(ESTUDIOUI_ENABLE_SANITIZERS "Enable address and undefined behavior sanitizers" OFF)
@@ -42,7 +44,7 @@ if(ESTUDIOUI_BUILD_THREAD_TESTS)
         src/Task.cpp src/BackgroundTasks.cpp src/StateStore.cpp src/State.cpp
         src/Action.cpp src/Shortcut.cpp src/InputEvent.cpp
         src/ModelValue.cpp src/ModelSnapshot.cpp src/RecordModel.cpp src/ModelBuilder.cpp
-        src/ItemModel.cpp src/SelectionModel.cpp src/SortFilterModel.cpp src/TreeRowMap.cpp)
+        src/ItemModel.cpp src/ModelEditSession.cpp src/ModelQuery.cpp src/SelectionModel.cpp src/SortFilterModel.cpp src/TreeRowMap.cpp)
     target_include_directories(EStudioUIThreadRuntime PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/include")
     target_link_libraries(EStudioUIThreadRuntime PUBLIC Threads::Threads)
     target_compile_options(EStudioUIThreadRuntime PUBLIC -fsanitize=thread -fno-omit-frame-pointer -O1 -g1)
@@ -119,6 +121,8 @@ add_library(EStudioUI STATIC
     src/Task.cpp src/BackgroundTasks.cpp src/Application.cpp
     src/StateStore.cpp src/State.cpp src/Bindings.cpp src/Invalidation.cpp
     src/ModelValue.cpp src/ModelSnapshot.cpp src/RecordModel.cpp src/ModelBuilder.cpp src/Models.cpp
+    src/ModelQuery.cpp src/ModelAdapter.cpp src/ModelEditSession.cpp src/AdapterModel.cpp src/SnapshotModelAdapter.cpp
+    src/CellEditor.cpp src/TreeTable.cpp src/ItemDragDrop.cpp
     src/ItemModel.cpp src/SelectionModel.cpp src/SortFilterModel.cpp src/CollectionView.cpp src/ItemDelegate.cpp src/TreeRowMap.cpp
 )
 add_library(EStudioUI::EStudioUI ALIAS EStudioUI)
@@ -145,8 +149,52 @@ if(ESTUDIOUI_ENABLE_SANITIZERS AND CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
     target_link_options(EStudioUI PUBLIC -fsanitize=address,undefined)
 endif()
 
-if(ESTUDIOUI_BUILD_DEMO OR ESTUDIOUI_BUILD_CREATOR OR ESTUDIOUI_BUILD_TESTS)
+if(ESTUDIOUI_BUILD_DEMO OR ESTUDIOUI_BUILD_CREATOR OR ESTUDIOUI_BUILD_DATABASE_BROWSER OR ESTUDIOUI_BUILD_TESTS)
     include(cmake/ControlFonts.cmake)
+endif()
+
+if(ESTUDIOUI_BUILD_SQLITE OR ESTUDIOUI_BUILD_DATABASE_BROWSER)
+    find_package(unofficial-sqlite3 CONFIG REQUIRED)
+    add_library(EStudioUISqlite STATIC src/SqliteAdapter.cpp)
+    add_library(EStudioUI::Sqlite ALIAS EStudioUISqlite)
+    target_link_libraries(EStudioUISqlite PUBLIC EStudioUI::EStudioUI PRIVATE unofficial::sqlite3::sqlite3)
+    if(MSVC)
+        target_compile_options(EStudioUISqlite PRIVATE /utf-8 /W4 /permissive-)
+    else()
+        target_compile_options(EStudioUISqlite PRIVATE -Wall -Wextra -Wpedantic -Wconversion -Wshadow)
+    endif()
+endif()
+
+if(ESTUDIOUI_BUILD_DATABASE_BROWSER)
+    add_library(EStudioUIDatabaseApp STATIC browser/DatabaseBrowserWindow.cpp browser/ExampleDatabase.cpp)
+    target_include_directories(EStudioUIDatabaseApp PUBLIC browser)
+    target_link_libraries(EStudioUIDatabaseApp PUBLIC EStudioUI::Sqlite PRIVATE unofficial::sqlite3::sqlite3)
+    add_executable(EStudioUIDatabaseBrowser browser/main.cpp browser/Verification.cpp demo/GpuProbeWindow.cpp)
+    target_link_libraries(EStudioUIDatabaseBrowser PRIVATE EStudioUIDatabaseApp EStudioUIGl glfw)
+    if(MSVC)
+        target_compile_options(EStudioUIDatabaseApp PRIVATE /utf-8 /W4 /permissive-)
+        target_compile_options(EStudioUIDatabaseBrowser PRIVATE /utf-8 /W4)
+    else()
+        target_compile_options(EStudioUIDatabaseApp PRIVATE -Wall -Wextra -Wpedantic -Wconversion -Wshadow)
+        target_compile_options(EStudioUIDatabaseBrowser PRIVATE -Wall -Wextra -Wpedantic -Wconversion -Wshadow)
+    endif()
+    add_custom_command(TARGET EStudioUIDatabaseBrowser POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_directory "${CMAKE_CURRENT_SOURCE_DIR}/assets" "$<TARGET_FILE_DIR:EStudioUIDatabaseBrowser>/assets"
+        COMMAND ${CMAKE_COMMAND} -E copy_directory "${ESTUDIOUI_CONTROL_FONT_DIR}" "$<TARGET_FILE_DIR:EStudioUIDatabaseBrowser>/assets/fonts"
+        COMMAND ${CMAKE_COMMAND} -E copy "${CMAKE_CURRENT_SOURCE_DIR}/third_party/fonts/NotoSans.ttf" "$<TARGET_FILE_DIR:EStudioUIDatabaseBrowser>/assets/NotoSans.ttf"
+        COMMAND ${CMAKE_COMMAND} -E copy_directory "${CMAKE_CURRENT_SOURCE_DIR}/licenses" "$<TARGET_FILE_DIR:EStudioUIDatabaseBrowser>/licenses"
+        COMMAND ${CMAKE_COMMAND} -E copy "${CMAKE_CURRENT_SOURCE_DIR}/THIRD_PARTY_NOTICES.md" "$<TARGET_FILE_DIR:EStudioUIDatabaseBrowser>/THIRD_PARTY_NOTICES.md"
+        COMMAND ${CMAKE_COMMAND} -E copy "${CMAKE_CURRENT_SOURCE_DIR}/LICENSE" "$<TARGET_FILE_DIR:EStudioUIDatabaseBrowser>/licenses/EStudioUI-MIT.txt"
+        VERBATIM)
+    if(DEFINED VCPKG_INSTALLED_DIR AND DEFINED VCPKG_TARGET_TRIPLET)
+        foreach(port glfw3 freetype harfbuzz utf8proc kiwi sheenbidi libunibreak stb nlohmann-json sqlite3)
+            set(copyright "${VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}/share/${port}/copyright")
+            if(EXISTS "${copyright}")
+                add_custom_command(TARGET EStudioUIDatabaseBrowser POST_BUILD COMMAND ${CMAKE_COMMAND} -E copy "${copyright}"
+                    "$<TARGET_FILE_DIR:EStudioUIDatabaseBrowser>/licenses/${port}-vcpkg-copyright.txt" VERBATIM)
+            endif()
+        endforeach()
+    endif()
 endif()
 
 if(ESTUDIOUI_BUILD_CREATOR OR ESTUDIOUI_BUILD_TESTS)
@@ -185,6 +233,8 @@ if(ESTUDIOUI_BUILD_CREATOR)
 endif()
 
 if(ESTUDIOUI_BUILD_DEMO)
+    add_executable(EStudioUIModelAdapterExample examples/ModelAdapter.cpp)
+    target_link_libraries(EStudioUIModelAdapterExample PRIVATE EStudioUI::EStudioUI)
     add_executable(EStudioUIPropertyExample examples/PropertyEditing.cpp)
     target_link_libraries(EStudioUIPropertyExample PRIVATE EStudioUI::EStudioUI)
     add_executable(EStudioUIRuntimeExample examples/RuntimeUi.cpp)
@@ -255,7 +305,7 @@ endif()
 
 if(ESTUDIOUI_BUILD_TESTS)
     enable_testing()
-    foreach(suite PropertyEditing UiDocument Theme UndoHistory DocumentWorkspace)
+    foreach(suite PropertyEditing UiDocument Theme UndoHistory DocumentWorkspace AdapterModel DataViews)
         add_executable(EStudioUI${suite}Tests tests/${suite}Tests.cpp)
         target_link_libraries(EStudioUI${suite}Tests PRIVATE EStudioUI::EStudioUI)
         target_compile_definitions(EStudioUI${suite}Tests PRIVATE ESTUDIOUI_FONT_PATH="${CMAKE_CURRENT_SOURCE_DIR}/third_party/fonts/NotoSans.ttf")
@@ -264,6 +314,18 @@ if(ESTUDIOUI_BUILD_TESTS)
         endif()
         add_test(NAME ${suite} COMMAND EStudioUI${suite}Tests)
     endforeach()
+    if(TARGET EStudioUISqlite)
+        add_executable(EStudioUISqliteAdapterTests tests/SqliteAdapterTests.cpp)
+        target_link_libraries(EStudioUISqliteAdapterTests PRIVATE EStudioUI::Sqlite unofficial::sqlite3::sqlite3)
+        if(MSVC)
+            target_compile_options(EStudioUISqliteAdapterTests PRIVATE /utf-8 /W4)
+        endif()
+        add_test(NAME SqliteAdapter COMMAND EStudioUISqliteAdapterTests)
+    endif()
+    if(ESTUDIOUI_GPU_TESTS AND TARGET EStudioUIDatabaseBrowser AND UNIX AND NOT APPLE)
+        add_test(NAME DatabaseBrowserGpuIntegration COMMAND EStudioUIDatabaseBrowser --headless --self-test --output "${CMAKE_CURRENT_BINARY_DIR}/database-verification")
+        set_tests_properties(DatabaseBrowserGpuIntegration PROPERTIES TIMEOUT 120)
+    endif()
     if(TARGET EStudioUICreatorApp)
         add_executable(EStudioUIDesignSnapTests tests/DesignSnapTests.cpp)
         target_link_libraries(EStudioUIDesignSnapTests PRIVATE EStudioUICreatorApp)

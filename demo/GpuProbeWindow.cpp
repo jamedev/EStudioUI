@@ -14,6 +14,7 @@
 #define WIN32_LEAN_AND_MEAN
 #define GLFW_EXPOSE_NATIVE_WIN32
 #include <GLFW/glfw3native.h>
+#include <dwmapi.h>
 #endif
 
 #include <stdexcept>
@@ -88,6 +89,11 @@ int VerifyGpuProbeChrome(Window& owner, const std::filesystem::path& assets, con
               "The actual GLFW client begins below one top-border pixel, not a native caption");
     };
     checkFrame(owner);
+    BOOL nativeCaption = TRUE;
+    check(SUCCEEDED(DwmGetWindowAttribute(nativeHandle(owner), DWMWA_NCRENDERING_ENABLED, &nativeCaption,
+                                          sizeof(nativeCaption))) &&
+              !nativeCaption,
+          "The actual GLFW surface disables the system caption renderer, independently of client geometry");
     WindowOptions options;
     options.m_Width = 720;
     options.m_Height = 440;

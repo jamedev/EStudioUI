@@ -12,6 +12,7 @@ struct Options
     std::uint64_t m_Key = AllocateItemId();
     std::optional<std::size_t> m_Sort;
     bool m_Ascending = true;
+    std::vector<ModelSort> m_Order;
     std::function<bool(const ModelSnapshot&, ItemId)> m_Filter;
     std::vector<std::size_t> m_Dependencies;
 };
@@ -37,6 +38,10 @@ class ProjectionData final : public ModelData
             return;
         if (m_Options.m_Sort)
             (void)m_Source.GetColumns().at(*m_Options.m_Sort);
+        for (const auto& key : m_Options.m_Order)
+        {
+            (void)m_Source.GetColumns().at(key.m_Column);
+        }
         for (const auto column : m_Options.m_Dependencies)
             (void)m_Source.GetColumns().at(column);
         std::unordered_set<ItemId> included;
@@ -66,7 +71,9 @@ class ProjectionData final : public ModelData
         }
         if (m_Options.m_Sort)
         {
-            const auto column = *m_Options.m_Sort;
+            const auto keys = m_Options.m_Order.empty()
+                                  ? std::vector<ModelSort>{{*m_Options.m_Sort, m_Options.m_Ascending, false}}
+                                  : m_Options.m_Order;
             for (auto& [parent, children] : siblings)
             {
                 (void)parent;
@@ -74,9 +81,22 @@ class ProjectionData final : public ModelData
                                  [&](ItemId a, ItemId b)
                                  {
                                      ++m_Stats.m_Comparisons;
-                                     const auto result =
-                                         CompareModelValues(m_Source.GetValue(a, column), m_Source.GetValue(b, column));
-                                     return m_Options.m_Ascending ? result < 0 : result > 0;
+                                     for (const auto& key : keys)
+                                     {
+                                         const auto left = m_Source.GetValue(a, key.m_Column),
+                                                    right = m_Source.GetValue(b, key.m_Column);
+                                         const bool leftNull = !left.index(), rightNull = !right.index();
+                                         if (leftNull != rightNull)
+                                         {
+                                             return key.m_NullsLast ? !leftNull : leftNull;
+                                         }
+                                         const int result = CompareModelValues(left, right);
+                                         if (result)
+                                         {
+                                             return key.m_Ascending ? result < 0 : result > 0;
+                                         }
+                                     }
+                                     return false;
                                  });
             }
         }
@@ -219,6 +239,13 @@ bool SortFilterModel::Apply(std::vector<ModelEdit> edits, std::optional<std::uin
     return m_Source->Apply(std::move(edits), expectedRevision);
 }
 
+ModelEditSession SortFilterModel::RequestEdit(std::vector<ModelEdit> edits,
+                                              std::optional<std::uint64_t> expectedRevision)
+{
+    VerifyAccess();
+    return m_Source->RequestEdit(std::move(edits), expectedRevision);
+}
+
 bool SortFilterModel::Replace(ModelSnapshot snapshot, std::optional<std::uint64_t> expectedRevision)
 {
     VerifyAccess();
@@ -233,13 +260,33 @@ void SortFilterModel::Restructure(const std::function<void(ModelBuilder&)>& edit
 
 void SortFilterModel::SetSort(std::optional<std::size_t> column, bool ascending)
 {
+    SetSortKeys(column ? std::vector<ModelSort>{{*column, ascending, false}} : std::vector<ModelSort>{});
+}
+
+std::vector<ModelSort> SortFilterModel::GetSortKeys() const
+{
+    VerifyAccess();
+    return Data(GetSnapshot())->m_Options.m_Order;
+}
+
+void SortFilterModel::SetSortKeys(std::vector<ModelSort> keys)
+{
+    VerifyAccess();
     const auto old = Data(GetSnapshot());
-    if (old->m_Options.m_Sort == column && old->m_Options.m_Ascending == ascending)
+    if (old->m_Options.m_Order == keys)
+    {
         return;
+    }
+    ModelQuery query;
+    query.m_DataSet = "projection";
+    query.m_Sort = keys;
+    query.Validate(m_Source->GetSnapshot().GetColumns().size());
     auto options = old->m_Options;
     options.m_Key = AllocateItemId();
-    options.m_Sort = column;
-    options.m_Ascending = ascending;
+    options.m_Order = std::move(keys);
+    options.m_Sort =
+        options.m_Order.empty() ? std::nullopt : std::optional<std::size_t>(options.m_Order.front().m_Column);
+    options.m_Ascending = options.m_Order.empty() || options.m_Order.front().m_Ascending;
     const auto source = m_Source->GetSnapshot();
     auto next = ModelSnapshot(std::make_shared<const ProjectionData>(source, std::move(options)));
     PublishProjection(std::move(next), ModelChange{GetSnapshot(), source, GetRevision(), {}, false, true}, true);
@@ -284,7 +331,8 @@ ModelChange SortFilterModel::PreviewChange(const ModelChange& canonical) const
     bool rebuild = change.m_Reset || change.m_Structure;
     for (const auto& field : change.m_Fields)
     {
-        rebuild = rebuild || (old->m_Options.m_Sort && *old->m_Options.m_Sort == field.m_Column);
+        rebuild = rebuild || std::any_of(old->m_Options.m_Order.begin(), old->m_Options.m_Order.end(),
+                                         [&](const ModelSort& key) { return key.m_Column == field.m_Column; });
         if (old->m_Options.m_Filter)
             rebuild = rebuild || old->m_Options.m_Dependencies.empty() ||
                       std::find(old->m_Options.m_Dependencies.begin(), old->m_Options.m_Dependencies.end(),

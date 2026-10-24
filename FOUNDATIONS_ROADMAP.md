@@ -35,7 +35,16 @@ command history, geometry, and persistence; these are not promised modules or
 current standalone SDKs. Public API usability and supported extension points
 remain acceptance criteria throughout.
 
-## Implementation status: 0.24, document workspace and reusable history
+## Implementation status: 0.25, stronger data views and source adapters
+
+The 0.25 increment extends F06 with worker-safe generic source adapters, bounded
+async result windows, confirmed edit sessions, portable typed query expressions,
+multi-key ordering and an optional SQLite backend. TreeTable, captured stable-ID
+row moves, column management and composed typed cell editors reuse the existing
+model/input/rendering foundations. The database browser is the working consumer.
+See [DATA_VIEWS.md](DATA_VIEWS.md) and [SQLITE_BROWSER.md](SQLITE_BROWSER.md).
+Loaded-window selection is explicit; cross-database selection, structural SQL
+writes, F10b document editing and F14 packaging remain separate work.
 
 The appearance/authoring follow-up adds neutral configurable preset families,
 coalesced owned OS appearance snapshots, palette icons and container drag insertion,

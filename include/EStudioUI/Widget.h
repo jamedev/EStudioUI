@@ -255,6 +255,7 @@ class Widget
 
   protected:
     friend class UiContext;
+    friend class ItemDragDrop;
     friend class SemanticTree;
     friend class WidgetRef;
     friend class ConstraintItem;
@@ -407,6 +408,7 @@ class Widget
 
     //! Stores optional delayed help text.
     std::string m_ToolTip;
+
     //! Stores the delayed help interval in seconds.
     double m_ToolTipDelay = 0.6;
 

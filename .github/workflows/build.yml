@@ -35,7 +35,7 @@ jobs:
   windows:
     name: Windows / MSVC 2022 / x64-windows-estudioui
     runs-on: windows-2022
-    timeout-minutes: 30
+    timeout-minutes: 45
     env:
       ESTUDIOUI_NATIVE_PLATFORM_TESTS: 1
       VCPKG_DEFAULT_BINARY_CACHE: ${{ github.workspace }}/.tools/vcpkg-binary-cache
@@ -48,6 +48,15 @@ jobs:
           restore-keys: |
             windows-v143-${{ hashFiles('vcpkg.json', 'vcpkg-bootstrap.json', 'vcpkg-configuration.json', 'cmake/ports/**', 'cmake/triplets/*.cmake') }}-
             windows-v143-
+      - name: Parse build scripts with PowerShell 7
+        shell: pwsh
+        run: |
+          foreach ($path in @('Build.ps1', 'scripts/Profile-Rendering.ps1')) {
+            $tokens = $null
+            $errors = $null
+            [System.Management.Automation.Language.Parser]::ParseFile((Join-Path $pwd $path), [ref]$tokens, [ref]$errors) | Out-Null
+            if ($errors.Count) { throw ($errors | Out-String) }
+          }
       - name: Install, build, and test Release
         shell: powershell
         run: |
@@ -78,6 +87,8 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw "Native Windows framebuffer self-test failed with exit code $LASTEXITCODE." }
           & (Join-Path $stage 'EStudioUICreator.exe') --self-test --output 'build/windows-vcpkg/verification/native-creator'
           if ($LASTEXITCODE -ne 0) { throw "Native Creator framebuffer self-test failed with exit code $LASTEXITCODE." }
+          & (Join-Path $stage 'EStudioUIDatabaseBrowser.exe') --self-test --output 'build/windows-vcpkg/verification/native-database-browser'
+          if ($LASTEXITCODE -ne 0) { throw "Native database browser framebuffer self-test failed with exit code $LASTEXITCODE." }
           ./scripts/Profile-Rendering.ps1 -SkipBuild -ExecutablePath (Join-Path $stage 'EStudioUIDemo.exe') -Frames 12 -Warmup 4 -Rate 0 -OutputDirectory 'build/windows-vcpkg/verification/native-profile-smoke'
           if ($LASTEXITCODE -ne 0) { throw "Native rendering profile smoke failed with exit code $LASTEXITCODE." }
       - name: Build and test Debug

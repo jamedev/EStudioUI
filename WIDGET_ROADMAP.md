@@ -129,7 +129,7 @@ modal convenience APIs that could introduce nested event loops.
 | ID | Widget/family | Scope | Priority |
 | --- | --- | --- | --- |
 | W37 | PropertyGrid / PropertyInspector | Categories and typed editors for booleans, enums, strings, numbers, colors, vectors | High — **0.23 virtual inspector delivered; mixed/multiple-selection editing pending** |
-| W38 | TreeTable | Hierarchy with columns for assemblies, layers, model properties | High |
+| W38 | TreeTable | Hierarchy with columns, shared selection, captured subtree moves, typed editing and virtual semantics | High — **0.25 delivered** |
 | W39 | IconGrid / ThumbnailView | Virtualized assets, materials, documents, images | High |
 | W40 | FileBrowser | Filesystem model with tree/list/thumbnail presentations | Later |
 | W41 | FilterPanel / FilterEditor | Composable filtering for reusable data models | Later |
@@ -262,3 +262,13 @@ TSan **6/6**, and local ASan/UBSan **42/42**. See the
 [final-source CI run](https://github.com/jamedev/EStudioUI/actions/runs/39980739125)
 and [verification record/captures](verification/WORKSPACES_0_22.md). Windows 11
 flyouts, physical mixed-DPI/snap and real AT remain interactive acceptance work.
+
+
+The 0.25 stronger-data-view increment delivers TreeTable, shared captured row
+moves for table/tree/list views, column hiding/reordering/resizing, composed
+bool/choice/numeric/color/null/text/binary cell editors and confirmed async edits.
+Generic worker-safe ModelAdapter providers and the optional SQLite adapter support
+portable typed filters, multi-key sort and bounded result windows. See
+[DATA_VIEWS.md](DATA_VIEWS.md) and the working [database browser](SQLITE_BROWSER.md).
+Selection is scoped to loaded records; persistent global selection, OS/cross-window
+data drags, structural SQL operations and keyset pagination remain later work.

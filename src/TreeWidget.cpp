@@ -8,6 +8,111 @@
 
 namespace EStudioUI
 {
+void TreeWidget::SetRowsMovable(bool enabled)
+{
+    VerifyStructuralMutation();
+    m_RowsMovable = enabled;
+    if (enabled)
+    {
+        EnsureDragDrop();
+    }
+    else if (m_DragDrop)
+    {
+        m_DragDrop->Cancel();
+    }
+}
+
+void TreeWidget::SetRowDropHandler(std::function<void(const ModelDragData&, const ModelDropTarget&)> handler)
+{
+    VerifyStructuralMutation();
+    EnsureDragDrop().SetDropHandler(std::move(handler));
+}
+
+Signal<ModelDragData, ModelDropTarget>& TreeWidget::RowsDropped()
+{
+    return EnsureDragDrop().Dropped();
+}
+
+Signal<std::string>& TreeWidget::DropRejected()
+{
+    return EnsureDragDrop().Rejected();
+}
+
+ItemDragDrop& TreeWidget::EnsureDragDrop()
+{
+    VerifyStructuralMutation();
+    if (!m_DragDrop)
+    {
+        const WidgetRef self(this);
+        m_DragDrop = std::make_unique<ItemDragDrop>(
+            *this,
+            [self]
+            {
+                auto* owner = dynamic_cast<TreeWidget*>(self.Get());
+                return owner ? owner->GetModel() : nullptr;
+            },
+            [self]
+            {
+                auto* owner = dynamic_cast<TreeWidget*>(self.Get());
+                const auto selection = owner ? owner->GetSelectionModel() : nullptr;
+                if (!selection)
+                {
+                    return std::vector<ItemId>{};
+                }
+                const auto selected = selection->GetSnapshot();
+                if (selected->m_Items.size() > 4096)
+                {
+                    throw std::length_error("A drag accepts at most 4096 selected records.");
+                }
+                return std::vector<ItemId>(selected->m_Items.begin(), selected->m_Items.end());
+            },
+            [self](Point point) -> std::optional<ModelDropTarget>
+            {
+                auto* owner = dynamic_cast<TreeWidget*>(self.Get());
+                return owner && owner->m_RowsMovable ? owner->GetRowDropTarget(point) : std::nullopt;
+            });
+    }
+    return *m_DragDrop;
+}
+
+std::optional<ModelDropTarget> TreeWidget::GetRowDropTarget(Point point) const
+{
+    if (!GetModel() || !GetViewport().Contains(point))
+    {
+        return {};
+    }
+    const auto viewport = GetViewport();
+    const int row = RowAt(point);
+    if (row < 0)
+    {
+        return ModelDropTarget{
+            0,
+            0,
+            {viewport.m_X,
+             viewport.m_Y + static_cast<float>(GetVisibleRowCount()) * GetStyle().m_RowHeight - GetScrollOffset().m_Y,
+             viewport.m_Width, 2},
+            false};
+    }
+    const auto item = VisibleRow(static_cast<std::size_t>(row)).m_Id;
+    const auto snapshot = GetModel()->GetRootModel()->GetSnapshot();
+    const auto parent = snapshot.GetParent(item);
+    const float y = viewport.m_Y + static_cast<float>(row) * GetStyle().m_RowHeight - GetScrollOffset().m_Y;
+    const float fraction = (point.m_Y - y) / GetStyle().m_RowHeight;
+    if (fraction >= .25f && fraction <= .75f)
+    {
+        return ModelDropTarget{item, 0, {viewport.m_X, y, viewport.m_Width, GetStyle().m_RowHeight}, true};
+    }
+    if (fraction < .25f)
+    {
+        return ModelDropTarget{parent, item, {viewport.m_X, y, viewport.m_Width, 2}, false};
+    }
+    const auto next = *snapshot.GetPosition(item) + 1;
+    return ModelDropTarget{parent,
+                           next < snapshot.GetRowCount(parent) ? snapshot.GetItem(next, parent) : 0,
+                           {viewport.m_X, y + GetStyle().m_RowHeight, viewport.m_Width, 2},
+                           false};
+}
+
 TreeWidget::TreeWidget() : ScrollWidget("treewidget")
 {
     RegisterStylePart("item", Hover | Pressed | Selected | Alternate | Expanded,
@@ -594,6 +699,10 @@ void TreeWidget::Paint(Renderer& renderer, FontFace& font, double time, float op
     }
     renderer.PopState();
     PaintScrollBars(renderer, opacity);
+    if (m_DragDrop)
+    {
+        m_DragDrop->Paint(renderer, opacity);
+    }
 }
 
 void TreeWidget::OnPointerDown(const PointerEvent& event)
@@ -616,17 +725,31 @@ void TreeWidget::OnPointerDown(const PointerEvent& event)
     const bool toggle = HasChildren(row.m_Id) && (m_PressedBranch || event.m_Clicks == 2);
     SetState(Pressed, true);
     const WidgetRef self(this);
-    SelectItem(row.m_Id, event.m_Modifiers);
+    const bool retainSelection = m_RowsMovable && m_View && !event.m_Modifiers.m_Control &&
+                                 !event.m_Modifiers.m_Shift && m_View->GetSelectionModel()->IsSelected(row.m_Id);
+    m_RetainedRowSelection = retainSelection;
+    if (!retainSelection)
+    {
+        SelectItem(row.m_Id, event.m_Modifiers);
+    }
     if (!self.Get() || !HasItem(row.m_Id))
         return;
     if (toggle && HasItem(row.m_Id))
         SetExpanded(row.m_Id, !IsExpanded(row.m_Id));
     else if (event.m_Clicks == 2)
         m_Activated.Emit(row.m_Id);
+    if (self.Get() && m_RowsMovable && m_View && !toggle)
+    {
+        EnsureDragDrop().Press(row.m_Id, GetContext()->ToWindowPoint(*this, event.m_Position));
+    }
 }
 
 void TreeWidget::OnPointerMove(const PointerEvent& event)
 {
+    if (m_DragDrop && m_DragDrop->Move(GetContext()->ToWindowPoint(*this, event.m_Position)))
+    {
+        return;
+    }
     ScrollWidget::OnPointerMove(event);
     m_HoverPosition = event.m_Position;
     const int index = RowAt(event.m_Position);
@@ -650,6 +773,20 @@ void TreeWidget::OnPointerMove(const PointerEvent& event)
 
 void TreeWidget::OnPointerUp(const PointerEvent& event)
 {
+    const WidgetRef self(this);
+    const bool dragged = m_DragDrop && m_DragDrop->Release(GetContext()->ToWindowPoint(*this, event.m_Position));
+    if (!self.Get())
+    {
+        return;
+    }
+    if (!dragged && m_RetainedRowSelection && m_Pressed && !m_PressedBranch)
+    {
+        SelectItem(m_Pressed, {});
+    }
+    if (!self.Get())
+    {
+        return;
+    }
     m_Pressed = 0;
     m_PressedBranch = false;
     SetState(Pressed, false);
@@ -658,6 +795,10 @@ void TreeWidget::OnPointerUp(const PointerEvent& event)
 
 void TreeWidget::OnCaptureLost()
 {
+    if (m_DragDrop)
+    {
+        m_DragDrop->Cancel();
+    }
     m_Pressed = 0;
     m_PressedBranch = false;
     SetState(Pressed, false);

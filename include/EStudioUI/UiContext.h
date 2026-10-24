@@ -28,20 +28,28 @@ class NativeTextInput;
 //! Identifies traversals during which synchronous structural changes are unsafe.
 enum class UiPhase
 {
+
     //! Allows ordinary input, commands, and deferred commits.
     Idle,
+
     //! Resolves cached widget and part styles.
     Style,
+
     //! Computes intrinsic geometry.
     Measure,
+
     //! Arranges widgets and invokes their layout hooks.
     Layout,
+
     //! Prepares external scene surfaces before painting.
     SurfacePreparation,
+
     //! Records the ordered widget drawing commands.
     Paint,
+
     //! Notifies surfaces that their shared textures were consumed.
     Submission,
+
     //! Queries extension hooks without permitting changes to the traversed tree.
     Inspection
 };
@@ -49,6 +57,7 @@ enum class UiPhase
 //! Cumulative counters used to verify cache behavior across animation frames.
 struct UiStats
 {
+
     //! Number of computed widget or decorative styles.
     std::size_t m_StyleResolutions = 0;
 
@@ -351,6 +360,7 @@ class UiContext
 
   private:
     friend class Widget;
+    friend class ItemDragDrop;
     friend class CssMotion;
     friend class Window;
     friend class AnimationSystem;
@@ -365,20 +375,28 @@ class UiContext
 
     //! Arms hover help, or keyboard help for an explicit preferred target.
     void ArmToolTip(Widget* preferred = nullptr);
+
     //! Cancels pending and visible help without moving focus.
     void DismissToolTip();
+
     //! Processes a due help deadline on the idle owner.
     void UpdateToolTip(double time);
+
     //! Returns the next help deadline, or minus one.
     double NextToolTipDeadline() const;
+
     //! Observes the help source without extending its lifetime.
     WidgetRef m_ToolTipTarget;
+
     //! Observes the owned top-layer help presentation.
     WidgetRef m_ToolTipPopup;
+
     //! Schedules delayed help without continuous rendering.
     double m_ToolTipDeadline = -1;
+
     //! Bounds the visible help interval.
     double m_ToolTipHideAt = -1;
+
     //! Prevents recursive arming while presenting help.
     bool m_ToolTipOpening = false;
 
@@ -419,6 +437,7 @@ class UiContext
     std::unique_ptr<SemanticTree> m_Semantics;
 
     //! Owns injectable services; it is destroyed before the native containing window.
+
     //! Retains idle delivery guards through callbacks that remove a context owner.
     struct IdleData;
     std::shared_ptr<IdleData> m_Idle;
@@ -615,6 +634,7 @@ class UiContext
                                      const AnimationOptions& options);
 
     //! Observes the font service, which outlives the context.
+
     //! Grants the font service access to registration guards and cache retirement.
     friend class FontFace;
 

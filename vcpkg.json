@@ -1,7 +1,7 @@
 {
   "$schema": "https://raw.githubusercontent.com/microsoft/vcpkg-tool/main/docs/vcpkg.schema.json",
   "name": "estudioui",
-  "version-semver": "0.23.0",
+  "version-semver": "0.25.0",
   "description": "C++20 GPU widget toolkit with GLFW, analytic outline text, signals, and CSS",
   "homepage": "https://github.com/jamedev/EStudioUI",
   "license": "MIT",
@@ -42,6 +42,13 @@
     {
       "name": "nlohmann-json",
       "default-features": false
+    },
+    {
+      "name": "sqlite3",
+      "default-features": false,
+      "features": [
+        "omit-load-extension"
+      ]
     }
   ]
 }

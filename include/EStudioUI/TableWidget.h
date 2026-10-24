@@ -5,6 +5,8 @@
 #include "CollectionView.h"
 #include "SortFilterModel.h"
 #include "ItemDelegate.h"
+#include "ItemDragDrop.h"
+#include "ModelQuery.h"
 
 namespace EStudioUI
 {
@@ -20,6 +22,7 @@ enum class ContentMeasurePolicy
 //! A caption and explicit sizing contract for one table column.
 struct TableColumn
 {
+
     //! UTF-8 header caption.
     std::string m_Title;
 
@@ -28,9 +31,21 @@ struct TableColumn
 };
 
 //! A virtualized single-cell-selection table with sorting, resizing, and editing.
-class TableWidget final : public ScrollWidget
+class TableWidget : public ScrollWidget
 {
   public:
+    //! Enables captured canonical row moves without creating per-record widgets.
+    void SetRowsMovable(bool enabled);
+
+    //! Installs an owner-side custom drop adapter for copy/transfer policies.
+    void SetRowDropHandler(std::function<void(const ModelDragData&, const ModelDropTarget&)> handler);
+
+    //! Reports accepted stable-ID drops after canonical publication.
+    Signal<ModelDragData, ModelDropTarget>& RowsDropped();
+
+    //! Reports rejected stale/cyclic/read-only drops without changing source data.
+    Signal<std::string>& DropRejected();
+
     //! Creates an empty editable table.
     TableWidget();
 
@@ -112,6 +127,30 @@ class TableWidget final : public ScrollWidget
     //! Assigns a Fixed/Content/Fill contract without replacing the attached model or its records.
     void SetColumnSize(int column, SizeRule size);
 
+    //! Reorders schema columns by a complete permutation without changing model coordinates.
+    void SetColumnOrder(std::vector<std::size_t> order);
+
+    //! Returns schema indices in visual order, optionally excluding hidden columns.
+    std::vector<std::size_t> GetColumnOrder(bool visibleOnly = false) const;
+
+    //! Moves one schema column to a final visual position.
+    void MoveColumn(std::size_t column, std::size_t visualIndex);
+
+    //! Shows/hides a schema column; at least one existing column remains visible.
+    void SetColumnVisible(std::size_t column, bool visible);
+
+    //! Returns the presentation visibility of a schema column.
+    bool IsColumnVisible(std::size_t column) const;
+
+    //! Enables captured header reordering; resize handles retain precedence.
+    void SetColumnsMovable(bool enabled);
+
+    //! Reports header sort intent; an observer owns source/server sorting when connected.
+    Signal<std::size_t, bool, bool>& SortRequested();
+
+    //! Updates header sort indicators after an application/source query change.
+    void SetSortIndicators(std::vector<ModelSort> sort);
+
     //! Returns current allocated column widths.
     std::vector<float> GetColumnWidths() const;
 
@@ -120,6 +159,9 @@ class TableWidget final : public ScrollWidget
 
     //! Opens a reusable text editor for a cell and selects its current contents.
     void BeginEdit(int row, int column);
+
+    //! Returns the active exact text/composed editor, or null while no edit is open.
+    Widget* GetCellEditor() const;
 
     //! Commits an active editor and restores table focus.
     void CommitEdit();
@@ -140,6 +182,40 @@ class TableWidget final : public ScrollWidget
     Rect GetViewport() const override;
 
   protected:
+    //! Resolves a drop in this view; hierarchy extensions may accept child targets.
+    virtual std::optional<ModelDropTarget> GetRowDropTarget(Point point) const;
+
+    //! Supplies the virtual row mapping reused by flat and hierarchical tables.
+    virtual std::size_t GetViewRowCount() const;
+
+    //! Resolves a visible row without enumerating preceding records.
+    virtual ItemId GetViewItem(std::size_t row) const;
+
+    //! Resolves canonical identity into this view's current row mapping.
+    virtual std::optional<std::size_t> GetViewIndex(ItemId item) const;
+
+    //! Refreshes a derived mapping before selection/editor/semantic remapping.
+    virtual void OnModelRowsChanged(ModelSnapshot snapshot, bool structure);
+
+    //! Adds hierarchy/extension content inset to the standard cell text.
+    virtual float GetCellIndent(int row, int column) const;
+
+    //! Paints an optional leading decoration using the same GPU cell clip/style.
+    virtual void PaintCellDecoration(Renderer& renderer, FontFace& font, int row, int column, Rect cell,
+                                     const Style& style, float opacity) const;
+
+    //! Invalidates mapped row geometry and preserves canonical selection identity.
+    void RefreshViewRows();
+
+    //! Resolves a body row for hierarchy/input extensions.
+    int RowAt(Point point) const;
+
+    //! Resolves a schema column for hierarchy/input extensions.
+    int ColumnAt(Point point) const;
+
+    //! Reports whether a persistent editor currently owns a cell.
+    bool IsEditing() const;
+
     //! Describes selection and logical structure without materializing row widgets.
     SemanticInfo DescribeSemantics() const override;
 
@@ -210,11 +286,50 @@ class TableWidget final : public ScrollWidget
     std::optional<SemanticKey> GetSemanticGridItem(std::size_t row, std::size_t column) const override;
 
   private:
+    //! Constructs/registers a weak drag endpoint only when explicitly requested.
+    ItemDragDrop& EnsureDragDrop();
+
+    //! Owns opt-in capture/preview metadata, independent of source records.
+    std::unique_ptr<ItemDragDrop> m_DragDrop;
+
+    //! Enables pointer drag handling without changing default legacy gestures.
+    bool m_RowsMovable = false;
+
+    //! Defers collapsing an already selected multi-row set until a click is confirmed.
+    bool m_RetainedRowSelection = false;
+
     //! Creates a collision-free record key in the current data namespace.
     SemanticKey SemanticRowKey(std::size_t row, std::uint64_t part = 0) const;
 
     //! Resolves a key into current visible row coordinates, or empty when filtered/deleted.
     std::optional<std::size_t> SemanticRowIndex(SemanticKey key) const;
+
+    //! Validates/reset schema-sized presentation arrays after a schema change.
+    void SyncColumns(bool reset = false);
+
+    //! Returns the pixel start of a schema column in visual order.
+    float ColumnOffset(std::size_t column, const std::vector<float>& widths) const;
+
+    //! Stores a complete schema-index permutation independently of model values.
+    std::vector<std::size_t> m_ColumnOrder;
+
+    //! Stores explicit per-schema visibility.
+    std::vector<bool> m_ColumnVisible;
+
+    //! Tracks prepared visible schema indices for semantic/grid coordinates.
+    std::vector<std::size_t> m_SemanticColumns;
+
+    //! Enables captured header movement without changing default legacy input timing.
+    bool m_ColumnsMovable = false, m_HeaderDragging = false;
+
+    //! Retains the original captured header position.
+    Point m_HeaderOrigin;
+
+    //! Stores source-owned multi-key header indicators.
+    std::vector<ModelSort> m_SortIndicators;
+
+    //! Delivers source/server sort intent with additive-key modifier.
+    Signal<std::size_t, bool, bool> m_SortRequested;
 
     //! Prepared column prefix coordinates; semantic inspection never triggers content fitting.
     std::vector<float> m_SemanticColumnOffsets;
@@ -270,6 +385,18 @@ class TableWidget final : public ScrollWidget
     //! Detects conflicting external changes to the edited field.
     ModelValue m_EditOriginal;
 
+    //! Observes the single optional composed editor owned by this table.
+    WidgetRef m_TypedEditor;
+
+    //! Captures a confirmed in-flight edit without retaining its model/view.
+    ModelEditSession m_EditSession;
+
+    //! Distinguishes successive editor lifetimes across asynchronous results.
+    std::uint64_t m_EditSerial = 0;
+
+    //! Finishes a confirmed edit or preserves a rejected draft for correction.
+    void FinishEdit(ModelEditResult result, bool restoreFocus, std::uint64_t serial);
+
     //! Prevents focus/model callbacks from recursively committing the same editor.
     bool m_Committing = false;
 
@@ -281,12 +408,6 @@ class TableWidget final : public ScrollWidget
 
     //! Completes editing, optionally committing text and restoring focus.
     void EndEdit(bool commit, bool restoreFocus);
-
-    //! Returns the column under a window-coordinate point, or -1.
-    int ColumnAt(Point point) const;
-
-    //! Returns the body row under a layout-coordinate point, or -1.
-    int RowAt(Point point) const;
 
     //! Returns the fixed header under a layout-coordinate point, or -1.
     int HeaderAt(Point point) const;

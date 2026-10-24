@@ -42,6 +42,16 @@ std::string ItemDelegate::GetEditorText(const ModelSnapshot& snapshot, ItemId it
     return FormatModelValue(snapshot.GetValue(item, column));
 }
 
+std::unique_ptr<CellEditor> ItemDelegate::CreateEditor(const ModelSnapshot& snapshot, ItemId item,
+                                                       std::size_t column) const
+{
+    const auto& schema = snapshot.GetColumns().at(column);
+    return schema.m_EditorType || schema.m_Nullable || schema.m_ValueType == ModelValueType::Blob ||
+                   !schema.m_Choices.empty()
+               ? CreateTypedCellEditor(schema, snapshot.GetValue(item, column))
+               : nullptr;
+}
+
 ModelValue ItemDelegate::ParseEdit(const ModelSnapshot& snapshot, ItemId, std::size_t column,
                                    std::string_view text) const
 {

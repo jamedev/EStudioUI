@@ -482,3 +482,28 @@ Floating document hosts copy compiled stylesheet revisions; there is no CSS pars
 on drag or paint-only animation ticks. Approval uses normal MessageBox/dialog
 styling, with centered unpadded dialog-close glyphs. See
 [document APIs and scope](DOCUMENT_WORKSPACE.md).
+
+
+## Data views and composed cell editors (0.25)
+
+TreeTable retains the `tablewidget` type and adds `.tree-table`, so existing rich
+`::header`, `::cell`, row/selection and scrollbar styling applies unchanged. Its
+`::branch` part supports `:expanded` as well as hover/pressed/selected variants.
+Visible column reordering changes geometry, not schema cell identities. Captured
+insertion previews use the GPU `::drop-indicator` part (background/opacity), with
+a neutral foreground-derived default.
+
+Typed editors compose existing controls below `.cell-editor`. Hooks are
+`.cell-editor-value`, `.cell-null`, `.cell-apply` and `.cell-cancel`; customize the
+ordinary checkbox/combo/numeric/color/text parts as for standalone controls. A
+pending asynchronous edit disables its composition until the confirmed result.
+No row/cell widget or CSS parse is introduced for unedited records.
+
+```css
+.tree-table::branch { color: #667085; background: transparent; }
+.tree-table::branch:expanded { color: #344054; }
+tablewidget::drop-indicator { background: #2563eb; opacity: 0.9; }
+.cell-editor { background: #ffffff; gap: 2px; padding: 0px; }
+.cell-apply { color: #175c3a; }
+.cell-cancel { color: #9a352e; }
+```

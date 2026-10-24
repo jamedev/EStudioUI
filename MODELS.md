@@ -1,5 +1,11 @@
 # Shared models, selection, and virtual collection views
 
+The 0.25 [data-view and adapter extension](DATA_VIEWS.md) adds portable typed
+queries, multi-key sorting, exact binary/null fields, confirmed asynchronous
+edits, bounded source windows, TreeTable and captured canonical row moves.
+[SQLITE_BROWSER.md](SQLITE_BROWSER.md) documents the working SQLite consumer.
+
+
 EStudioUI 0.11 adds the first F06 model foundation. One `ItemModel` publishes
 owned immutable data to several views. `SelectionModel` shares canonical item
 identities; `SortFilterModel` supplies independent ordering and filtering.

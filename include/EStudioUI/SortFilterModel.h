@@ -1,12 +1,14 @@
 #pragma once
 
 #include "ItemModel.h"
+#include "ModelQuery.h"
 
 namespace EStudioUI
 {
 //! Records the explicit whole-model work of the most recent projection preparation.
 struct ProjectionStats
 {
+
     //! Source identities visited while constructing this mapping.
     std::size_t m_Scanned = 0;
 
@@ -39,6 +41,10 @@ class SortFilterModel final : public ItemModel
     //! Applies typed edits to canonical source records, including temporarily filtered identities.
     bool Apply(std::vector<ModelEdit> edits, std::optional<std::uint64_t> expectedRevision = {}) override;
 
+    //! Forwards synchronous/asynchronous edit acknowledgement to the canonical source.
+    ModelEditSession RequestEdit(std::vector<ModelEdit> edits,
+                                 std::optional<std::uint64_t> expectedRevision = {}) override;
+
     //! Replaces canonical source data with the supplied revision policy.
     bool Replace(ModelSnapshot snapshot, std::optional<std::uint64_t> expectedRevision = {}) override;
 
@@ -47,6 +53,12 @@ class SortFilterModel final : public ItemModel
 
     //! Sorts each sibling range by a typed raw column; an empty column restores source order.
     void SetSort(std::optional<std::size_t> column, bool ascending = true);
+
+    //! Applies ordered primary/secondary keys while preserving canonical identities.
+    void SetSortKeys(std::vector<ModelSort> keys);
+
+    //! Returns an owned description of the current sort keys.
+    std::vector<ModelSort> GetSortKeys() const;
 
     //! Filters records with a pure predicate, retaining matching descendants' ancestors.
     void SetFilter(std::function<bool(const ModelSnapshot&, ItemId)> predicate,

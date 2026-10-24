@@ -46,6 +46,15 @@ struct NativeWindowChrome::Impl : std::enable_shared_from_this<Impl>
             const MARGINS margins{0, 0, m_Enabled ? 1 : 0, 0};
             DwmExtendFrameIntoClientArea(m_Window, &margins);
         }
+        // Client geometry alone does not stop DWM from painting caption controls
+        // after a title/activation update. Keep shell styles for snapping and the
+        // system menu, but give this GPU window exclusive ownership of its frame.
+        const DWMNCRENDERINGPOLICY policy = m_Enabled ? DWMNCRP_DISABLED : DWMNCRP_USEWINDOWSTYLE;
+        const auto result = DwmSetWindowAttribute(m_Window, DWMWA_NCRENDERING_POLICY, &policy, sizeof(policy));
+        if (m_Enabled && m_CompositionEnabled && FAILED(result))
+        {
+            throw std::runtime_error("Windows could not disable the system caption renderer.");
+        }
     }
 
     Point ClientPoint(LPARAM position, bool screen) const
@@ -248,11 +257,7 @@ struct NativeWindowChrome::Impl : std::enable_shared_from_this<Impl>
             case 0x00AF: // WM_NCUAHDRAWFRAME.
                 return 0;
             case WM_NCPAINT:
-                if (!self.m_CompositionEnabled)
-                {
-                    return 0;
-                }
-                break;
+                return 0;
             case WM_ACTIVATE:
                 self.Extend();
                 if (LOWORD(wParam) == WA_INACTIVE)

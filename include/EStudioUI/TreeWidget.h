@@ -4,6 +4,7 @@
 #include "CollectionView.h"
 #include "TreeRowMap.h"
 #include "ItemDelegate.h"
+#include "ItemDragDrop.h"
 
 #include <cstdint>
 #include <unordered_map>
@@ -16,6 +17,18 @@ class TreeWidget final : public ScrollWidget
   public:
     //! Stable node identity; zero identifies the invisible root.
     using NodeId = std::uint64_t;
+
+    //! Enables captured canonical row moves without creating per-record widgets.
+    void SetRowsMovable(bool enabled);
+
+    //! Installs an owner-side custom drop adapter for copy/transfer policies.
+    void SetRowDropHandler(std::function<void(const ModelDragData&, const ModelDropTarget&)> handler);
+
+    //! Reports accepted stable-ID drops after canonical publication.
+    Signal<ModelDragData, ModelDropTarget>& RowsDropped();
+
+    //! Reports rejected stale/cyclic/read-only drops without changing source data.
+    Signal<std::string>& DropRejected();
 
     //! Creates an empty hierarchy.
     TreeWidget();
@@ -133,6 +146,21 @@ class TreeWidget final : public ScrollWidget
     void OnKey(Key key, bool down, bool repeat, Modifiers modifiers) override;
 
   private:
+    //! Resolves an insertion against the existing visible-row mapping.
+    std::optional<ModelDropTarget> GetRowDropTarget(Point point) const;
+
+    //! Constructs/registers a weak drag endpoint only when explicitly requested.
+    ItemDragDrop& EnsureDragDrop();
+
+    //! Owns opt-in capture/preview metadata, independent of source records.
+    std::unique_ptr<ItemDragDrop> m_DragDrop;
+
+    //! Enables pointer drag handling without changing default legacy gestures.
+    bool m_RowsMovable = false;
+
+    //! Defers collapsing an already selected multi-row set until a click is confirmed.
+    bool m_RetainedRowSelection = false;
+
     //! Returns a stable identity in the current model namespace.
     SemanticKey SemanticItemKey(NodeId item) const;
 

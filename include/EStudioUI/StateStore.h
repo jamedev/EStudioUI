@@ -107,6 +107,7 @@ class StateStore
 {
     friend class Action;
     friend class UndoHistory;
+    friend class AdapterModel;
 
   public:
     //! Uses one owner dispatcher and bounds callback feedback to a positive number of notification rounds.

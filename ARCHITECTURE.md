@@ -738,3 +738,29 @@ service callback consumes results, advances decisions and retires closed hosts.
 Unchanged turns do no document scan and introduce no new timer. Recursive service
 pumping is diagnosed; owners can disappear during a callback without leaving raw
 service targets alive. See [contracts and limits](DOCUMENT_WORKSPACE.md).
+
+
+## Stronger data views (0.25)
+
+TreeTable extends TableWidget through a shared visible-row mapping, cell decoration
+and drop-target boundary. TreeRowMap indexes expanded branches; the table renderer,
+scrolling, columns, selection, editing and virtual semantics stay common. Captured
+ItemDragDrop endpoints use the existing input hit test and world/layout transforms;
+default moves validate revision, forest roots and cycles before one source rebuild.
+Typed delegates allocate only one active editor composition.
+
+ModelAdapter separates pure worker I/O from the GUI's ItemModel boundary. AdapterModel
+publishes one immutable, byte-bounded result page and coherent status through
+StateStore, with a reserved completion slot independent of normal queue admission.
+Source keys/schema revisions are distinct from bounded cached UI identities.
+Worker-prepared display values are bounded independently of exact raw fields.
+RequestEdit/ModelEditSession supports synchronous models and confirmed asynchronous
+persistence; table drafts stay alive until the terminal outcome. See
+[DATA_VIEWS.md](DATA_VIEWS.md) for caps, full-scan costs and lifetime contracts.
+
+EStudioUI::Sqlite is a separate optional target. Every provider operation owns a
+connection on its worker; typed predicates bind values and quote metadata identifiers.
+Count/page reads share a transaction. Optimistic multi-field writes and their
+resulting page are captured in one transaction before commit. The browser consumes
+these public APIs and application-owned workers. SQLite is the only new dependency,
+public domain, from the existing pinned manifest with loadable extensions omitted.

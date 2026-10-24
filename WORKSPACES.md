@@ -224,3 +224,16 @@ occur during explicit operations, serialization and stylesheet replacements.
 Actual rendering checks compare retained/full pixels at narrow/wide sizes,
 transfer shared GL surfaces, and verify zero settled repaint work. See
 [verification](verification/WORKSPACES_0_22.md) for completed checks and limits.
+
+
+## Caption rendering ownership (0.25)
+
+Custom chrome now disables DWM non-client rendering explicitly while enabled,
+restores the normal policy when disabled, and suppresses native non-client paint.
+Changing client geometry alone had allowed a second system caption to be painted
+above/over the GPU title row. The HWND keeps resize, maximize and system-menu
+styles; hit testing and the existing resize modal-loop scheduler remain native.
+The native regression checks desktop pixels after title, activation and theme
+updates as well as client geometry and system interactions. Physical Windows 11
+snap flyouts, shadows/corners and mixed-monitor DPI remain interactive acceptance
+work; a software-GL client capture alone does not establish desktop frame fidelity.

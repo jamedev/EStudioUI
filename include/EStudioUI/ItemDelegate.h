@@ -2,6 +2,7 @@
 
 #include "ModelSnapshot.h"
 #include "Style.h"
+#include "CellEditor.h"
 
 namespace EStudioUI
 {
@@ -28,6 +29,10 @@ class ItemDelegate
 
     //! Returns raw editor text independently of formatted display units.
     virtual std::string GetEditorText(const ModelSnapshot& snapshot, ItemId item, std::size_t column) const;
+
+    //! Creates one optional composed editor; null retains the legacy exact text editor.
+    virtual std::unique_ptr<CellEditor> CreateEditor(const ModelSnapshot& snapshot, ItemId item,
+                                                     std::size_t column) const;
 
     //! Parses and validates committed editor text into an owned typed value.
     virtual ModelValue ParseEdit(const ModelSnapshot& snapshot, ItemId item, std::size_t column,

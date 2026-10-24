@@ -1,6 +1,7 @@
 #pragma once
 
 #include "ModelBuilder.h"
+#include "ModelEditSession.h"
 #include "State.h"
 #include "ThreadAffinity.h"
 
@@ -11,6 +12,7 @@ class SelectionModel;
 //! Identifies one changed semantic field without storing its formatted presentation.
 struct ModelField
 {
+
     //! Stable item identity.
     ItemId m_Item = 0;
 
@@ -27,6 +29,7 @@ struct ModelField
 //! Owns one coherent model publication, including immutable before/after data.
 struct ModelChange
 {
+
     //! Snapshot before this publication.
     ModelSnapshot m_Before;
 
@@ -54,6 +57,7 @@ namespace Detail
 //! Keeps model data and its accumulated change description in one transactional state value.
 struct ModelState
 {
+
     //! Current candidate immutable storage.
     ModelSnapshot m_Snapshot;
 
@@ -123,6 +127,10 @@ class ItemModel : public std::enable_shared_from_this<ItemModel>
     //! Applies final field candidates once; an expected canonical revision rejects obsolete work.
     virtual bool Apply(std::vector<ModelEdit> edits, std::optional<std::uint64_t> expectedRevision = {});
 
+    //! Requests an edit and reports its confirmed outcome; adapters may complete asynchronously.
+    virtual ModelEditSession RequestEdit(std::vector<ModelEdit> edits,
+                                         std::optional<std::uint64_t> expectedRevision = {});
+
     //! Replaces a complete snapshot atomically, pruning selection in the same store transaction.
     virtual bool Replace(ModelSnapshot snapshot, std::optional<std::uint64_t> expectedRevision = {});
 
@@ -163,6 +171,12 @@ class ItemModel : public std::enable_shared_from_this<ItemModel>
     virtual ModelChange PreviewChange(const ModelChange& canonical) const;
 
   protected:
+    //! Allows derived asynchronous models to create an owner-bound pending result.
+    static ModelEditSession BeginEditSession();
+
+    //! Settles a derived model's result without exposing its completion to view consumers.
+    static void CompleteEditSession(const ModelEditSession& session, ModelEditResult result);
+
     //! Publishes a derived mapping while preserving its source domain and field impacts.
     bool PublishProjection(ModelSnapshot snapshot, const ModelChange& sourceChange, bool reordered);
 

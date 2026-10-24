@@ -1,5 +1,10 @@
 # EStudioUI
 
+0.25 adds [stronger data views and generic model adapters](DATA_VIEWS.md),
+including TreeTable and a working [SQLite database browser](SQLITE_BROWSER.md).
+Build, test and launch it on Windows with `.\Build.ps1 -RunDatabaseBrowser`.
+
+
 A C++20 application framework prototype, currently centered on GLFW windows,
 analytic GPU shapes and text, typed signals, and CSS styling. Controls include
 buttons, checkboxes/radio groups, read-only/editable combos, scrolling forms, splitters,

@@ -18,6 +18,8 @@
 .PARAMETER SkipGpuTest
     Skip the native OpenGL self-test on machines without an OpenGL 3.3 context.
     Core tests still run. Intended for hosted Windows CI runners.
+.PARAMETER RunDatabaseBrowser
+    Open the SQLite browser after all automated checks pass.
 .PARAMETER RunCreator
     Open the EStudioUICreator application after automated checks pass.
 .PARAMETER Run
@@ -39,7 +41,8 @@ param(
     [int]$Jobs = [Math]::Max(1, [Math]::Min(4, [Environment]::ProcessorCount)),
     [switch]$SkipGpuTest,
     [switch]$Run,
-    [switch]$RunCreator
+    [switch]$RunCreator,
+    [switch]$RunDatabaseBrowser
 )
 
 Set-StrictMode -Version Latest
@@ -291,7 +294,7 @@ try
         "-DVCPKG_TARGET_TRIPLET:STRING=$targetTriplet", '-DVCPKG_HOST_TRIPLET:STRING=x64-windows',
         "-DVCPKG_INSTALLED_DIR:PATH=$installedRoot",
         '-DCMAKE_MSVC_RUNTIME_LIBRARY:STRING=MultiThreaded$<$<CONFIG:Debug>:Debug>DLL',
-        '-DESTUDIOUI_BUILD_DEMO:BOOL=ON', '-DESTUDIOUI_BUILD_CREATOR:BOOL=ON', '-DESTUDIOUI_BUILD_TESTS:BOOL=ON', '-DESTUDIOUI_GPU_TESTS:BOOL=OFF'
+        '-DESTUDIOUI_BUILD_DATABASE_BROWSER:BOOL=ON', '-DESTUDIOUI_BUILD_SQLITE:BOOL=ON', '-DESTUDIOUI_BUILD_DEMO:BOOL=ON', '-DESTUDIOUI_BUILD_CREATOR:BOOL=ON', '-DESTUDIOUI_BUILD_TESTS:BOOL=ON', '-DESTUDIOUI_GPU_TESTS:BOOL=OFF'
     )
     Invoke-Checked 'Build EStudioUI' $cmake @('--build', $buildRoot, '--config', $Configuration, '--parallel', $Jobs.ToString())
     Invoke-Checked 'Run core tests' $ctest @('--test-dir', $buildRoot, '-C', $Configuration, '--output-on-failure', '--no-tests=error')
@@ -305,18 +308,28 @@ try
     {
         throw "The Creator executable was not produced: $creatorExecutable"
     }
+    $databaseExecutable = Join-Path $buildRoot "$Configuration/EStudioUIDatabaseBrowser.exe"
+    if (-not (Test-Path -LiteralPath $databaseExecutable -PathType Leaf))
+    {
+        throw "The database browser executable was not produced: $databaseExecutable"
+    }
     if (-not $SkipGpuTest)
     {
         $verification = Join-Path $buildRoot "verification/$Configuration"
         Invoke-Checked 'Run native GPU self-test' $executable @('--self-test', '--output', $verification)
         Invoke-Checked 'Run Creator GPU self-test' $creatorExecutable @('--self-test', '--output', (Join-Path $verification 'creator'))
+        Invoke-Checked 'Run database browser GPU self-test' $databaseExecutable @('--self-test', '--output', (Join-Path $verification 'database-browser'))
     }
     else
     {
         Write-Host 'Native GPU self-test skipped by -SkipGpuTest; core tests passed.'
     }
     Write-Host "`nEStudioUI build and selected checks passed: $executable" -ForegroundColor Green
-    if ($RunCreator)
+    if ($RunDatabaseBrowser)
+    {
+        Invoke-Checked 'Launch SQLite database browser' $databaseExecutable
+    }
+    elseif ($RunCreator)
     {
         Invoke-Checked 'Launch EStudioUICreator' $creatorExecutable
     }

@@ -14,6 +14,7 @@ namespace EStudioUI
 //! Exposes one field of an ordinary C++ record through an immutable model adapter.
 template <typename T> struct RecordColumn
 {
+
     //! Stores public formatting, editing, and sizing metadata.
     ModelColumn m_Schema;
 
@@ -32,6 +33,7 @@ namespace Detail
 //! Stores immutable identities and hierarchy separately from paged record values.
 struct RecordIndex
 {
+
     //! Lists IDs in storage order.
     std::vector<ItemId> m_Items;
 
@@ -283,6 +285,11 @@ template <typename T, typename V> RecordColumn<T> Column(std::string title, V T:
     else if constexpr (std::is_same_v<V, std::string>)
     {
         result.m_Schema.m_ValueType = ModelValueType::Text;
+    }
+    else if constexpr (std::is_same_v<V, ModelBlob>)
+    {
+        result.m_Schema.m_ValueType = ModelValueType::Blob;
+        result.m_Schema.m_EditorType = ModelValueType::Blob;
     }
     else
     {

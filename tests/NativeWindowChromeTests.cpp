@@ -7,6 +7,7 @@
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
 #include <windowsx.h>
+#include <dwmapi.h>
 
 #include <atomic>
 #include <chrono>
@@ -25,6 +26,18 @@ LPARAM s_ActivationPaint = 0;
 
 LRESULT CALLBACK ProbeProcedure(HWND window, UINT message, WPARAM wParam, LPARAM lParam)
 {
+    if (message == WM_PAINT)
+    {
+        PAINTSTRUCT paint{};
+        const auto dc = BeginPaint(window, &paint);
+        RECT client{};
+        GetClientRect(window, &client);
+        const auto brush = CreateSolidBrush(RGB(197, 23, 151));
+        FillRect(dc, &client, brush);
+        DeleteObject(brush);
+        EndPaint(window, &paint);
+        return 0;
+    }
     if (message == WM_NCLBUTTONDOWN && (wParam == HTMINBUTTON || wParam == HTMAXBUTTON || wParam == HTCLOSE))
     {
         ++s_DefaultCaptionPresses;
@@ -48,6 +61,39 @@ void Check(bool condition, const char* message)
     {
         throw std::runtime_error(message);
     }
+}
+
+bool CustomCaptionPixels(HWND window)
+{
+    SetWindowPos(window, HWND_TOPMOST, 80, 80, 0, 0, SWP_NOSIZE | SWP_NOACTIVATE | SWP_SHOWWINDOW);
+    for (int attempt = 0; attempt < 30; ++attempt)
+    {
+        RedrawWindow(window, nullptr, nullptr, RDW_FRAME | RDW_INVALIDATE | RDW_UPDATENOW);
+        DwmFlush();
+        RECT client{};
+        GetClientRect(window, &client);
+        HDC screen = GetDC(nullptr);
+        bool correct = screen != nullptr;
+        for (const LONG x : {80L, client.right / 2, client.right - 25})
+        {
+            POINT point{x, 12};
+            ClientToScreen(window, &point);
+            const auto color = GetPixel(screen, point.x, point.y);
+            correct = correct && color != CLR_INVALID && abs(static_cast<int>(GetRValue(color)) - 197) <= 12 &&
+                      abs(static_cast<int>(GetGValue(color)) - 23) <= 12 &&
+                      abs(static_cast<int>(GetBValue(color)) - 151) <= 12;
+        }
+        if (screen)
+        {
+            ReleaseDC(nullptr, screen);
+        }
+        if (correct)
+        {
+            return true;
+        }
+        std::this_thread::sleep_for(std::chrono::milliseconds(10));
+    }
+    return false;
 }
 
 LRESULT Hit(HWND window, int x, int y)
@@ -278,6 +324,18 @@ int main()
         Check(ticks >= 5, "Custom chrome preserves ordinary scheduler frames during the real SC_SIZE modal loop");
         resize.RethrowError();
         chrome.RethrowError();
+        const auto captionStyle = GetWindowLongPtrW(window, GWL_STYLE);
+        Check((captionStyle & (WS_THICKFRAME | WS_MAXIMIZEBOX | WS_SYSMENU)) ==
+                  (WS_THICKFRAME | WS_MAXIMIZEBOX | WS_SYSMENU),
+              "Custom rendering retains native resize, maximize and system-menu styles");
+        Check(CustomCaptionPixels(window),
+              "Desktop-composited pixels contain the custom caption rather than a system overlay");
+        SetWindowTextW(window, L"Creator dirty title update *");
+        SendMessageW(window, WM_NCACTIVATE, TRUE, 0);
+        Check(CustomCaptionPixels(window), "Changing the title cannot redraw system caption buttons over the client");
+        SendMessageW(window, WM_NCACTIVATE, FALSE, 0);
+        SendMessageW(window, WM_THEMECHANGED, 0, 0);
+        Check(CustomCaptionPixels(window), "Inactive/theme-change desktop pixels retain exactly one custom caption");
         RECT beforeDisable{};
         GetClientRect(window, &beforeDisable);
         chrome.SetEnabled(false);

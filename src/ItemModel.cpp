@@ -18,9 +18,19 @@ void ValidateSchema(const Detail::ModelState& state)
         throw std::length_error("This model exceeds the supported signed 32-bit view index domain.");
     for (const auto& column : snapshot.GetColumns())
     {
-        if (column.m_ValueType > ModelValueType::Color ||
+        if (column.m_ValueType < ModelValueType::Any || column.m_ValueType > ModelValueType::Blob ||
+            (column.m_EditorType &&
+             (*column.m_EditorType < ModelValueType::Any || *column.m_EditorType > ModelValueType::Blob)) ||
+            column.m_Choices.size() > 256 ||
             (column.m_WidthHint && (!std::isfinite(*column.m_WidthHint) || *column.m_WidthHint < 0)))
-            throw std::invalid_argument("Model schema requires a known value type and finite nonnegative width hints.");
+        {
+            throw std::invalid_argument("Model schema requires known value/editor types, at most 256 choices, and "
+                                        "finite nonnegative width hints.");
+        }
+        for (const auto& choice : column.m_Choices)
+        {
+            ValidateModelValue(column, choice);
+        }
     }
     for (const auto& field : state.m_Fields)
         if (field.m_Role == ModelRole::Edit && snapshot.Contains(field.m_Item))
@@ -197,6 +207,37 @@ bool ItemModel::Apply(std::vector<ModelEdit> edits, std::optional<std::uint64_t>
             changed = Publish(after, std::move(fields), false, false, expectedRevision);
         });
     return changed;
+}
+
+ModelEditSession ItemModel::BeginEditSession()
+{
+    return ModelEditSession::Create();
+}
+
+void ItemModel::CompleteEditSession(const ModelEditSession& session, ModelEditResult result)
+{
+    session.Complete(std::move(result));
+}
+
+ModelEditSession ItemModel::RequestEdit(std::vector<ModelEdit> edits, std::optional<std::uint64_t> expectedRevision)
+{
+    VerifyAccess();
+    const auto before = GetSnapshot();
+    const auto lifetime = GetHandle();
+    auto session = ModelEditSession::Create();
+    try
+    {
+        Apply(std::move(edits), expectedRevision);
+        session.Complete({lifetime.IsConnected() ? ModelEditStatus::Committed : ModelEditStatus::OwnerClosed, {}});
+    }
+    catch (const std::exception& error)
+    {
+        const auto status = !lifetime.IsConnected()   ? ModelEditStatus::OwnerClosed
+                            : GetSnapshot() != before ? ModelEditStatus::Committed
+                                                      : ModelEditStatus::Failed;
+        session.Complete({status, error.what()});
+    }
+    return session;
 }
 
 bool ItemModel::Replace(ModelSnapshot snapshot, std::optional<std::uint64_t> expectedRevision)
