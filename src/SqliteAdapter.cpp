@@ -295,7 +295,7 @@ Schema Describe(Connection& db, const std::string& name, bool writable)
         ModelColumn column;
         column.m_Title = columnName;
         column.m_ValueType = ModelValueType::Any;
-        column.m_Nullable = true;
+        column.m_Nullable = sqlite3_column_int(columns.m_Value, 2) == 0;
         column.m_Editable = writable && !virtualTable && result.m_DataSet.m_Kind == "table" && !hidden && !pk;
         const auto type = Upper(columns.Text(1));
         column.m_EditorType = type.find("BOOL") != std::string::npos  ? ModelValueType::Boolean

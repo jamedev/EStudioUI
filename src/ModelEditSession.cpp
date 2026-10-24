@@ -48,7 +48,7 @@ std::optional<ModelEditResult> ModelEditSession::GetResult() const
     {
         return {};
     }
-    m_Data->m_Affinity.VerifyAccess("Document close result access");
+    m_Data->m_Affinity.VerifyAccess("Model edit result access");
     return m_Data->m_Result;
 }
 
@@ -59,7 +59,7 @@ void ModelEditSession::OnFinished(std::function<void(ModelEditResult)> callback)
     {
         throw std::invalid_argument("A model edit subscription requires a valid session and callback.");
     }
-    data->m_Affinity.VerifyAccess("Document close result subscription");
+    data->m_Affinity.VerifyAccess("Model edit result subscription");
     if (data->m_Result)
     {
         data->Invoke(callback);
@@ -87,7 +87,7 @@ void ModelEditSession::Complete(ModelEditResult result) const
     {
         return;
     }
-    data->m_Affinity.VerifyAccess("Document close result completion");
+    data->m_Affinity.VerifyAccess("Model edit result completion");
     if (data->m_Result)
     {
         return;

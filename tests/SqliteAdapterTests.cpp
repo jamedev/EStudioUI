@@ -118,6 +118,8 @@ void Database()
           "Binary values retain zero bytes");
     Check(page.m_Rows[1].m_Values[2].index() == 0 && std::get<ModelBlob>(page.m_Rows[1].m_Values[3]).empty(),
           "NULL and empty binary values are distinct");
+    Check(!page.m_DataSet.m_Columns[1].m_Nullable && page.m_DataSet.m_Columns[2].m_Nullable,
+          "Editor metadata distinguishes nullable fields from NOT NULL constraints");
     Check(!page.m_DataSet.m_Columns[0].m_Editable && page.m_DataSet.m_Columns[1].m_Editable,
           "Identity fields remain read-only");
     query.m_Offset = 100;
