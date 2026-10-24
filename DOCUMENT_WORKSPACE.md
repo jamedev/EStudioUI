@@ -41,7 +41,9 @@ The save body above is a contract illustration, not a complete persistence
 handler. [The compiled example](examples/DocumentWorkspace.cpp) accepts an
 application persistence function; [the gallery](demo/DocumentGallery.cpp)
 implements an actual picker and atomic JSON replacement. Applications retain
-their canonical State models for as long as their documents need them.
+their canonical State models for as long as their documents need them. The
+compiled TextBox example commits on `Submitted` (Enter); use `TextChanged` for
+live string editing or a focus-loss commit for an application-owned draft.
 
 `UndoAction`, `RedoAction`, `SaveAction` and `CloseAction` are shared commands
 following the active stable document, with Primary+Z, Primary+Y/Shift+Z,

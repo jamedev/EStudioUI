@@ -496,10 +496,12 @@ rules, and a clear source/API compatibility policy. Until then retain readable
 public APIs, extension contracts, and dependency direction on every milestone;
 deferring packaging does not defer those everyday design requirements.
 
-Generalize reusable command grouping/history and versioned workspace state at
-the application track. Reuse lessons from SketchDocument; do not couple all
-widgets to the sketcher's history. Restore layouts, dock states and settings by
-stable IDs, with migration and malformed-state handling.
+The 0.24 application-track slice delivers reusable transactional command grouping
+and bounded history independently of the sketcher's private command stacks.
+The remaining F16 work is versioned application-session state and recovery:
+restore document identities, layouts, dock states and settings through explicit
+application adapters, migration and malformed-state handling. DockManager already
+has its separate bounded versioned panel-layout format.
 
 ## Delivery gates and evidence
 
