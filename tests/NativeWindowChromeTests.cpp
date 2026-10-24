@@ -178,10 +178,10 @@ int main()
               "Extended client calculation returns no stale native caption preservation flags");
         for (const LONG size : {0L, 1L, 4L, 16L})
         {
-            RECT small{80, 80, 80 + size, 80 + size};
-            SendMessageW(window, WM_NCCALCSIZE, FALSE, reinterpret_cast<LPARAM>(&small));
-            Check(small.left >= 80 && small.right >= small.left && small.right <= 80 + size &&
-                      small.top >= 80 && small.bottom >= small.top && small.bottom <= 80 + size,
+            RECT tinyClient{80, 80, 80 + size, 80 + size};
+            SendMessageW(window, WM_NCCALCSIZE, FALSE, reinterpret_cast<LPARAM>(&tinyClient));
+            Check(tinyClient.left >= 80 && tinyClient.right >= tinyClient.left && tinyClient.right <= 80 + size &&
+                      tinyClient.top >= 80 && tinyClient.bottom >= tinyClient.top && tinyClient.bottom <= 80 + size,
                   "Simple client calculation stays nonnegative inside tiny and empty native frames");
             calculation.rgrc[0] = {80, 80, 80 + size, 80 + size};
             SendMessageW(window, WM_NCCALCSIZE, TRUE, reinterpret_cast<LPARAM>(&calculation));
