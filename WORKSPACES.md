@@ -68,6 +68,8 @@ their existing keyboard behavior.
 
 Switching the frame preserves client dimensions, and `SetSize()` accounts for
 the actual custom frame instead of adding the removed native caption height.
+Client insets remain inside the proposed native rectangle during tiny and
+empty minimize transitions, keeping client/framebuffer dimensions nonnegative.
 Maximizing updates the restore symbol and accessible command name at the normal
 frame boundary. The existing resize pump continues servicing the normal capped
 scheduler inside native move/size loops. Hit testing itself never lays out,

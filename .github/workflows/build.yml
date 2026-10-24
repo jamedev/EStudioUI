@@ -13,6 +13,25 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  windows-chrome:
+    name: Windows / native chrome regression
+    runs-on: windows-2022
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+      - name: Build and exercise the isolated Win32 frame adapter
+        shell: cmd
+        run: |
+          for /f "usebackq tokens=*" %%i in (`"%ProgramFiles(x86)%\Microsoft Visual Studio\Installer\vswhere.exe" -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath`) do call "%%i\Common7\Tools\VsDevCmd.bat" -arch=x64 -host_arch=x64
+          if errorlevel 1 exit /b %errorlevel%
+          if not defined VSINSTALLDIR exit /b 1
+          mkdir "%RUNNER_TEMP%\estudioui-native-chrome"
+          pushd "%RUNNER_TEMP%\estudioui-native-chrome"
+          cl.exe /nologo /std:c++20 /EHsc /utf-8 /W4 /MD /D_WIN32_WINNT=0x0A00 /I"%GITHUB_WORKSPACE%\include" /I"%GITHUB_WORKSPACE%\src" "%GITHUB_WORKSPACE%\tests\NativeWindowChromeTests.cpp" "%GITHUB_WORKSPACE%\src\NativeWindowChrome.cpp" "%GITHUB_WORKSPACE%\src\NativeResizePump.cpp" /Fe:EStudioUINativeChromeTests.exe /link comctl32.lib dwmapi.lib shell32.lib user32.lib gdi32.lib
+          if errorlevel 1 exit /b %errorlevel%
+          EStudioUINativeChromeTests.exe
+          exit /b %errorlevel%
+
   windows:
     name: Windows / MSVC 2022 / x64-windows-estudioui
     runs-on: windows-2022

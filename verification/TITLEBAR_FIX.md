@@ -41,14 +41,14 @@ include the raw client/framebuffer dimensions and content scale.
 
 ## Verification
 
-The final source revision and Windows/Linux CI run will be recorded once the
-native minimize regressions complete on `feature/canvas-sketcher`.
+Source under verification: `37589fe12a8524fa6b42010fa3c13759e754c348` on
+`feature/canvas-sketcher`.
 
-Local GNU 13 Release passes all 46 suites in 19.06 s, including actual
+Local GNU 13 Release passes all 46 suites in 22.91 s, including actual
 retained/full GPU framebuffer, workspace and focus/composition checks.
 Focused AddressSanitizer/UndefinedBehaviorSanitizer verification passes
 `CreatorGpuIntegration`, `WorkspaceCore`, `InputFoundation` and `GpuIntegration`
-(4/4, 65.23 s; leak detection disabled for this graphics run).
+(4/4, 57.23 s; leak detection disabled for this graphics run).
 
 A MinGW-w64 C++20
 cross-syntax pass compiles the Windows branches of `NativeWindowChrome.cpp`,
@@ -75,7 +75,8 @@ separately against the actual HWND outer/client origins, not inferred from a
 headless image. Native probes use the window's normal monotonic clock so native
 callbacks cannot invalidate a separate manual test clock.
 
-Windows CI with the final minimize regressions is pending.
+The final [Windows/Linux CI run](https://github.com/jamedev/EStudioUI/actions/runs/40041995928)
+with the native minimize regressions is pending.
 Windows 11 Snap flyout appearance, physical snap gestures and actual
 mixed-monitor DPI transitions remain interactive acceptance checks; the native
 hit-test contract alone does not establish those experiences.

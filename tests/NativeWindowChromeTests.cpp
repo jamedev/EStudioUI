@@ -181,6 +181,8 @@ int main()
         Check(IsZoomed(window), "The system maximize command follows native behavior");
         SendMessageW(window, WM_SYSCOMMAND, SC_RESTORE, 0);
         Check(!IsZoomed(window), "The system restore command returns from maximized state");
+        RECT beforeMinimize{};
+        GetClientRect(window, &beforeMinimize);
         SendMessageW(window, WM_SYSCOMMAND, SC_MINIMIZE, 0);
         RECT minimized{};
         GetClientRect(window, &minimized);
@@ -188,8 +190,14 @@ int main()
               "A real minimized custom frame retains a valid nonnegative client rectangle");
         SendMessageW(window, WM_SYSCOMMAND, SC_RESTORE, 0);
         GetClientRect(window, &minimized);
+        origin = {};
         ClientToScreen(window, &origin);
         GetWindowRect(window, &frame);
+        std::cout << "Native restore geometry: initial=" << extended.right << 'x' << extended.bottom
+                  << ", before minimize=" << beforeMinimize.right << 'x' << beforeMinimize.bottom
+                  << ", restored=" << minimized.right << 'x' << minimized.bottom
+                  << ", top inset=" << origin.y - frame.top << ", iconic=" << IsIconic(window)
+                  << ", zoomed=" << IsZoomed(window) << ".\n";
         Check(!IsIconic(window) && minimized.right == extended.right && minimized.bottom == extended.bottom &&
                   origin.y - frame.top == 1,
               "Restoring from minimize preserves client dimensions and the single custom caption");
