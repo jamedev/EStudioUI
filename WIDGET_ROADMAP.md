@@ -44,6 +44,12 @@ focused Windows acceptance runner. F10b begins with separate multiline document
 storage and incremental paragraph layout before rich editor widgets; physical
 IME/AT/DPI acceptance remains explicitly recorded human work.
 
+F10b begins in 0.27 with widget-independent immutable paragraph storage and
+transactional edits/history. The multiline editor/view still follows incremental
+layout; rich documents and DOCX interchange follow their own semantic/fidelity
+gates. [Document architecture](DOCUMENT_ARCHITECTURE.md) records the reviewed
+WordprocessingML and FastOoxml boundaries without introducing an XML-shaped core.
+
 ## Current coverage
 
 The library already includes `Widget`, `Label`, `Button`, `ToolButton`,

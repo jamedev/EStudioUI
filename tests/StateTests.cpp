@@ -562,6 +562,43 @@ void LifetimeAndAffinity()
     dispatcher.Close();
 }
 
+void NotificationInspection()
+{
+    UiDispatcher dispatcher;
+    StateStore store(dispatcher), unrelated(dispatcher);
+    State<int> value(store, 0);
+    Check(!store.IsNotifying(), "notification inspection starts idle");
+    int rounds = 0;
+    value.Subscribe(
+        [&](const StateChange<int>& change)
+        {
+            ++rounds;
+            Check(store.IsNotifying() && !unrelated.IsNotifying(),
+                  "notification inspection is owner-domain specific across every observer round");
+            if (change.GetAfter() == 1)
+            {
+                store.Batch(
+                    [&]
+                    {
+                        Check(store.IsNotifying(), "an explicit observer batch retains notification context");
+                        value.Set(2);
+                    });
+            }
+        });
+    store.Batch(
+        [&]
+        {
+            Check(!store.IsNotifying(), "ordinary explicit batches do not report observer dispatch");
+            value.Set(1);
+        });
+    Check(rounds == 2 && !store.IsNotifying(), "notification inspection returns idle after bounded feedback");
+    auto failing = value.Subscribe([](const StateChange<int>&) { throw std::runtime_error("observer"); });
+    Check(Rejects<std::runtime_error>([&] { value.Set(3); }) && !store.IsNotifying(),
+          "observer failure cannot leave notification inspection active");
+    Check(RejectsWorker([&] { (void)store.IsNotifying(); }),
+          "notification inspection rejects foreign-thread live-state access");
+}
+
 void TaskIntegration()
 {
     UiDispatcher dispatcher;
@@ -607,6 +644,7 @@ int main()
         FailureIsolation();
         QueuedPublicationAndReceivers();
         LifetimeAndAffinity();
+        NotificationInspection();
         TaskIntegration();
         std::cout << "Typed state and transaction PASS / " << s_Checks << " checks\n";
         return 0;

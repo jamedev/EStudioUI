@@ -35,6 +35,24 @@ command history, geometry, and persistence; these are not promised modules or
 current standalone SDKs. Public API usability and supported extension points
 remain acceptance criteria throughout.
 
+## Implementation status: 0.27, first F10b document increment
+
+The first F10b slice adds widget-independent TextDocument/DocumentSnapshot
+storage and edit commands, persistent paragraph sharing, exact Unicode and
+whitespace, snapshot-specific positions, local invalidation metadata, bounded
+transactional history and worker-readable immutable values. StateStore exposes
+its notification phase so ordered document commands can reject synchronous
+observer feedback and use receiver-bound queued delivery instead of losing an
+edit through value coalescing.
+
+[DOCUMENT_ARCHITECTURE.md](DOCUMENT_ARCHITECTURE.md) records the primary
+WordprocessingML review and the audited FastOoxml module in DeckShow. Future
+DOCX interchange stays in an optional format adapter; native document styles,
+rich blocks/stories and layout stay separate from widget CSS and package XML.
+The following slices add incremental line layout and a multiline editor, then
+rich content and tested interchange. No DOCX import/export or document editor
+widget is claimed in this storage increment. F14 remains deferred.
+
 ## Implementation status: 0.26.1, text readiness before documents
 
 The focused pre-F10b milestone shares typography validation across CSS, shaping
@@ -120,7 +138,7 @@ and its remaining platform limits.
 | F10a | Implemented in 0.17: actual font identity/selection/fallback, script and bidi shaping, visual caret affinity and disjoint selection, Unicode wrapping, shared composition and bounded CPU/GPU text caches; see TEXT.md and verification/TEXT_0_17.md |
 | F12 image slice | 0.20: immutable worker-friendly images, bounded decoding, DPI icon sources and byte/count-bounded per-context texture residency with safe retirement; broader resource services remain feature-driven |
 | F16 first slice | 0.24 delivered: reusable transactional history/grouping, count/estimated-byte budgets, exact saved checkpoints and stable document close/save/detach lifecycle; versioned application-session restore and recovery remain planned |
-| F10b, broader F12 | Planned: later document editing and feature-driven resource hardening |
+| F10b, broader F12 | In progress in 0.27: immutable paragraph storage/edit commands and bounded shared history; incremental layout, multiline/rich editors and document interchange remain pending |
 | F14 | Deferred until broad widget/workspace use informs reusable module extraction and SDK packaging; not a Gate B prerequisite |
 
 Ease of use is a standing acceptance criterion, not a separate polish phase.
@@ -481,7 +499,12 @@ Verify real pixels and unaffected layout/paint caches. Multi-font cache identity
 and the necessary F12 budget/retirement policy accompany this slice; document
 features are not required to exercise it.
 
-## F10b: later multiline and structured document editing
+## F10b: multiline and structured document editing
+
+The first storage/edit-command slice is delivered in 0.27. Consult
+[DOCUMENT_ARCHITECTURE.md](DOCUMENT_ARCHITECTURE.md) for the native semantic
+boundaries, exact FastOoxml audit and DOCX compatibility decisions before
+extending layout, formatting or interchange.
 
 Build a separate document layer using F10a services. Do not grow a document editor
 by removing the newline restriction alone. Changing one HarfBuzz direction flag

@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.24)
-project(EStudioUI VERSION 0.26.1 LANGUAGES C CXX)
+project(EStudioUI VERSION 0.27.0 LANGUAGES C CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -93,6 +93,7 @@ add_library(EStudioUI STATIC
     src/SegmentedControl.cpp src/MultiSelectComboBox.cpp src/TagEditor.cpp src/RangeSlider.cpp
     src/SelectableLabel.cpp src/LinkLabel.cpp src/FontEditor.cpp src/FontPicker.cpp
     src/TemporalValue.cpp src/Calendar.cpp src/DateEdit.cpp src/TimeEdit.cpp src/DateTimeEdit.cpp
+    src/DocumentSnapshot.cpp src/TextDocument.cpp
     src/UndoHistory.cpp src/WindowCloseRequest.cpp src/DocumentWorkspace.cpp src/DocumentSaveRequest.cpp src/DocumentCloseSession.cpp
     src/Theme.cpp src/ThemeController.cpp
     src/UiDocument.cpp src/WidgetRegistry.cpp
@@ -238,6 +239,11 @@ if(ESTUDIOUI_BUILD_CREATOR)
 endif()
 
 if(ESTUDIOUI_BUILD_DEMO)
+    add_executable(EStudioUITextDocumentExample examples/TextDocument.cpp)
+    target_link_libraries(EStudioUITextDocumentExample PRIVATE EStudioUI::EStudioUI)
+    if(MSVC)
+        target_compile_options(EStudioUITextDocumentExample PRIVATE /utf-8 /W4)
+    endif()
     add_executable(EStudioUISearchExample examples/SearchFeedback.cpp)
     target_link_libraries(EStudioUISearchExample PRIVATE EStudioUI::EStudioUI)
     add_executable(EStudioUIPickersExample examples/CommonPickers.cpp)
@@ -314,7 +320,7 @@ endif()
 
 if(ESTUDIOUI_BUILD_TESTS)
     enable_testing()
-    foreach(suite TextReadiness SearchFeedback CommonControls PropertyEditing UiDocument Theme UndoHistory DocumentWorkspace AdapterModel DataViews)
+    foreach(suite TextDocument TextReadiness SearchFeedback CommonControls PropertyEditing UiDocument Theme UndoHistory DocumentWorkspace AdapterModel DataViews)
         add_executable(EStudioUI${suite}Tests tests/${suite}Tests.cpp)
         target_link_libraries(EStudioUI${suite}Tests PRIVATE EStudioUI::EStudioUI)
         target_compile_definitions(EStudioUI${suite}Tests PRIVATE ESTUDIOUI_FONT_PATH="${CMAKE_CURRENT_SOURCE_DIR}/third_party/fonts/NotoSans.ttf")

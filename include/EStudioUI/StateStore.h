@@ -144,6 +144,9 @@ class StateStore
     //! Returns the last coherent committed revision; equality-only batches do not advance it.
     std::uint64_t GetRevision() const;
 
+    //! Reports active committed observer rounds; ordered edit commands can queue instead of coalescing.
+    bool IsNotifying() const;
+
     //! Returns the first observer error from the most recent discarded-candidate reconciliation.
     std::exception_ptr GetReconciliationError() const;
 

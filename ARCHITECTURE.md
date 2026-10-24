@@ -179,6 +179,32 @@ and caret affinity. GDEF caret positions are used when available, with an evenly
 partitioned fallback. FontSelection supplies shared validation before font
 resolution. See [TEXT.md](TEXT.md) for the control-text boundary.
 
+## Document storage before multiline widgets (0.27)
+
+TextDocument stores a plain-text story in State<DocumentSnapshot>. Immutable AVL
+paragraph trees path-copy edited ranges and share untouched paragraph payloads;
+retained snapshots remain readable on workers without a widget or graphics
+context. Paragraph-local grapheme indexes are rebuilt when that paragraph
+changes. Logical content never stores visual lines, glyphs or pages.
+
+The existing UndoHistory service publishes document roots and command metadata
+in one StateStore transaction. Validation failures discard both candidates.
+History retains changed paragraph/path storage rather than whole-document text
+copies, with conservative estimated-byte accounting. External snapshots retain
+their own storage independently. Direct positions identify a story, content-root
+token, paragraph ID/ordinal and UTF-8 boundary; stale coordinates fail explicitly.
+Direct/inverse edits yield paragraph invalidation metadata; unrelated roots use
+a conservative whole-story fallback.
+
+StateStore::IsNotifying exposes owner-side publication phase inspection. Document
+commands reject synchronous observer edits; GetHandle().Post schedules ordered
+follow-up work. Ordinary state coalescing and explicit batches retain their
+existing behavior. File-format storage, rich paragraph/character styles, line
+layout and editor/view interactions remain separate responsibilities.
+[DOCUMENT_ARCHITECTURE.md](DOCUMENT_ARCHITECTURE.md) records the WordprocessingML
+review, current FastOoxml Reader/Sink limitations and future adapter/preservation
+policy. DOCX support and a multiline widget are not implemented by this slice.
+
 ## GPU representation
 
 Managed `Image` resources (0.20) are shared immutable top-down RGBA8 CPU values,

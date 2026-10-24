@@ -1,5 +1,10 @@
 # EStudioUI
 
+0.27 starts F10b with [document storage and transactional editing](DOCUMENT_ARCHITECTURE.md),
+independent of widgets and file formats. Immutable paragraph snapshots, shared
+undo storage and exact text semantics prepare the later multiline editor and
+optional FastOoxml DOCX adapter. No DOCX reader/writer is added here.
+
 0.26.1 adds [text-readiness hardening](TEXT_READINESS.md): shared font validation,
 safe automatic GPU glyph compaction, deterministic text profiles and a focused
 Windows acceptance runner. Multiline document editing remains the next track.

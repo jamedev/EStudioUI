@@ -463,6 +463,12 @@ std::uint64_t StateStore::GetRevision() const
     return m_Data->m_Revision;
 }
 
+bool StateStore::IsNotifying() const
+{
+    VerifyAccess();
+    return m_Data->m_Notifying;
+}
+
 std::exception_ptr StateStore::GetReconciliationError() const
 {
     VerifyAccess();
