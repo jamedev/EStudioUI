@@ -4,6 +4,8 @@
 independent of widgets and file formats. Immutable paragraph snapshots, shared
 undo storage and exact text semantics prepare the later multiline editor and
 optional FastOoxml DOCX adapter. No DOCX reader/writer is added here.
+See [verification](verification/DOCUMENT_MODEL_0_27.md) and the compiled
+[standalone example](examples/TextDocument.cpp).
 
 0.26.1 adds [text-readiness hardening](TEXT_READINESS.md): shared font validation,
 safe automatic GPU glyph compaction, deterministic text profiles and a focused

@@ -50,6 +50,14 @@ its documentation.
   explicitly limits DOCX to a structural/property projection: no typed DOCX
   writer or full style resolution is currently supplied.
 
+That stream is an integration starting point, not the final rich-import
+contract. The reviewed implementation does not expose all bookmark/comment/
+revision ranges, individual note ownership, field boundaries or the outer
+DrawingML inline/anchor geometry as typed events. Styles/numbering/theme parts
+also need separate resolution. Extend FastOoxml's DOCX surface or use bounded
+package/source mapping when these features are implemented; do not infer missing
+semantics from its plain visible-text projection.
+
 The future dependency should be an optional adapter using FastOoxml's Core/Docx
 components. Do not copy its ZIP/XML implementation into EStudioUI, add a second
 OOXML package engine, or require its XLSX/PPTX/Qt targets to edit plain text.
@@ -75,6 +83,11 @@ the native model depend on their serialized representation.
 | Inline/floating objects | Resource references and text anchors separate from rendered geometry | Resolve owner-scoped relationships; retain inline versus anchored placement |
 | Units and themes | Preserve precise unit-tagged/source semantic values when rich formatting arrives | Convert units at layout boundaries; retain theme/script-specific font/color intent rather than only resolved pixels/RGB |
 | Unknown content | Explicit supported/editable subset and diagnostics | Retain package parts/source mappings where safe; reject destructive edits or use read-only placeholders when preservation cannot be guaranteed |
+
+Rich layout must resolve paragraph-level bidi/script context across formatting
+boundaries. An XML/style run is not an independently shaped paragraph; splitting
+first and shaping each run in isolation would lose joining and directional
+context. Visual shaping runs and grapheme boundaries remain derived mappings.
 
 Source relationship IDs, XML node pointers and source run indices are never
 application paragraph identities. Bookmarks, comments, fields, tracked changes,
@@ -168,6 +181,13 @@ batches remain supported.
    fidelity diagnostics and preservation sessions. No changes to DeckShow's
    unrelated formats are required by this increment.
 
+Before large asynchronous imports, add a format-neutral bulk builder and an
+expected-revision root-adoption operation. A worker should be able to prepare
+owned content within limits and publish it once on the document owner, without
+replaying thousands of UI-side text edits or converting a rich import through
+one flat string. The immutable storage boundary supports this addition; the
+current snapshot API supplies worker reads, not an import-builder/adoption API.
+
 The DOCX adapter corpus must cover fragmented callbacks/runs forming one
 grapheme, exact spaces/tabs, paragraph/hard/page breaks, RTL/LTR mixtures,
 inheritance versus explicit false, numbering restart, nested cell paragraphs,
@@ -186,3 +206,6 @@ behavior for the supported subset before promising document interchange.
 - [Section properties](https://learn.microsoft.com/en-us/dotnet/api/documentformat.openxml.wordprocessing.sectionproperties?view=openxml-3.0.1)
 - [Tables and cell content](https://learn.microsoft.com/en-us/office/open-xml/word/working-with-wordprocessingml-tables)
 - [Markup compatibility and preservation](https://learn.microsoft.com/en-us/office/open-xml/general/introduction-to-markup-compatibility)
+
+[Verification](verification/DOCUMENT_MODEL_0_27.md) records the exact tested
+source, Windows Release/Debug, Linux, sanitizer and native framebuffer results.
