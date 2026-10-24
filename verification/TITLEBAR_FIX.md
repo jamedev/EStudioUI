@@ -41,14 +41,14 @@ include the raw client/framebuffer dimensions and content scale.
 
 ## Verification
 
-Source under verification: `37589fe12a8524fa6b42010fa3c13759e754c348` on
-`feature/canvas-sketcher`.
+The final source revision and CI run are recorded after native verification
+completes on `feature/canvas-sketcher`.
 
-Local GNU 13 Release passes all 46 suites in 22.91 s, including actual
+Local GNU 13 Release passes all 46 suites in 17.77 s, including actual
 retained/full GPU framebuffer, workspace and focus/composition checks.
 Focused AddressSanitizer/UndefinedBehaviorSanitizer verification passes
 `CreatorGpuIntegration`, `WorkspaceCore`, `InputFoundation` and `GpuIntegration`
-(4/4, 57.23 s; leak detection disabled for this graphics run).
+(4/4, 46.68 s; leak detection disabled for this graphics run).
 
 A MinGW-w64 C++20
 cross-syntax pass compiles the Windows branches of `NativeWindowChrome.cpp`,
@@ -74,9 +74,19 @@ GPU captures contain client content; removal of the native caption is checked
 separately against the actual HWND outer/client origins, not inferred from a
 headless image. Native probes use the window's normal monotonic clock so native
 callbacks cannot invalidate a separate manual test clock.
+Queued caption commands run at the ordinary window frame boundary, where
+synchronous resize callbacks cannot reenter dispatcher traversal. Explicit
+`RenderFrame()` also surfaces captured native callback errors before and after
+the frame, matching the ordinary event loop's error reporting.
 
-The final [Windows/Linux CI run](https://github.com/jamedev/EStudioUI/actions/runs/40041995928)
-with the native minimize regressions is pending.
+The isolated MSVC Windows frame job passes all 47 native assertions, including
+unchanged 704x441 client dimensions through minimize/restore, one restored top
+border pixel, and six scheduler ticks during the `SC_SIZE` probe. It builds
+directly from the existing three native test/backend sources with the Windows
+system libraries, providing quick regression feedback before the full build.
+
+The full Windows/Linux rerun using the protected caption-command frame boundary
+is pending.
 Windows 11 Snap flyout appearance, physical snap gestures and actual
 mixed-monitor DPI transitions remain interactive acceptance checks; the native
 hit-test contract alone does not establish those experiences.

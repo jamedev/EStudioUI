@@ -642,6 +642,8 @@ Native caption presses carry an explicit preserve-focus pointer policy through
 the shared input boundary, leaving client focus and preedit intact; native
 caption controls do not become client Tab stops.
 Maximize/restore presentation synchronizes only at ordinary frame boundaries.
+Explicit `RenderFrame()` calls report captured native callback errors before
+and after processing, matching the ordinary event loop's error boundary.
 See [native title-bar verification](verification/TITLEBAR_FIX.md).
 
 FileDialog is an owner-lifetime facade over PlatformServices. FilePathEditor and

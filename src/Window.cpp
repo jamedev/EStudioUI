@@ -527,7 +527,7 @@ struct Window::Impl : std::enable_shared_from_this<Window::Impl>
         return std::max(glfwGetTime() + m_TimeOffset, m_Ui->GetTime());
     }
 
-    bool IsOpen() const
+    void RethrowError() const
     {
         if (m_Chrome)
             m_Chrome->RethrowError();
@@ -535,6 +535,11 @@ struct Window::Impl : std::enable_shared_from_this<Window::Impl>
             m_ResizePump->RethrowError();
         if (m_CallbackError)
             std::rethrow_exception(m_CallbackError);
+    }
+
+    bool IsOpen() const
+    {
+        RethrowError();
         return m_Owner && !m_Closed && !glfwWindowShouldClose(m_Window);
     }
 
@@ -1323,7 +1328,9 @@ void Window::RenderFrame(double time)
     {
         const auto self = m_Impl;
         Detail::ApplicationDispatchScope scope;
+        self->RethrowError();
         self->Render(time, true);
+        self->RethrowError();
         self->m_TimeOffset = time - glfwGetTime();
     }
     Detail::FlushRetiredWindows();

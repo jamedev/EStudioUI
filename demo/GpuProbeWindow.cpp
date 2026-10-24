@@ -164,7 +164,7 @@ int VerifyGpuProbeChrome(Window& owner, const std::filesystem::path& assets, con
               "Native hit testing uses the exact painted caption rectangle");
         SendMessageW(native, WM_NCLBUTTONDOWN, hit, nativePoint(position, true));
         SendMessageW(native, WM_LBUTTONUP, 0, nativePoint(position, false));
-        window->Ui().GetDispatcher().Drain();
+        render();
     };
     check(SendMessageW(native, WM_NCHITTEST, 0, nativePoint(center(search.GetBounds()), true)) == HTCLIENT,
           "An embedded title-bar editor remains client input");
@@ -190,12 +190,12 @@ int VerifyGpuProbeChrome(Window& owner, const std::filesystem::path& assets, con
     window->Graphics().SavePpm(output / "native-titlebar-pressed.ppm");
     SendMessageW(native, WM_MOUSEMOVE, MK_LBUTTON, nativePoint({20, 100}, false));
     SendMessageW(native, WM_LBUTTONUP, 0, nativePoint({20, 100}, false));
-    window->Ui().GetDispatcher().Drain();
+    render();
     check(!window->IsClosed() && !close.IsPressed() && GetCapture() != native,
           "Releasing outside cancels the close click without leaving pressed state");
     SendMessageW(native, WM_NCLBUTTONDOWN, HTCLOSE, nativePoint(closePoint, true));
     SendMessageW(native, WM_CANCELMODE, 0, 0);
-    window->Ui().GetDispatcher().Drain();
+    render();
     check(!window->IsClosed() && !close.IsPressed(), "Native cancellation does not activate close");
     click(WindowHitRegion::Minimize, HTMINBUTTON);
     check(IsIconic(native), "A single click on the painted minimize button minimizes the actual HWND");
