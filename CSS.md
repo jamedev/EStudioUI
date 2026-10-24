@@ -463,3 +463,22 @@ grammar or paint-time parsing. Structural CSS precedes the generated rules;
 application overrides follow them, with normal specificity preserved. Raw
 `SetStyleSheet` is an explicit handoff until the controller is configured again.
 See [THEMES.md](THEMES.md) for the small API and platform support.
+
+## Document tabs and workspace (0.24)
+
+`documentworkspace` contains `.document-tabs` (an ordinary TabWidget),
+`document-content` and persistent `.tab-button` selectors. Opt-in close buttons
+are real accessible `.tab-close` ToolButtons with hover/focus/disabled states.
+`.tab-modified` marks an unsaved document and `.document-saving` marks an
+outstanding save. The dirty dot is one GPU shape, with an accessible unsaved
+annotation; it does not rewrite the application caption. Closable selectors reserve
+a constant close/indicator gutter so focus-loss commits cannot move the mouse
+target. Existing selected/hover/pressed/focus CSS, icons and rich effects remain
+available. Tab close/reorder/detach behavior defaults off for ordinary TabWidget
+users; DocumentWorkspace enables it explicitly.
+
+Minimal and the other generated themes provide neutral workspace/close defaults.
+Floating document hosts copy compiled stylesheet revisions; there is no CSS parsing
+on drag or paint-only animation ticks. Approval uses normal MessageBox/dialog
+styling, with centered unpadded dialog-close glyphs. See
+[document APIs and scope](DOCUMENT_WORKSPACE.md).

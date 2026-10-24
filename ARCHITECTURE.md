@@ -711,3 +711,30 @@ canonical snapshot. Optional relationships use the existing constraint solver.
 Reusable compositions are flattened owned document subtrees with remapped IDs;
 source class generation reuses the direct C++ node/property/layout emitters and
 is compiled in the catalog test, without a runtime registry/JSON requirement.
+
+## Document lifecycle and transactional history (0.24)
+
+`UndoHistory` stores its timeline as State in the application's existing StateStore.
+Command effects, grouped commands and cursor/clean-position metadata share the
+same transaction, rollback and final-candidate validation boundary. Immutable
+command snapshots are pruned under count/estimated-byte budgets; lifetime-unique
+positions distinguish older saves from newer edits even after branching/pruning.
+The public service requires no widgets or GL initialization; F14 packaging remains
+deferred. Creator bridges its existing canonical design edits into this service.
+
+`DocumentWorkspace` owns stable IDs and persistent view containers, reparenting
+actual views to owned native Window hosts on detach. It uses shared Action
+presentations, opt-in TabWidget close/reorder/drag-out hooks and PopupSession-based
+MessageBox approval. Close All preflights all documents, records exact checkpoint/
+external-edit stamps and rechecks focused-editor commits before any removal.
+Native close requests use a synchronous veto and retry after asynchronous approval;
+forced lifetime teardown remains explicit.
+
+Each pending application save reserves one independently synchronized completion
+slot. Workers own immutable application snapshots and complete tickets exactly
+once; they never read widget data. Completion sets a ready bit and wakes the
+existing dispatcher without consuming ordinary queue capacity. UiContext's idle
+service callback consumes results, advances decisions and retires closed hosts.
+Unchanged turns do no document scan and introduce no new timer. Recursive service
+pumping is diagnosed; owners can disappear during a callback without leaving raw
+service targets alive. See [contracts and limits](DOCUMENT_WORKSPACE.md).

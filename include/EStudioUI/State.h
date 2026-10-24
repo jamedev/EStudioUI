@@ -67,6 +67,7 @@ template <typename T> class StateChange
 //! A typed owner-thread value with validation, transactional updates, and lifetime-safe publication.
 template <typename T> class State
 {
+    friend class UndoHistory;
     static_assert(!std::is_reference_v<T> && !std::is_pointer_v<std::remove_cv_t<T>> &&
                       !Detail::BorrowedSignalArgument<std::remove_cv_t<T>>::value,
                   "State<T> requires an owned value; replace borrowed pointers/views with owning values or smart pointers.");

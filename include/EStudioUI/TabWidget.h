@@ -41,6 +41,28 @@ class TabWidget final : public Widget
     //! Changes a tab caption without recreating its page.
     void SetTabText(int index, std::string title);
 
+    //! Returns the persistent selector for styling, focus and accessible interaction.
+    ToolButton& GetTabButton(int index) const;
+
+    //! Enables explicit close buttons; requests leave removal to the document/application policy.
+    void SetTabsClosable(bool enabled);
+    //! Enables captured pointer reordering of stable persistent pages.
+    void SetTabsMovable(bool enabled);
+    //! Enables drag-out detach requests without changing page ownership automatically.
+    void SetTabsDetachable(bool enabled);
+    //! Shows a GPU indicator and accessible description without changing the stored title.
+    void SetTabModified(int index, bool modified);
+    //! Returns whether a selector displays unsaved changes.
+    bool IsTabModified(int index) const;
+    //! Requests application approval before removing a page.
+    Signal<int>& CloseRequested();
+    //! Reports committed reordering independently of selection changes.
+    Signal<int, int>& TabsReordered();
+    //! Reports a released drag-out in window logical coordinates.
+    Signal<int, Point>& DetachRequested();
+    //! Reports a selector context menu with its stable current index and window point.
+    Signal<int, Point>& TabContextMenuRequested();
+
     //! Reports a committed page selection.
     Signal<int>& CurrentChanged();
 
@@ -61,6 +83,13 @@ class TabWidget final : public Widget
     void OnDescendantFocused(Widget& descendant) override;
 
   private:
+    //! Resolves one captured selector through its stable page identity.
+    void DragTab(WidgetRef page, Point point, bool finished);
+    //! Updates opt-in selector behavior without rebuilding pages.
+    void ConfigureSelectors();
+    //! Installs opt-in selector menus while preserving ordinary parent menu bubbling.
+    void ConnectTabContextMenu(WidgetRef page, ToolButton& button);
+
     //! Opens the bounded, scrollable chooser for every persistent page.
     void ShowTabChooser();
 
@@ -100,6 +129,19 @@ class TabWidget final : public Widget
 
     //! Maps stable page identities to tab selectors.
     std::vector<Tab> m_Tabs;
+
+    //! Keeps generic tabs behavior unchanged unless explicitly enabled.
+    bool m_Closable = false, m_Movable = false, m_Detachable = false;
+    //! Enables lazy menu routing for both existing and subsequently added selectors.
+    bool m_TabMenusEnabled = false;
+    //! Reports policy-controlled tab closure.
+    Signal<int> m_CloseRequested;
+    //! Reports stable-page reorder operations.
+    Signal<int, int> m_TabsReordered;
+    //! Reports released drag-out requests.
+    Signal<int, Point> m_DetachRequested;
+    //! Reports selector context-menu requests.
+    Signal<int, Point> m_TabContextMenuRequested;
 
     //! Stores the active page index.
     int m_Current = -1;

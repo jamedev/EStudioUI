@@ -221,6 +221,11 @@ DispatchReceipt UiDispatcher::PostWork(std::function<DispatchStatus()> callback,
     return receipt;
 }
 
+void UiDispatcher::Wake() const noexcept
+{
+    m_State->Wake();
+}
+
 std::size_t UiDispatcher::Drain(std::size_t maxCount, std::chrono::steady_clock::duration maxDuration)
 {
     VerifyAccess();

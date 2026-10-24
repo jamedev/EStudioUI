@@ -33,6 +33,11 @@ explicit extensible adapter catalog; construction coverage does not mean every
 widget API or content-slot configuration is serialized. F10b and F14 remain
 deferred. See [verification](verification/PROPERTY_CREATOR_0_23.md).
 
+The 0.24 [document workspace](DOCUMENT_WORKSPACE.md) delivers W22 close/reorder/
+detach tabs, unsaved indicators and asynchronous Save/Discard/Cancel workflows.
+Reusable bounded `UndoHistory` now serves the gallery and Creator. F16 versioned
+application-session restore and F10b document editing remain separate work.
+
 ## Current coverage
 
 The library already includes `Widget`, `Label`, `Button`, `ToolButton`,
@@ -43,6 +48,7 @@ single-line `TextBox`, `NumericInput`, `Slider`, `SplitToolButton`, `TabWidget`,
 `BusyIndicator`, `ToolTip`, `MenuBar`, `MenuItem`, `Popup`, `Dialog`,
 `DialogButtonBox`, `MessageBox`, `InputDialog`, `ImageView`, shared `Image`/`Icon` resources,
 `CollapsiblePanel`, `PropertyGrid`, `ColorEditor`/`ColorPicker`, `UnitEditor`, `VectorEditor`,
+`DocumentWorkspace`,
 and custom painting through `PaintWidget`/`Painter`.
 
 Existing collections render viewport model entries rather than creating a widget
@@ -52,7 +58,7 @@ scrolling container. The custom dial in the demo is not a public library `Dial`.
 
 Priority means: **Essential** for ordinary applications, **High** for a powerful
 engineering/CAD workspace, **Later** after the shared foundations and common
-controls. Entries marked **0.18**, **0.19**, **0.20**, **0.21** or **0.22** are delivered; the other catalog entries remain planned.
+controls. Entries marked **0.18**, **0.19**, **0.20**, **0.21**, **0.22**, **0.23** or **0.24** are delivered; the other catalog entries remain planned.
 
 F09 adds shared action presentations to the existing buttons, toolbars, split
 choosers, and context menus. Nested command menus are implemented through
@@ -93,7 +99,7 @@ only change appearance should share implementations and semantic roles.
 | W19 | CollapsiblePanel / Accordion / ToolBox | Expandable inspector sections and categorized tools | High — **0.23 CollapsiblePanel delivered; Accordion/ToolBox pending** |
 | W20 | MainWindow | Central workspace, title-row menus/widgets, toolbars, status, owned windows | High — **0.22 delivered; interactive acceptance recorded separately** |
 | W21 | DockWidget / DockManager | Four edge tab groups, splitters, dock/float, grip dragging, tabify/reorder and bounded restore | High — **0.22 delivered**; arbitrary nested dock trees remain later |
-| W22 | DocumentWorkspace | Multiple documents, close/reorder/detach tabs, unsaved-state indicators | High |
+| W22 | DocumentWorkspace | Multiple documents, close/reorder/detach tabs, unsaved-state indicators | High — **0.24 delivered, with save/discard/cancel and shared history** |
 | W23 | Overlay / Drawer | Anchored or sliding temporary panels | Later |
 
 ## Commands, dialogs, feedback, and pickers
@@ -246,7 +252,7 @@ including Windows title-row menus/widgets with native non-client behavior.
 [WORKSPACES.md](WORKSPACES.md) defines ownership, bounds, cross-context handles,
 CSS and persistence. [Verification](verification/WORKSPACES_0_22.md) distinguishes
 automated checks from Windows 11 snap, mixed-DPI and interactive accessibility acceptance.
-W22 document workspaces, arbitrary nested dock trees, F10b and F14 remain separate work.
+W22 document workspaces are delivered in 0.24. Arbitrary nested dock trees, F10b and F14 remain separate work.
 
 
 Final 0.22 source `d2aa847` passes Windows Release/Debug **44/44** each,

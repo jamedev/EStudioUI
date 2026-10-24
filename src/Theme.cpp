@@ -249,6 +249,12 @@ tabbar, tabpage { background: @bg@; color: @fg@; border-width: 0; }
 menubar, dialog-title { background: @surface@; color: @fg@; }
 menubar > button, menu-trigger, dialog-close { background: transparent; color: @fg@; border-width: 0; box-shadow: none; }
 menubar > button:hover, menu-trigger:hover, dialog-close:hover { background: @hover@; }
+dialog-close { padding: 0; text-align: center; font-size: @font@px; }
+dialog-title { background: transparent; }
+documentworkspace { background: @bg@; color: @fg@; gap: 0; padding: 0; }
+.tab-close { background: transparent; color: @muted@; border-width: 0; border-radius: 3px; box-shadow: none; padding: 0; }
+.tab-close:hover, .tab-close:focus { background: @hover@; color: @fg@; }
+.document-saving { opacity: .6; }
 tabbar toolbutton:hover, .dock-tabs .tab-button:hover { background: @hover@; color: @fg@; }
 contextmenu, popup, dialog, tooltip { background: @input@; color: @fg@; border: 1px solid @border@; border-radius: @radius@px; box-shadow: none; }
 contextmenu .menu-action { color: @fg@; background: transparent; box-shadow: none; }

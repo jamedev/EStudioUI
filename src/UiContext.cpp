@@ -12,6 +12,12 @@
 
 namespace EStudioUI
 {
+struct UiContext::IdleData
+{
+    bool m_Pumping = false;
+    Signal<> m_Callbacks;
+};
+
 struct UiContext::PhaseScope
 {
     const UiContext& m_Context;
@@ -31,6 +37,7 @@ struct UiContext::PhaseScope
 UiContext::UiContext(FontFace& font)
     : m_Font(font), m_Animations(*this), m_CssMotion(std::make_unique<CssMotion>(*this))
 {
+    m_Idle = std::make_shared<IdleData>();
     m_Font.VerifyAccess();
     m_FontRevision = m_Font.GetRevision();
     m_Root.Attach(this, nullptr);
@@ -140,9 +147,28 @@ void UiContext::PumpPlatformServices()
 {
     const auto ownerLifetime = RetainOwner();
     VerifyTraversalEntry();
+    const auto idle = m_Idle;
+    if (idle->m_Pumping)
+        throw std::logic_error("An idle platform turn cannot be pumped recursively.");
+    struct Scope
+    {
+        bool& m_Active;
+        ~Scope() { m_Active = false; }
+    } scope{idle->m_Pumping};
+    idle->m_Pumping = true;
+    const WidgetRef root(&m_Root);
     if (m_Platform)
         m_Platform->Pump();
+    if (!root.Get())
+        return;
     std::erase_if(m_RetiredPlatforms, [](const auto& services) { return !services->HasPendingNativeWork(); });
+    idle->m_Callbacks.Emit();
+}
+
+Signal<>& UiContext::IdleTurn()
+{
+    VerifyAccess();
+    return m_Idle->m_Callbacks;
 }
 
 bool UiContext::HasPendingPlatformWork() const

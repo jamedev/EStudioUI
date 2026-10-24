@@ -236,6 +236,9 @@ struct Window::Impl : std::enable_shared_from_this<Window::Impl>
     std::unique_ptr<Detail::NativeAccessibility> m_Accessibility;
     std::unique_ptr<Detail::NativeTextInput> m_TextInput;
     Signal<Key> m_KeyPressed;
+    Signal<WindowCloseRequest&> m_CloseRequested;
+    std::exception_ptr m_CloseRequestError;
+    bool m_AskingClose = false, m_PendingClose = false;
     std::exception_ptr m_CallbackError;
     bool m_Initialized = false;
     bool m_Headless = false;
@@ -545,6 +548,45 @@ struct Window::Impl : std::enable_shared_from_this<Window::Impl>
         return m_Owner && !m_Closed && !glfwWindowShouldClose(m_Window);
     }
 
+    void AskClose()
+    {
+        if (m_Closed || m_AskingClose || !m_Owner)
+            return;
+        if (!m_CloseRequested.HasConnections())
+        {
+            RequestClose();
+            return;
+        }
+        if (m_Ui->GetPhase() != UiPhase::Idle || StateStore::IsUpdatingOnThisThread())
+        {
+            m_PendingClose = true;
+            m_Ui->RequestRepaint();
+            m_Ui->GetDispatcher().Wake();
+            return;
+        }
+        const auto keepAlive = shared_from_this();
+        struct Scope
+        {
+            bool& m_Active;
+            ~Scope() { m_Active = false; }
+        } scope{m_AskingClose};
+        m_AskingClose = true;
+        m_PendingClose = false;
+        m_CloseRequestError = {};
+        WindowCloseRequest request;
+        try
+        {
+            m_CloseRequested.Emit(request);
+        }
+        catch (...)
+        {
+            request.Cancel();
+            m_CloseRequestError = std::current_exception();
+        }
+        if (!request.IsCancelled() && m_Owner && !m_Closed)
+            RequestClose();
+    }
+
     void RequestClose()
     {
         if (m_Closed)
@@ -627,6 +669,10 @@ struct Window::Impl : std::enable_shared_from_this<Window::Impl>
         }
         if (!m_Owner || m_Closed)
             return;
+        if (m_PendingClose)
+            AskClose();
+        if (!m_Owner || m_Closed)
+            return;
         m_FramePreparing.Emit();
         if (!m_Owner || m_Closed)
             return;
@@ -687,6 +733,10 @@ struct Window::Impl : std::enable_shared_from_this<Window::Impl>
             }
         } servicing(m_Servicing);
 
+        if (!IsOpen())
+            return -1;
+        if (m_PendingClose)
+            AskClose();
         if (!IsOpen())
             return -1;
         if (m_TextInput)
@@ -1128,7 +1178,10 @@ Window::Window(const WindowOptions& options, const std::filesystem::path& fontPa
     glfwSetWindowFocusCallback(self.m_Window, [](GLFWwindow* window, int focused)
                                { Impl::Dispatch(window, [&](Impl& state) { state.SetFocused(focused != 0); }); });
     glfwSetWindowCloseCallback(self.m_Window, [](GLFWwindow* window)
-                               { Impl::Dispatch(window, [](Impl& state) { state.RequestClose(); }); });
+    {
+        glfwSetWindowShouldClose(window, GLFW_FALSE);
+        Impl::Dispatch(window, [](Impl& state) { state.AskClose(); });
+    });
     glfwSetDropCallback(self.m_Window,
                         [](GLFWwindow* window, int count, const char** paths)
                         {
@@ -1393,9 +1446,21 @@ void Window::Close()
     {
         const auto self = m_Impl;
         Detail::ApplicationDispatchScope scope;
-        self->RequestClose();
+        self->AskClose();
     }
     Detail::FlushRetiredWindows();
+}
+
+Signal<WindowCloseRequest&>& Window::CloseRequested()
+{
+    VerifyAccess();
+    return m_Impl->m_CloseRequested;
+}
+
+std::exception_ptr Window::GetCloseRequestError() const
+{
+    VerifyAccess();
+    return m_Impl->m_CloseRequestError;
 }
 
 void Window::SetTitle(std::string title)

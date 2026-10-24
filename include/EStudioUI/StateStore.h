@@ -106,6 +106,7 @@ void RecordStateReconciliationError(const std::weak_ptr<StateStoreData>& data, s
 class StateStore
 {
     friend class Action;
+    friend class UndoHistory;
 
   public:
     //! Uses one owner dispatcher and bounds callback feedback to a positive number of notification rounds.

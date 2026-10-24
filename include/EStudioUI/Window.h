@@ -5,6 +5,7 @@
 #include "UiHandle.h"
 #include "UiContext.h"
 #include "ThemeController.h"
+#include "WindowCloseRequest.h"
 
 namespace EStudioUI
 {
@@ -121,7 +122,7 @@ class Window
     //! Requests a new frame and wakes the GLFW event loop.
     void RequestRepaint();
 
-    //! Hides and closes the native surface; owned resources survive active callbacks and live until destruction.
+    //! Requests closure through veto observers; resources survive active callbacks and live until destruction.
     void Close();
 
     //! Exposes key presses after controls receive them, including F5/F6.
@@ -165,6 +166,12 @@ class Window
 
     //! Runs on the idle UI owner immediately before a requested frame, without adding an idle timer.
     Signal<>& FramePreparing();
+
+    //! Allows synchronous veto of native/caption/programmatic close intents; defer asynchronous approval.
+    Signal<WindowCloseRequest&>& CloseRequested();
+
+    //! Returns the last contained close-observer exception; failed approval leaves the window open.
+    std::exception_ptr GetCloseRequestError() const;
 
     //! Reports completed native/programmatic closure once while resources remain retained.
     Signal<>& Closed();

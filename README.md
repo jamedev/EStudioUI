@@ -21,6 +21,22 @@ packaging are deferred until that use informs reusable boundaries, including
 services for applications without a UI. Standalone modules are planned, not
 current package capabilities; see the roadmaps for acceptance criteria.
 
+## Document workspace and reusable history (0.24)
+
+The **Documents & history** gallery tab provides persistent document tabs with
+close buttons, unsaved indicators, pointer reordering and native detach/reattach.
+Save / Discard / Cancel also guards floating and containing-window closure.
+Close All approves every document before removing views; an older asynchronous
+save cannot silently clean newer edits. The sample saves actual JSON on a worker.
+
+`UndoHistory` supplies State transactions, grouped edits, clean checkpoints and
+count/byte retention budgets without initializing widgets or GL. Creator now
+uses this shared service for its existing design undo/redo. Shared document
+actions follow the active view. No new runtime dependency or idle timer is added.
+See [contracts and API](DOCUMENT_WORKSPACE.md), the
+[compiled example](examples/DocumentWorkspace.cpp) and
+[verification](verification/DOCUMENT_WORKSPACE_0_24.md).
+
 ## Neutral themes and Creator authoring tools
 
 New windows default to the restrained **Minimal** style. Minimal, Engineering,

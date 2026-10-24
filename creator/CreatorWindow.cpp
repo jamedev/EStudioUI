@@ -47,6 +47,38 @@ template <typename F> auto Alive(std::weak_ptr<void> lifetime, F callback)
     };
 }
 
+std::size_t SnapshotBytes(const UiDocument& document)
+{
+    const auto size = [&](const auto& self, const UiNode& node) -> std::size_t
+    {
+        std::size_t bytes = sizeof(UiNode) + node.m_Id.capacity() + node.m_Type.capacity() + node.m_Layout.capacity();
+        for (const auto& [name, value] : node.m_Properties)
+        {
+            bytes += sizeof(PropertyValue) + sizeof(std::string) + sizeof(void*) * 4 + name.capacity();
+            if (const auto* text = std::get_if<std::string>(&value))
+            {
+                bytes += text->capacity();
+            }
+            else if (const auto* vector = std::get_if<VectorValue>(&value))
+            {
+                bytes += vector->capacity() * sizeof(double);
+            }
+        }
+        bytes += node.m_Constraints.capacity() * sizeof(UiConstraint);
+        for (const auto& rule : node.m_Constraints)
+        {
+            bytes += rule.m_Name.capacity() + rule.m_Item.capacity() + rule.m_Anchor.capacity() +
+                     rule.m_Target.capacity() + rule.m_TargetAnchor.capacity();
+        }
+        for (const auto& child : node.m_Children)
+        {
+            bytes += self(self, child);
+        }
+        return bytes;
+    };
+    return sizeof(UiDocument) + document.m_StyleSheet.capacity() + size(size, document.m_Root);
+}
+
 UiNode* ParentOf(UiNode& root, std::string_view id)
 {
     for (auto& child : root.m_Children)
@@ -345,25 +377,35 @@ CreatorWindow::CreatorWindow(Application& application, Window& window, std::stri
     m_Document = std::make_unique<State<UiDocument>>(
         window.Ui().States(), std::move(initial), [this](const UiDocument& candidate)
         { candidate.Validate(m_Registry, candidate.m_StyleSheet != m_AppliedCss); });
+    m_History = std::make_unique<UndoHistory>(window.Ui().States(), HistoryLimits{32, 64 * 1024 * 1024});
     m_Saved = m_Document->GetSnapshot();
     BuildShell();
     const std::weak_ptr<void> lifetime = m_Lifetime;
-    m_Connections.emplace_back(
-        m_Document->Subscribe(Alive(lifetime,
-                                    [this](const StateChange<UiDocument>& change)
-                                    {
-                                        if (!m_Replaying)
-                                        {
-                                            m_Undo.push_back(change.GetBeforeSnapshot());
-                                            if (m_Undo.size() > 32)
-                                            {
-                                                m_Undo.erase(m_Undo.begin());
-                                            }
-                                            m_Redo.clear();
-                                        }
-                                        m_PreviewDirty = true;
-                                        Status(IsDirty() ? "Modified / preview updates at the next frame" : "Ready");
-                                    })));
+    m_Connections.emplace_back(m_Document->Subscribe(
+        Alive(lifetime,
+              [this](const StateChange<UiDocument>& change)
+              {
+                  if (!m_Replaying)
+                  {
+                      const auto before = change.GetBeforeSnapshot();
+                      const auto after = change.GetAfterSnapshot();
+                      const auto endpoint = m_Document->GetHandle();
+                      auto* state = m_Document.get();
+                      const auto apply = [endpoint, state](const std::shared_ptr<const UiDocument>& snapshot)
+                      {
+                          if (!endpoint.IsConnected())
+                          {
+                              throw std::logic_error("The Creator document has expired.");
+                          }
+                          state->Set(*snapshot);
+                      };
+                      m_History->RecordApplied(
+                          "Edit UI", [apply, after] { apply(after); }, [apply, before] { apply(before); },
+                          SnapshotBytes(*before) + SnapshotBytes(*after));
+                  }
+                  m_PreviewDirty = true;
+                  Status(IsDirty() ? "Modified / preview updates at the next frame" : "Ready");
+              })));
     m_Connections.emplace_back(window.FramePreparing().Connect(Alive(lifetime, [this] { Refresh(); })));
     Refresh();
     SelectNode("submit");
@@ -832,7 +874,12 @@ void CreatorWindow::LoadDocument(UiDocument document)
     m_Replaying = true;
     try
     {
-        m_Document->Set(std::move(document));
+        m_Window.Ui().States().Batch(
+            [&]
+            {
+                m_History->Set(*m_Document, std::move(document), "Load UI");
+                m_History->Clear(true);
+            });
     }
     catch (...)
     {
@@ -841,8 +888,6 @@ void CreatorWindow::LoadDocument(UiDocument document)
     }
     m_Replaying = false;
     ++m_FileGeneration;
-    m_Undo.clear();
-    m_Redo.clear();
     m_Saved = m_Document->GetSnapshot();
     m_Selected = m_Document->Get().m_Root.m_Id;
     m_PreviewDirty = true;
@@ -1126,49 +1171,33 @@ void CreatorWindow::SetProperty(std::string_view id, std::string name, PropertyV
 
 void CreatorWindow::Undo()
 {
-    if (m_Undo.empty())
-    {
-        return;
-    }
-    const auto snapshot = m_Undo.back();
-    m_Redo.push_back(m_Document->GetSnapshot());
     m_Replaying = true;
     try
     {
-        m_Document->Set(*snapshot);
+        m_History->Undo();
     }
     catch (...)
     {
         m_Replaying = false;
-        m_Redo.pop_back();
         throw;
     }
     m_Replaying = false;
-    m_Undo.pop_back();
     m_PreviewDirty = true;
 }
 
 void CreatorWindow::Redo()
 {
-    if (m_Redo.empty())
-    {
-        return;
-    }
-    const auto snapshot = m_Redo.back();
-    m_Undo.push_back(m_Document->GetSnapshot());
     m_Replaying = true;
     try
     {
-        m_Document->Set(*snapshot);
+        m_History->Redo();
     }
     catch (...)
     {
         m_Replaying = false;
-        m_Undo.pop_back();
         throw;
     }
     m_Replaying = false;
-    m_Redo.pop_back();
     m_PreviewDirty = true;
 }
 
@@ -1762,6 +1791,7 @@ void CreatorWindow::Save(bool cpp, bool selected)
         return;
     }
     const auto snapshot = m_Document->GetSnapshot();
+    const auto checkpoint = m_History->CaptureCheckpoint();
     auto design = *snapshot;
     if (selected)
     {
@@ -1786,7 +1816,8 @@ void CreatorWindow::Save(bool cpp, bool selected)
     FileDialog::Save(*m_Shell, std::move(options))
         .OnFinished(Alive(
             lifetime,
-            [this, snapshot, design = std::move(design), json, cpp, generation, lifetime](FileDialogResult result)
+            [this, snapshot, checkpoint, design = std::move(design), json, cpp, generation,
+             lifetime](FileDialogResult result)
             {
                 if (generation != m_FileGeneration)
                 {
@@ -1840,7 +1871,7 @@ void CreatorWindow::Save(bool cpp, bool selected)
                     },
                     Alive(
                         lifetime,
-                        [this, snapshot, cpp, generation](MainWindow&, const std::filesystem::path& saved)
+                        [this, snapshot, checkpoint, cpp, generation](MainWindow&, const std::filesystem::path& saved)
                         {
                             if (generation != m_FileGeneration)
                             {
@@ -1848,6 +1879,7 @@ void CreatorWindow::Save(bool cpp, bool selected)
                             }
                             if (!cpp)
                             {
+                                m_History->MarkSaved(checkpoint);
                                 m_Saved = snapshot;
                                 m_Path = saved;
                             }

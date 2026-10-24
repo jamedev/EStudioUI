@@ -3,6 +3,7 @@
 #include "DesignerSurface.h"
 #include "WidgetPalette.h"
 #include <EStudioUI/ThemeController.h>
+#include <EStudioUI/UndoHistory.h>
 
 #include <EStudioUI/Application.h>
 #include <EStudioUI/MainWindow.h>
@@ -192,8 +193,8 @@ class CreatorWindow
     //! Suppresses a gesture invalidated by another document publication.
     bool m_AbortGesture = false;
 
-    //! Owns bounded history snapshots.
-    std::vector<std::shared_ptr<const UiDocument>> m_Undo, m_Redo;
+    //! Uses the shared transaction-backed history with count and estimated-byte budgets.
+    std::unique_ptr<UndoHistory> m_History;
 
     //! Owns the last saved design snapshot.
     std::shared_ptr<const UiDocument> m_Saved;

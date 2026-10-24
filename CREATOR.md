@@ -57,7 +57,9 @@ not hardware performance.
    colors, border width/radius, opacity and font size. Full existing EStudioUI CSS
    remains available in source, including selectors, parts and animation rules.
 6. Switch Live preview to interact with actual framework widgets. Save JSON or
-   export editable C++ independently. Undo/redo retains 32 document snapshots.
+   export editable C++ independently. Undo/redo uses the framework `UndoHistory`
+   service, retaining at most 32 snapshot commands and 64 MiB estimated payload.
+   Saving marks the exact captured history checkpoint; newer edits remain dirty.
 
 Typed CSS values are explicit C++ presentation overrides, with the framework's
 ordinary precedence over stylesheet rules. Clear CSS overrides returns a selected
@@ -168,7 +170,7 @@ or application-level adapters rather than arbitrary child factories.
 | Priority | Missing block | Reason and next acceptance target |
 | --- | --- | --- |
 | 1 | Complete widget adapters and named/multiple slots | Author combo choices, list/tree/table models, tab/stack pages, menu/tool actions, resources, units and command properties without losing information on either output path |
-| 2 | Document-safe application services | Dirty close prompts, crash recovery, history byte budgets, migration policies and workspace preferences; open already confirms discarding edits and async file completion preserves newer data |
+| 2 | Document-safe application services | Integrate the 0.24 DocumentWorkspace close workflow into Creator; shared bounded UndoHistory is now used. Crash recovery, migration policies and workspace preferences remain application work; open already confirms discarding edits and async file completion preserves newer data |
 | 3 | Scoped styles and richer visual CSS editing | Keep theme editing inside a preview subtree, distinguish inherited/computed/overridden values, edit pseudo states/parts, gradients, shadows and keyframes without rebuilding controls |
 | 4 | Visual hierarchy and constraints | Existing-widget reparent/reorder by drag, multi-selection, relationship handles and visible solver conflict reports; container/sibling snapping guides now ship |
 | 5 | Canvas dashboard authoring | Build on existing sparse widget hosts; add visual host placement, document persistence of host bounds, zoom policy and large-scene widget lifecycle/resource budgets |

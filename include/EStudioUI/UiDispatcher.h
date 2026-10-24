@@ -104,6 +104,9 @@ class UiDispatcher
     std::size_t Drain(std::size_t maxCount = 256,
                       std::chrono::steady_clock::duration maxDuration = std::chrono::milliseconds(2));
 
+    //! Wakes an open owner loop without allocating queue work; safe for reserved completion slots.
+    void Wake() const noexcept;
+
     //! Returns whether accepted unfinished work remains.
     bool HasPending() const noexcept;
 

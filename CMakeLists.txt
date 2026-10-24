@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.24)
-project(EStudioUI VERSION 0.23.0 LANGUAGES C CXX)
+project(EStudioUI VERSION 0.24.0 LANGUAGES C CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -86,6 +86,7 @@ add_library(EStudioUIGl STATIC third_party/glad/src/gl.c)
 target_include_directories(EStudioUIGl PUBLIC third_party/glad/include)
 
 add_library(EStudioUI STATIC
+    src/UndoHistory.cpp src/WindowCloseRequest.cpp src/DocumentWorkspace.cpp src/DocumentSaveRequest.cpp src/DocumentCloseSession.cpp
     src/Theme.cpp src/ThemeController.cpp
     src/UiDocument.cpp src/WidgetRegistry.cpp
     src/PropertyValue.cpp src/PropertyModel.cpp src/PropertyGrid.cpp src/CollapsiblePanel.cpp
@@ -194,9 +195,11 @@ if(ESTUDIOUI_BUILD_DEMO)
         demo/WidgetStylesGallery.cpp demo/WidgetStylesProbe.cpp demo/ApplicationProbe.cpp demo/FoundationGallery.cpp
         demo/StateGallery.cpp demo/ModelGallery.cpp demo/LayoutGallery.cpp demo/ConstraintGallery.cpp demo/InputGallery.cpp demo/PlatformGallery.cpp
         demo/PlatformSemanticProbe.cpp demo/TextGallery.cpp demo/EssentialGallery.cpp demo/CommandGallery.cpp
-        demo/GpuProbeWindow.cpp demo/RenderingProfile.cpp demo/ImageGallery.cpp demo/ScrollStackGallery.cpp demo/WorkspaceGallery.cpp)
+        demo/GpuProbeWindow.cpp demo/RenderingProfile.cpp demo/ImageGallery.cpp demo/ScrollStackGallery.cpp demo/WorkspaceGallery.cpp demo/DocumentGallery.cpp)
     target_link_libraries(EStudioUIDemo PRIVATE EStudioUI::EStudioUI EStudioUIGl glfw)
     target_compile_definitions(EStudioUIDemo PRIVATE ESTUDIOUI_DEMO_BUILD_CONFIGURATION="$<CONFIG>")
+    add_executable(EStudioUIDocumentWorkspaceExample examples/DocumentWorkspace.cpp)
+    target_link_libraries(EStudioUIDocumentWorkspaceExample PRIVATE EStudioUI::EStudioUI)
     add_executable(EStudioUIWorkspaceExample examples/ApplicationWorkspace.cpp)
     target_link_libraries(EStudioUIWorkspaceExample PRIVATE EStudioUI::EStudioUI)
     add_executable(EStudioUIConstraintExample examples/ConstraintLayout.cpp)
@@ -252,7 +255,7 @@ endif()
 
 if(ESTUDIOUI_BUILD_TESTS)
     enable_testing()
-    foreach(suite PropertyEditing UiDocument Theme)
+    foreach(suite PropertyEditing UiDocument Theme UndoHistory DocumentWorkspace)
         add_executable(EStudioUI${suite}Tests tests/${suite}Tests.cpp)
         target_link_libraries(EStudioUI${suite}Tests PRIVATE EStudioUI::EStudioUI)
         target_compile_definitions(EStudioUI${suite}Tests PRIVATE ESTUDIOUI_FONT_PATH="${CMAKE_CURRENT_SOURCE_DIR}/third_party/fonts/NotoSans.ttf")

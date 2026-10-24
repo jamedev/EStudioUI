@@ -35,7 +35,7 @@ command history, geometry, and persistence; these are not promised modules or
 current standalone SDKs. Public API usability and supported extension points
 remain acceptance criteria throughout.
 
-## Implementation status: 0.23, property editing and the first Creator application
+## Implementation status: 0.24, document workspace and reusable history
 
 The appearance/authoring follow-up adds neutral configurable preset families,
 coalesced owned OS appearance snapshots, palette icons and container drag insertion,
@@ -78,7 +78,8 @@ and its remaining platform limits.
 | F11 | 0.16 implementation extends 0.15 native services with shared composition, Windows IMM, GPU preedit, stable virtual list/tree/table/canvas semantics and native collection/text/event patterns; automated Windows Release/Debug/native repetitions pass; interactive IME/AT/mixed-DPI acceptance remains open |
 | F10a | Implemented in 0.17: actual font identity/selection/fallback, script and bidi shaping, visual caret affinity and disjoint selection, Unicode wrapping, shared composition and bounded CPU/GPU text caches; see TEXT.md and verification/TEXT_0_17.md |
 | F12 image slice | 0.20: immutable worker-friendly images, bounded decoding, DPI icon sources and byte/count-bounded per-context texture residency with safe retirement; broader resource services remain feature-driven |
-| F10b, F12, F16 | Planned: later document editing, feature-driven resource hardening, and reusable history/workspace services |
+| F16 first slice | 0.24 delivered: reusable transactional history/grouping, count/estimated-byte budgets, exact saved checkpoints and stable document close/save/detach lifecycle; versioned application-session restore and recovery remain planned |
+| F10b, broader F12 | Planned: later document editing and feature-driven resource hardening |
 | F14 | Deferred until broad widget/workspace use informs reusable module extraction and SDK packaging; not a Gate B prerequisite |
 
 Ease of use is a standing acceptance criterion, not a separate polish phase.
@@ -150,11 +151,23 @@ commands, platform pickers, layout/constraint and sparse canvas widget-hosting
 contracts. `PropertyModel` owns validated typed values; `PropertyGrid` keeps rows
 virtual and exposes lazy stable semantic cells. `UiDocument` provides bounded,
 versioned open JSON construction and independently generated direct C++. The
-Creator has a small application-owned snapshot history, not the proposed generic
-F16 command/history service. Its [missing-block list](CREATOR.md) informs future
+Creator initially used a small application-owned snapshot history. The 0.24
+increment migrates that consumer to the reusable F16 `UndoHistory` service. Its [missing-block list](CREATOR.md) informs future
 framework work without moving F10b or F14 into this increment. The private
 header-only nlohmann/json dependency uses MIT and the existing pinned manifest.
 See [verification](verification/PROPERTY_CREATOR_0_23.md).
+
+**The 0.24 F16/W22 slice** supplies `UndoHistory` in the canonical State domain,
+atomic grouped edits, bounded count/estimated-byte retention and non-reused saved
+checkpoints. `DocumentWorkspace` preserves stable views across tab reorder and
+native detach/reattach. Close preflight covers Save/Discard/Cancel, asynchronous
+failure and cancellation, stale saved data, focused-editor commits, owner teardown
+and native close veto. Close All approves all target views before removing any.
+The real gallery saves JSON through the platform picker and application workers;
+Creator reuses the shared history without becoming a multi-document application.
+See [contracts](DOCUMENT_WORKSPACE.md) and
+[verification](verification/DOCUMENT_WORKSPACE_0_24.md). This is not completion of
+versioned application-session persistence, recovery, F10b or deferred F14 extraction.
 
 ## Original assessment of the 0.8 implementation
 
@@ -682,7 +695,8 @@ snapshots are bounded and fully validated before applying changes.
 [Contracts](WORKSPACES.md) and [verification](verification/WORKSPACES_0_22.md)
 record delivered scope and test evidence. This is feature-driven workspace
 persistence, not completion of generic F16 document/history services. Arbitrary
-nested dock trees, W22 document workspaces, F10b and F14 remain deferred. Windows
+nested dock trees, F10b and F14 remain deferred. W22 document workspaces
+are delivered by the separate 0.24 increment. Windows
 11 Snap Layout overlays, physical mixed-monitor transitions and real AT stay in
 the separate interactive F11 acceptance list.
 

@@ -168,6 +168,9 @@ class UiContext
     //! Delivers native results and retires replaced adapters; manual hosts call this at an idle owner turn.
     void PumpPlatformServices();
 
+    //! Runs once per ordinary idle service turn, without polling native events or draining queues.
+    Signal<>& IdleTurn();
+
     //! Reports native work that requires a manual host to retain its native owner and keep pumping.
     bool HasPendingPlatformWork() const;
 
@@ -416,6 +419,10 @@ class UiContext
     std::unique_ptr<SemanticTree> m_Semantics;
 
     //! Owns injectable services; it is destroyed before the native containing window.
+    //! Retains idle delivery guards through callbacks that remove a context owner.
+    struct IdleData;
+    std::shared_ptr<IdleData> m_Idle;
+
     std::unique_ptr<PlatformServices> m_Platform;
 
     //! Prevents completion observers from installing new native work during shutdown.
