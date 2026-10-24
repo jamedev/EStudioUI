@@ -87,7 +87,8 @@ bool SemanticTree::IsVisible(const Widget& widget) const
         return false;
     for (auto* node = &widget; node; node = node->m_Parent)
         if (node->m_Overlay)
-            return std::any_of(m_Context.m_Popups.begin(), m_Context.m_Popups.end(),
+            return m_Context.IsPinnedOverlay(*node) ||
+                   std::any_of(m_Context.m_Popups.begin(), m_Context.m_Popups.end(),
                                [&](const auto& popup) { return popup.m_Widget.Get() == node; });
     return true;
 }
@@ -149,8 +150,11 @@ std::optional<SemanticNode> SemanticTree::GetNode(SemanticId id) const
         node.m_Info.m_Role = *widget->m_AccessibleRole;
     auto& info = node.m_Info;
     if (info.m_Role < SemanticRole::Group || info.m_Role > SemanticRole::ScrollBar ||
+        info.m_Live < SemanticLiveSetting::Off || info.m_Live > SemanticLiveSetting::Assertive ||
         (static_cast<unsigned>(info.m_Actions) & ~2047U))
+    {
         throw std::invalid_argument("A semantic hook returned an invalid role or action mask.");
+    }
     for (const auto* text : {&info.m_Name, &info.m_Description, &info.m_Value})
         ValidatePlatformText(*text);
     for (const auto value : {info.m_Number, info.m_Minimum, info.m_Maximum, info.m_Step})
@@ -240,8 +244,11 @@ std::size_t SemanticTree::GetChildCount(SemanticId id) const
     if (id.m_Key.m_Item)
         return count;
     for (const auto& child : parent->m_Children)
-        if (!child->m_Overlay && m_Context.LogicalParent(*child) == parent && IsVisible(*child))
+        if ((!child->m_Overlay || m_Context.IsPinnedOverlay(*child)) && m_Context.LogicalParent(*child) == parent &&
+            IsVisible(*child))
+        {
             ++count;
+        }
     for (const auto& popup : m_Context.m_Popups)
         if (const auto* child = popup.m_Widget.Get();
             child && m_Context.LogicalParent(*child) == parent && IsVisible(*child))
@@ -269,7 +276,8 @@ SemanticId SemanticTree::GetChildAt(SemanticId id, std::size_t index) const
         return key ? SemanticId{id.m_Widget, *key} : SemanticId{};
     }
     for (const auto& child : parent->m_Children)
-        if (!child->m_Overlay && m_Context.LogicalParent(*child) == parent && IsVisible(*child))
+        if ((!child->m_Overlay || m_Context.IsPinnedOverlay(*child)) && m_Context.LogicalParent(*child) == parent &&
+            IsVisible(*child))
         {
             if (!index)
                 return child->m_TargetKey;
@@ -326,8 +334,11 @@ SemanticId SemanticTree::GetSibling(SemanticId id, bool next) const
         {
             const QueryScope scope(m_Context);
             for (const auto& child : owner->m_Children)
-                if (!child->m_Overlay && m_Context.LogicalParent(*child) == owner && IsVisible(*child))
+                if ((!child->m_Overlay || m_Context.IsPinnedOverlay(*child)) &&
+                    m_Context.LogicalParent(*child) == owner && IsVisible(*child))
+                {
                     ++prefix;
+                }
             for (const auto& popup : m_Context.m_Popups)
                 if (const auto* child = popup.m_Widget.Get();
                     child && m_Context.LogicalParent(*child) == owner && IsVisible(*child))

@@ -164,6 +164,41 @@ std::string Theme::StyleSheet(const SystemAppearance& appearance) const
                                                                                                    : 6.0f);
     std::string css = R"CSS(
 /* EStudioUI semantic theme: ordinary CSS, compiled only on a preference change. */
+searchbox, dateedit, timeedit { height: @height@px; padding: 0; gap: 0; }
+searchbox textbox, dateedit textbox, timeedit textbox { height: @height@px; }
+searchbox toolbutton, dateedit toolbutton, timeedit toolbutton { padding: 0; }
+completionpopup, commandpalette, notification, .calendar-popup, .font-picker-popup, .time-picker-popup, .multi-select-popup {
+ background: @input@; color: @fg@; border: 1px solid @border@; border-radius: @radius@px; padding: 8px; gap: 8px; box-shadow: none;
+}
+notificationcenter { background: transparent; border-width: 0; padding: 0; }
+notification { padding: 10px; }
+validationmessage { background: transparent; border-width: 0; color: @muted@; }
+validationmessage.error { color: @error@; }
+validationmessage.warning { color: @warning@; }
+validationmessage.success { color: @success@; }
+logview, fonteditor, datetimeedit, tageditor { color: @fg@; background: transparent; gap: 8px; }
+segmentedcontrol { gap: 0; background: @surface@; border-radius: @radius@px; }
+radiobutton.segment { background: @input@; color: @fg@; border: 1px solid @border@; padding: 6px 10px; }
+radiobutton.segment:checked { background: @selected@; border-color: @accent@; }
+radiobutton.segment::indicator, radiobutton.segment::mark { display: none; width: 0; height: 0; }
+radiobutton.segment::label { color: @fg@; }
+multiselectcombobox { height: @height@px; }
+.tag-chip { background: @selected@; color: @fg@; border: 1px solid @border@; padding: 3px 8px; border-radius: @radius@px; }
+.tag-chip:hover { border-color: @accent@; }
+textbox.selectable-label, textbox.selectable-label:read-only { background: transparent; color: @fg@; border-width: 0; }
+textbox.link-label, textbox.link-label:read-only { color: @accent@; }
+textbox.link-label:hover, textbox.link-label:focus { border: 1px solid @accent@; }
+rangeslider::groove { background: @border@; border-width: 0; }
+rangeslider::fill { background: @accent@; border-width: 0; }
+rangeslider::lower-handle, rangeslider::upper-handle { width: 16px; height: 16px; background: @accent@; border: 2px solid @input@; border-radius: 8px; }
+rangeslider::lower-handle:selected:focus, rangeslider::upper-handle:selected:focus { border-color: @fg@; }
+calendar { background: @input@; color: @fg@; padding: 8px; border: 1px solid @border@; border-radius: @radius@px; }
+calendar::header { background: transparent; color: @muted@; }
+calendar::day { background: transparent; color: @fg@; border-width: 0; border-radius: 4px; }
+calendar::day:selected { background: @accent@; color: @onaccent@; }
+calendar::day:selected:focus { border: 1px solid @fg@; }
+.font-preview { background: @surface@; color: @fg@; padding: 12px; border-radius: @radius@px; }
+
 window { background: @bg@; color: @fg@; font-size: @font@px; }
 button, toolbutton, textbox, numericinput, combobox, listwidget, treewidget, tablewidget, propertygrid,
 groupbox, frame, collapsiblepanel, colorpicker, popup, dialog, contextmenu, toolbar, stackedwidget {
@@ -277,6 +312,9 @@ design-overlay { color: @accent@; }
              {"@accent-hover@", Css(Mix(p.m_Accent, Rgb(p.m_Dark ? 0xffffff : 0), p.m_Dark ? .14f : .22f))},
              {"@onaccent@", Css(p.m_OnAccent)},
              {"@muted@", Css(p.m_Muted)},
+             {"@error@", Css(p.m_HighContrast ? p.m_Foreground : Rgb(p.m_Dark ? 0xff8d92 : 0xa92f38))},
+             {"@warning@", Css(p.m_HighContrast ? p.m_Foreground : Rgb(p.m_Dark ? 0xe3b365 : 0x9a6500))},
+             {"@success@", Css(p.m_HighContrast ? p.m_Foreground : Rgb(p.m_Dark ? 0x64cba0 : 0x16784f))},
              {"@border@", Css(p.m_Border)},
              {"@hover@", Css(p.m_Hover)},
              {"@selected@", Css(p.m_Selected)},

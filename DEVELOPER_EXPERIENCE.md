@@ -215,3 +215,23 @@ it neither creates a window nor installs a stylesheet implicitly. The compiled
 Creator uses these same APIs rather than a private substitute widget system.
 Complete adapter coverage and authoring ergonomics remain visible in
 [CREATOR.md](CREATOR.md).
+
+## Search, feedback and common-control acceptance (0.26)
+
+The common path stays small: `SetSuggestions`, `SetTags`, `SetValues`, `SetFont`,
+`SetDate` and `SetTime` accept ordinary owned values. Search exposes its normal
+TextBox for validators/IME; asynchronous completion uses the same typed UI handles
+as other framework work, plus a request ID to reject obsolete results.
+`GetQueryError` exposes contained debounced observer failures.
+
+Shared values have ordinary two-way binding helpers: `BindText(SearchBox)`,
+`BindTags`, `BindFont`, `BindDate`, `BindTime` and interval/datetime `BindValue`.
+Do not introduce parallel state or command execution systems for these controls.
+The palette takes existing Actions; multiple selection exposes its canonical
+SelectionModel. Logs explicitly batch worker entries and report inbox rejection.
+
+Review [compiled search examples](examples/SearchFeedback.cpp) and
+[compiled picker examples](examples/CommonPickers.cpp), plus the real
+`ProductivityGallery` call sites. Bounds and civil-value semantics are explicit
+in the feature references. Font selection does not require applications to load
+a platform-wide font catalog; link activation remains application-routed.

@@ -1,6 +1,7 @@
 #pragma once
 
 #include "PropertyValue.h"
+#include "TemporalValue.h"
 
 #include "State.h"
 #include "Widget.h"
@@ -29,6 +30,16 @@ class ScrollBar;
 class ToolButton;
 class CheckBox;
 class FilePathEditor;
+class SearchBox;
+class RangeSlider;
+class TagEditor;
+class FontEditor;
+class FontPicker;
+class DateEdit;
+class TimeEdit;
+class DateTimeEdit;
+struct RangeValues;
+struct FontSelection;
 
 //! Selects whether a control also publishes its committed edits to the state.
 enum class BindingMode
@@ -371,4 +382,21 @@ Binding BindEnabled(Widget& target, State<bool>& state);
 
 //! Binds the widget's local programmatic visibility flag in one direction.
 Binding BindVisible(Widget& target, State<bool>& state);
+//! Binds committed search text using its ordinary text input endpoint.
+Binding BindText(SearchBox& target, State<std::string>& state, BindingMode mode = BindingMode::TwoWay);
+//! Binds both slider endpoints with exact final-candidate range validation.
+Binding BindValue(RangeSlider& target, State<RangeValues>& state, BindingMode mode = BindingMode::TwoWay);
+//! Binds a bounded complete tag set with coherent rollback.
+Binding BindTags(TagEditor& target, State<std::vector<std::string>>& state, BindingMode mode = BindingMode::TwoWay);
+//! Binds a requested font to the live editor.
+Binding BindFont(FontEditor& target, State<FontSelection>& state, BindingMode mode = BindingMode::TwoWay);
+//! Binds an applied font to the popup picker.
+Binding BindFont(FontPicker& target, State<FontSelection>& state, BindingMode mode = BindingMode::TwoWay);
+//! Binds an optional validated civil date.
+Binding BindDate(DateEdit& target, State<std::optional<CalendarDate>>& state, BindingMode mode = BindingMode::TwoWay);
+//! Binds an optional validated local clock value.
+Binding BindTime(TimeEdit& target, State<std::optional<ClockTime>>& state, BindingMode mode = BindingMode::TwoWay);
+//! Binds an optional complete civil date and local clock pair.
+Binding BindValue(DateTimeEdit& target, State<std::optional<DateTimeValue>>& state,
+                  BindingMode mode = BindingMode::TwoWay);
 } // namespace EStudioUI

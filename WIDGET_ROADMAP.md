@@ -48,7 +48,10 @@ single-line `TextBox`, `NumericInput`, `Slider`, `SplitToolButton`, `TabWidget`,
 `BusyIndicator`, `ToolTip`, `MenuBar`, `MenuItem`, `Popup`, `Dialog`,
 `DialogButtonBox`, `MessageBox`, `InputDialog`, `ImageView`, shared `Image`/`Icon` resources,
 `CollapsiblePanel`, `PropertyGrid`, `ColorEditor`/`ColorPicker`, `UnitEditor`, `VectorEditor`,
-`DocumentWorkspace`,
+`DocumentWorkspace`, `TreeTable`, `SearchBox`, `CompletionPopup`, `CommandPalette`,
+`ValidationMessage`, `NotificationCenter`, `LogView`, `SegmentedControl`,
+`MultiSelectComboBox`, `TagEditor`, `RangeSlider`, `SelectableLabel`, `LinkLabel`,
+`FontEditor`, `FontPicker`, `DateEdit`, `TimeEdit`, `DateTimeEdit`, `Calendar`,
 and custom painting through `PaintWidget`/`Painter`.
 
 Existing collections render viewport model entries rather than creating a widget
@@ -58,7 +61,7 @@ scrolling container. The custom dial in the demo is not a public library `Dial`.
 
 Priority means: **Essential** for ordinary applications, **High** for a powerful
 engineering/CAD workspace, **Later** after the shared foundations and common
-controls. Entries marked **0.18**, **0.19**, **0.20**, **0.21**, **0.22**, **0.23** or **0.24** are delivered; the other catalog entries remain planned.
+controls. Entries marked **0.18**, **0.19**, **0.20**, **0.21**, **0.22**, **0.23** **0.24**, **0.25** or **0.26** are delivered; the other catalog entries remain planned.
 
 F09 adds shared action presentations to the existing buttons, toolbars, split
 choosers, and context menus. Nested command menus are implemented through
@@ -76,12 +79,12 @@ No other planned widget family is marked delivered by the input milestone.
 | W05 | RichTextEditor / RichTextView | Editable/read-only presentations of one structured document model | Later document track; essential there |
 | W06 | ImageView / image and icon display | Aspect fit/fill, alignment, PNG/JPEG/RGBA resources, shared command icons, DPI source choice and bounded context residency | Essential — **0.20 delivered** |
 | W07 | ProgressBar / BusyIndicator | Determinate/indeterminate progress; hidden indicators stop requesting frames | Essential — **0.18 delivered** |
-| W08 | SearchBox / CompletionPopup | Search/clear actions, reusable suggestions, cancellable asynchronous results | High |
-| W09 | Switch / SegmentedControl | Boolean/exclusive selection presentations sharing normal control semantics | High |
-| W10 | MultiSelectComboBox / TagEditor | Checkable choices, removable tags, keyboard interaction | High |
-| W11 | RangeSlider | Bounded interval selected by two handles | High |
+| W08 | SearchBox / CompletionPopup | Search/clear actions, reusable suggestions, stale-safe asynchronous results and explicit worker cancellation | High — **0.26 delivered** |
+| W09 | Switch / SegmentedControl | Boolean/exclusive selection presentations sharing normal control semantics | High — **0.26 SegmentedControl delivered; Switch remains pending** |
+| W10 | MultiSelectComboBox / TagEditor | Checkable choices, removable tags, keyboard interaction | High — **0.26 delivered** |
+| W11 | RangeSlider | Bounded interval selected by two handles | High — **0.26 delivered** |
 | W12 | Dial | Public reusable circular value control | Later |
-| W13 | Hyperlink / richer Label | Links, selectable text, icons, wrapping | High |
+| W13 | Hyperlink / richer Label | Application-routed LinkLabel, single-line SelectableLabel; existing Label supplies wrapping | High — **0.26 delivered for links/selectable text; integrated icon labels remain pending** |
 
 Password presentation, input masks, and completion hooks extend `TextBox`.
 Integer/floating-point stepping remains based on `NumericInput`. Variants that
@@ -113,11 +116,11 @@ only change appearance should share implementations and semantic roles.
 | W28 | MessageBox / InputDialog / DialogButtonBox | Reusable confirmation, errors, input requests, standard responses | Essential — **0.19 delivered** |
 | W29 | FileDialog / FolderPicker / FilePathEditor | Asynchronous open/save/folder selection, filters, recent paths, canonical path bindings | Essential — **0.22 delivered** |
 | W30 | StatusBar | Message and permanent application widget area | High — **0.22 delivered** |
-| W31 | Banner / Toast / ValidationMessage | Nonmodal and field-level feedback with accessible announcements | High |
+| W31 | Banner / Toast / ValidationMessage | Nonmodal and field-level feedback with live-region semantics | High — **0.26 NotificationCenter and ValidationMessage delivered; real AT speech remains a human gate** |
 | W32 | ColorPicker / ColorEditor | Palette, RGB/HSV, alpha, hexadecimal input | High — **0.23 delivered** |
-| W33 | FontPicker / FontEditor | Family, size, style, preview using the shared font service | High |
-| W34 | DateEdit / TimeEdit / DateTimeEdit / Calendar | Validated temporal input and popup calendar | Later |
-| W35 | CommandPalette | Searchable shared actions and shortcuts | High |
+| W33 | FontPicker / FontEditor | Registered family, size, style and live preview using the shared font service | High — **0.26 delivered** |
+| W34 | DateEdit / TimeEdit / DateTimeEdit / Calendar | Validated optional civil input, calendar and time picker | **0.26 delivered; localization/timezones remain separate** |
+| W35 | CommandPalette | Searchable shared actions and shortcut hints | High — **0.26 delivered** |
 | W36 | Wizard / Stepper / Breadcrumb | Guided workflows and hierarchical navigation | Later |
 
 Standard dialogs should share platform-service interfaces, with documented native
@@ -171,7 +174,7 @@ compatibility is implied by the presence of a rich-text editor.
 | --- | --- | --- | --- |
 | W42 | Unit-aware scalar editors | Unit conversion, dimensional validation, display precision | High — **0.23 affine UnitEditor delivered** |
 | W43 | Vector / matrix / coordinate-system editors | Composition of typed value editors | High — **0.23 VectorEditor(2/3/4) delivered; matrices/frames pending** |
-| W44 | LogView / Console | Bounded streaming content, filtering, search, optional command input | High |
+| W44 | LogView / Console | Bounded worker streaming with virtualized read-only rows | High — **0.26 LogView delivered; dedicated filtering/search UI and command console remain pending** |
 | W45 | CodeEditor | Plain editor plus gutter, syntax styling, completion/folding interfaces | Later |
 | W46 | Plot / Chart / Legend / ColorMapEditor | Scientific data display with explicit data/LOD/performance contracts | Later |
 | W47 | Document viewers and media integrations | Optional PDF/web/media adapters with independent dependency/license review | Later |
@@ -280,3 +283,24 @@ Linux 54/54, isolated TSan 6/6 and local ASan/UBSan 54/54. The
 [verification record](verification/DATA_VIEWS_0_25.md) includes actual captures and
 remaining scope limits; [CI](https://github.com/jamedev/EStudioUI/actions/runs/40099945384)
 is green for that exact source.
+
+## Search, feedback and remaining common controls (0.26)
+
+The requested priorities 7 and 8 are implemented together, using existing input,
+model, state, font and renderer services. The two production demo pages, compiled
+examples, general Creator registration and neutral theme rules provide working
+consumers. See [search/feedback contracts](SEARCH_FEEDBACK.md) and
+[common-control contracts](COMMON_PICKERS.md).
+
+Completion IDs expire on edits, focus loss and dismissal. The bounded log inbox
+works independently of ordinary UI queue capacity. Static feedback expiry uses
+GUI-clock deadlines rather than per-frame polling. Visible row work and font
+layouts remain bounded/cached. Range endpoints have virtual Slider identities;
+calendar dates have stable virtual ListItem identities. Windows exposes feedback
+live priorities through UI Automation's existing bounded observation path.
+
+F10b structured document editing and F14 module extraction remain deferred.
+Further catalog work includes IconGrid/ThumbnailView, guided navigation, richer
+property adapters, a command console and application-specific model extensions.
+This increment does not claim OS-wide font enumeration, timezone conversion or
+complete specialized Creator serialization of every new value.

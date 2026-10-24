@@ -764,3 +764,39 @@ Count/page reads share a transaction. Optimistic multi-field writes and their
 resulting page are captured in one transaction before commit. The browser consumes
 these public APIs and application-owned workers. SQLite is the only new dependency,
 public domain, from the existing pinned manifest with loadable extensions omitted.
+
+## Search, feedback and common controls (0.26)
+
+`UiContext` owns a bounded deadline queue. `UiTimer` is a move-only owner-side RAII
+registration; the receiver overload captures a weak widget and attachment
+generation. Idle turns detach at most 64 ready callbacks before invocation.
+Callbacks scheduled by those callbacks await another turn, exceptions stay in
+terminal records, and context destruction cancels the rest of a detached ready
+batch. `Window::Step` folds the earliest GUI deadline into its existing wake time,
+including inactive windows. Timers never request an animation frame by themselves.
+
+Viewport overlays are root-owned and arranged separately from flow/popup content.
+Their bounded registry participates in hit testing, focus and logical semantics,
+while modal scopes still intercept lower layers. This lets notifications coexist
+with command palettes and dialogs instead of replacing popup sessions.
+
+Completion uses a bounded canonical model and virtual list. Search folds a static
+catalog on admission and performs explicit bounded scans per committed query.
+Request generations invalidate late results immediately; applications schedule
+workers through existing task/handle services. Command palettes reference shared
+Actions and recheck eligibility when invoked, closing the surface first.
+
+Log producers retain only a mutex-protected bounded CPU inbox plus a dispatcher
+wake endpoint. They never retain UI-owned model/state storage. Owner idle turns
+publish one immutable bounded model batch with surviving IDs. Snapshot rebuilding
+is O(retained rows) per batch; painting and shaping remain viewport-bounded.
+External snapshot owners may extend old data lifetime beyond the current budget.
+
+New scalar/composite controls reuse existing editors and final-candidate binding
+validation. Interval endpoints and calendar dates are virtual semantic children.
+Selectable labels reuse the read-only single-line text engine. Font controls use
+registered font identity/fallback, and civil date/time values avoid implicit
+timezone conversion. `SemanticLiveSetting` adds polite/assertive feedback
+metadata; Windows maps it to LiveSetting and raises live-region changes through
+the existing bounded observed-node set. This does not add full-tree frame scans
+or establish real screen-reader speech acceptance.

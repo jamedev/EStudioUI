@@ -142,3 +142,5 @@ font set. Shared image/icon resources follow in [0.20](IMAGE_RESOURCES.md), incl
 the inherited image-icon slot on checkbox/radio choices. Full mirrored UI layouts,
 document editing and other roadmap families remain separate work. Native human IME/assistive-technology/
 mixed-monitor acceptance remains tracked in the platform checklist.
+
+The 0.26 [remaining common controls](COMMON_PICKERS.md) add segmented and multiple choices, tags, intervals, selectable/link labels, fonts and civil date/time pickers.

@@ -112,6 +112,16 @@ Widget* UiContext::InputHitTest(Point position) const
         if (i->m_Options.m_Modal)
             return nullptr;
     }
+    for (auto i = m_Overlays.rbegin(); i != m_Overlays.rend(); ++i)
+    {
+        if (auto* overlay = i->m_Widget.Get(); overlay && overlay->m_Context == this && overlay->m_Parent == &m_Root)
+        {
+            if (auto* hit = HitTest(*overlay, position))
+            {
+                return hit;
+            }
+        }
+    }
     return HitTest(const_cast<Widget&>(m_Root), position);
 }
 
@@ -769,6 +779,18 @@ void UiContext::FocusNext(bool backwards)
                 self(self, *child);
     };
     collect(collect, *scope);
+    if (scope == &m_Root)
+    {
+        for (const auto& entry : m_Overlays)
+        {
+            if (auto* overlay = entry.m_Widget.Get();
+                overlay && overlay->m_Context == this && overlay->m_Parent == &m_Root)
+            {
+                collect(collect, *overlay);
+            }
+        }
+    }
+
     if (candidates.empty())
     {
         SetFocus(nullptr);

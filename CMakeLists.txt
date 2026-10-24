@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.24)
-project(EStudioUI VERSION 0.25.0 LANGUAGES C CXX)
+project(EStudioUI VERSION 0.26.0 LANGUAGES C CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -88,6 +88,11 @@ add_library(EStudioUIGl STATIC third_party/glad/src/gl.c)
 target_include_directories(EStudioUIGl PUBLIC third_party/glad/include)
 
 add_library(EStudioUI STATIC
+    src/CommonControlBindings.cpp src/UiTimer.cpp src/CompletionPopup.cpp src/SearchBox.cpp src/CommandPalette.cpp
+    src/ValidationMessage.cpp src/NotificationCenter.cpp src/LogSink.cpp src/LogView.cpp
+    src/SegmentedControl.cpp src/MultiSelectComboBox.cpp src/TagEditor.cpp src/RangeSlider.cpp
+    src/SelectableLabel.cpp src/LinkLabel.cpp src/FontEditor.cpp src/FontPicker.cpp
+    src/TemporalValue.cpp src/Calendar.cpp src/DateEdit.cpp src/TimeEdit.cpp src/DateTimeEdit.cpp
     src/UndoHistory.cpp src/WindowCloseRequest.cpp src/DocumentWorkspace.cpp src/DocumentSaveRequest.cpp src/DocumentCloseSession.cpp
     src/Theme.cpp src/ThemeController.cpp
     src/UiDocument.cpp src/WidgetRegistry.cpp
@@ -233,6 +238,10 @@ if(ESTUDIOUI_BUILD_CREATOR)
 endif()
 
 if(ESTUDIOUI_BUILD_DEMO)
+    add_executable(EStudioUISearchExample examples/SearchFeedback.cpp)
+    target_link_libraries(EStudioUISearchExample PRIVATE EStudioUI::EStudioUI)
+    add_executable(EStudioUIPickersExample examples/CommonPickers.cpp)
+    target_link_libraries(EStudioUIPickersExample PRIVATE EStudioUI::EStudioUI)
     add_executable(EStudioUIModelAdapterExample examples/ModelAdapter.cpp)
     target_link_libraries(EStudioUIModelAdapterExample PRIVATE EStudioUI::EStudioUI)
     add_executable(EStudioUIPropertyExample examples/PropertyEditing.cpp)
@@ -245,7 +254,7 @@ if(ESTUDIOUI_BUILD_DEMO)
         demo/WidgetStylesGallery.cpp demo/WidgetStylesProbe.cpp demo/ApplicationProbe.cpp demo/FoundationGallery.cpp
         demo/StateGallery.cpp demo/ModelGallery.cpp demo/LayoutGallery.cpp demo/ConstraintGallery.cpp demo/InputGallery.cpp demo/PlatformGallery.cpp
         demo/PlatformSemanticProbe.cpp demo/TextGallery.cpp demo/EssentialGallery.cpp demo/CommandGallery.cpp
-        demo/GpuProbeWindow.cpp demo/RenderingProfile.cpp demo/ImageGallery.cpp demo/ScrollStackGallery.cpp demo/WorkspaceGallery.cpp demo/DocumentGallery.cpp)
+        demo/GpuProbeWindow.cpp demo/RenderingProfile.cpp demo/ImageGallery.cpp demo/ScrollStackGallery.cpp demo/WorkspaceGallery.cpp demo/DocumentGallery.cpp demo/ProductivityGallery.cpp)
     target_link_libraries(EStudioUIDemo PRIVATE EStudioUI::EStudioUI EStudioUIGl glfw)
     target_compile_definitions(EStudioUIDemo PRIVATE ESTUDIOUI_DEMO_BUILD_CONFIGURATION="$<CONFIG>")
     add_executable(EStudioUIDocumentWorkspaceExample examples/DocumentWorkspace.cpp)
@@ -305,7 +314,7 @@ endif()
 
 if(ESTUDIOUI_BUILD_TESTS)
     enable_testing()
-    foreach(suite PropertyEditing UiDocument Theme UndoHistory DocumentWorkspace AdapterModel DataViews)
+    foreach(suite SearchFeedback CommonControls PropertyEditing UiDocument Theme UndoHistory DocumentWorkspace AdapterModel DataViews)
         add_executable(EStudioUI${suite}Tests tests/${suite}Tests.cpp)
         target_link_libraries(EStudioUI${suite}Tests PRIVATE EStudioUI::EStudioUI)
         target_compile_definitions(EStudioUI${suite}Tests PRIVATE ESTUDIOUI_FONT_PATH="${CMAKE_CURRENT_SOURCE_DIR}/third_party/fonts/NotoSans.ttf")

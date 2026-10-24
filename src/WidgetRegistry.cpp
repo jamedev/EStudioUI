@@ -1,3 +1,18 @@
+#include <EStudioUI/SearchBox.h>
+#include <EStudioUI/ValidationMessage.h>
+#include <EStudioUI/LogView.h>
+#include <EStudioUI/SegmentedControl.h>
+#include <EStudioUI/MultiSelectComboBox.h>
+#include <EStudioUI/TagEditor.h>
+#include <EStudioUI/RangeSlider.h>
+#include <EStudioUI/SelectableLabel.h>
+#include <EStudioUI/LinkLabel.h>
+#include <EStudioUI/FontEditor.h>
+#include <EStudioUI/FontPicker.h>
+#include <EStudioUI/DateEdit.h>
+#include <EStudioUI/TimeEdit.h>
+#include <EStudioUI/DateTimeEdit.h>
+#include <EStudioUI/Calendar.h>
 #include <EStudioUI/WidgetRegistry.h>
 #include <EStudioUI/Widget.h>
 #include <EStudioUI/Label.h>
@@ -218,7 +233,7 @@ template <typename T> UiWidgetDescriptor Type(std::string typeName, std::string 
             "placeholder", "Placeholder", "Enter text", [](Widget& widget, const std::string& value)
             { static_cast<T&>(widget).SetPlaceholder(value); }, "SetPlaceholder"));
         descriptor.m_Properties.push_back(Boolean(
-            "readOnly", "Read only", false,
+            "readOnly", "Read only", std::is_base_of_v<SelectableLabel, T>,
             [](Widget& widget, bool value) { static_cast<T&>(widget).SetReadOnly(value); }, "SetReadOnly"));
     }
     if constexpr (std::is_base_of_v<ToolButton, T> || std::is_base_of_v<CheckBox, T>)
@@ -352,6 +367,22 @@ std::string UiCppValue(const PropertyValue& value)
 WidgetRegistry::WidgetRegistry()
 {
     Register(Type<Widget>("Widget", "Containers", true));
+    Register(Type<SearchBox>("SearchBox", "Search and feedback"));
+    Register(Type<ValidationMessage>("ValidationMessage", "Search and feedback"));
+    Register(Type<LogView>("LogView", "Search and feedback"));
+    Register(Type<SegmentedControl>("SegmentedControl", "Common controls"));
+    Register(Type<MultiSelectComboBox>("MultiSelectComboBox", "Common controls"));
+    Register(Type<TagEditor>("TagEditor", "Common controls"));
+    Register(Type<RangeSlider>("RangeSlider", "Common controls"));
+    Register(Type<SelectableLabel>("SelectableLabel", "Common controls"));
+    Register(Type<LinkLabel>("LinkLabel", "Common controls"));
+    Register(Type<FontEditor>("FontEditor", "Common controls"));
+    Register(Type<FontPicker>("FontPicker", "Common controls"));
+    Register(Type<DateEdit>("DateEdit", "Common controls"));
+    Register(Type<TimeEdit>("TimeEdit", "Common controls"));
+    Register(Type<DateTimeEdit>("DateTimeEdit", "Common controls"));
+    Register(Type<Calendar>("Calendar", "Common controls"));
+
     Register(Type<Label>("Label", "Controls", false));
     Register(Type<Button>("Button", "Controls", false));
     Register(Type<ToolButton>("ToolButton", "Controls", false));

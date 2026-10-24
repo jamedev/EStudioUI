@@ -1,5 +1,11 @@
 # EStudioUI
 
+0.26 adds [search and application feedback](SEARCH_FEEDBACK.md) and
+[remaining common controls](COMMON_PICKERS.md). Try the new **Search & feedback**
+and **Common controls** demo tabs with `.\Build.ps1 -Run`. Both increments reuse
+the existing renderer and dependencies, with light/dark CSS and typed state bindings.
+[Verification](verification/PRODUCTIVITY_0_26.md) records platform checks and scope.
+
 0.25 adds [stronger data views and generic model adapters](DATA_VIEWS.md),
 including TreeTable and a working [SQLite database browser](SQLITE_BROWSER.md).
 Build, test and launch it on Windows with `.\Build.ps1 -RunDatabaseBrowser`.

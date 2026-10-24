@@ -9,6 +9,7 @@
 #include "PopupSession.h"
 #include "PlatformServices.h"
 #include "TextInputClient.h"
+#include "UiTimer.h"
 
 #include <functional>
 #include <stdexcept>
@@ -23,6 +24,7 @@ class SemanticTree;
 namespace Detail
 {
 class NativeTextInput;
+class UiTimers;
 }
 
 //! Identifies traversals during which synchronous structural changes are unsafe.
@@ -84,6 +86,15 @@ struct UiStats
 
     //! Registered action associations examined by shortcut resolution, independent of widget count.
     std::size_t m_ShortcutChecks = 0;
+};
+
+//! Pins a nonmodal overlay independently of the application's normal layout.
+enum class OverlayCorner
+{
+    TopLeft,
+    TopRight,
+    BottomLeft,
+    BottomRight
 };
 
 //! Owns one window's widget tree, style resolution, layout, and input routing.
@@ -189,6 +200,31 @@ class UiContext
     //! Loads a UTF-8 stylesheet from disk.
     bool LoadStyleSheet(const std::filesystem::path& path, std::string& error);
 
+    //! Schedules a cancellable deadline; retain its handle until completion.
+    UiTimer After(double delay, std::function<void()> callback);
+
+    //! Schedules a weak receiver-bound callback that expires on destruction or context transfer.
+    template <class T, class Callback>
+        requires std::derived_from<T, Widget>
+    UiTimer After(T& receiver, double delay, Callback callback)
+    {
+        if (receiver.GetContext() != this)
+        {
+            throw std::invalid_argument("A timer receiver must belong to its context.");
+        }
+        const WidgetRef weak(&receiver);
+        const auto generation = receiver.m_ContextGeneration;
+        return After(delay,
+                     [weak, generation, context = this, callback = std::move(callback)]() mutable
+                     {
+                         if (auto* live = dynamic_cast<T*>(weak.Get());
+                             live && live->GetContext() == context && live->m_ContextGeneration == generation)
+                         {
+                             std::invoke(callback, *live);
+                         }
+                     });
+    }
+
     //! Returns the window-local property animation scheduler.
     AnimationSystem& Animations();
 
@@ -219,6 +255,10 @@ class UiContext
 
     //! Routes an owning input payload; nested input/frame/queue dispatch is diagnosed.
     bool DispatchInput(const InputEvent& event);
+
+    //! Owns a bounded window-level overlay below popups; overlays do not replace popup sessions.
+    Widget& AddOverlay(std::unique_ptr<Widget> overlay, OverlayCorner corner = OverlayCorner::BottomRight,
+                       float margin = 12);
 
     //! Creates a shared command in this context's state domain.
     std::shared_ptr<Action> CreateAction(std::string text = {});
@@ -384,6 +424,29 @@ class UiContext
 
     //! Returns the next help deadline, or minus one.
     double NextToolTipDeadline() const;
+
+    //! Describes one root-owned nonmodal overlay.
+    struct OverlayEntry
+    {
+        //! Observes the independently arranged widget.
+        WidgetRef m_Widget;
+        //! Selects its viewport corner.
+        OverlayCorner m_Corner;
+        //! Reserves a logical-pixel viewport inset.
+        float m_Margin;
+    };
+
+    //! Contains at most 64 root-owned overlay registrations.
+    std::vector<OverlayEntry> m_Overlays;
+
+    //! Distinguishes registered nonmodal layers from popup surfaces.
+    bool IsPinnedOverlay(const Widget& widget) const;
+
+    //! Returns the next GUI-clock timer deadline for the native wait scheduler.
+    double NextTimerDeadline() const;
+
+    //! Owns bounded one-shot deadlines without continuous rendering.
+    std::unique_ptr<Detail::UiTimers> m_Timers;
 
     //! Observes the help source without extending its lifetime.
     WidgetRef m_ToolTipTarget;

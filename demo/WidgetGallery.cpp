@@ -90,6 +90,9 @@ WidgetGallery::WidgetGallery(Window& window, TabWidget& tabs, const std::filesys
     m_Documents = std::make_unique<DocumentGallery>(window, tabs.AddTab("Documents & history"));
     m_ScrollStack = std::make_unique<ScrollStackGallery>(window, tabs.AddTab("Scrolling & pages"));
     m_Workspace = std::make_unique<WorkspaceGallery>(window, tabs.AddTab("Application workspace"));
+    auto& searchPage = tabs.AddTab("Search & feedback");
+    auto& commonPage = tabs.AddTab("Common controls");
+    m_Productivity = std::make_unique<ProductivityGallery>(window, searchPage, commonPage);
 }
 
 void WidgetGallery::BuildCollections(Widget& page)
@@ -482,6 +485,7 @@ void WidgetGallery::Verify(const std::filesystem::path& assets, const std::files
     m_ScrollStack->Verify(assets, output);
     m_Workspace->Verify(assets, output);
     m_Documents->Verify(assets, output);
+    m_Productivity->Verify(output);
     m_Window.RenderFrame(ui.GetTime());
     std::ofstream report(output / "widgets-report.txt");
     report << "EStudioUI 0.3 widget integration: PASS\n"

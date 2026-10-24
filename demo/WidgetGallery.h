@@ -20,6 +20,7 @@
 #include "ScrollStackGallery.h"
 #include "WorkspaceGallery.h"
 #include "DocumentGallery.h"
+#include "ProductivityGallery.h"
 
 #include <EStudioUI/ContextMenu.h>
 #include <EStudioUI/ListWidget.h>
@@ -178,6 +179,8 @@ class WidgetGallery
 
     //! Owns the document-lifecycle and reusable-history acceptance application.
     std::unique_ptr<DocumentGallery> m_Documents;
+    //! Owns search, feedback and common-control examples.
+    std::unique_ptr<ProductivityGallery> m_Productivity;
     //! Observes the visible shortcut to a tab beyond a narrow tab strip.
     WidgetRef m_ConstraintShortcut;
 };

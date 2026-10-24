@@ -505,6 +505,9 @@ class Provider final : public IRawElementProviderSimple,
             {
             case UIA_NamePropertyId:
                 return StringValue(node.m_Info.m_Name, result);
+            case UIA_LiveSettingPropertyId:
+                *result = Integer(static_cast<LONG>(node.m_Info.m_Live));
+                return S_OK;
             case UIA_HelpTextPropertyId:
                 return StringValue(node.m_Info.m_Description, result);
             case UIA_AutomationIdPropertyId:
@@ -1491,6 +1494,18 @@ struct NativeAccessibility::Impl
                 StringValue(after, &current);
                 changed(property, previous, current);
             };
+            if (old.m_Info.m_Live != node->m_Info.m_Live)
+            {
+                changed(UIA_LiveSettingPropertyId, Integer(static_cast<LONG>(old.m_Info.m_Live)),
+                        Integer(static_cast<LONG>(node->m_Info.m_Live)));
+            }
+            if (node->m_Visible && !node->m_Offscreen && node->m_Info.m_Live != SemanticLiveSetting::Off &&
+                (old.m_Info.m_Name != node->m_Info.m_Name || old.m_Info.m_Value != node->m_Info.m_Value ||
+                 !old.m_Visible))
+            {
+                UiaRaiseAutomationEvent(static_cast<IRawElementProviderSimple*>(provider),
+                                        UIA_LiveRegionChangedEventId);
+            }
             textChanged(UIA_NamePropertyId, old.m_Info.m_Name, node->m_Info.m_Name);
             textChanged(UIA_HelpTextPropertyId, old.m_Info.m_Description, node->m_Info.m_Description);
             textChanged(UIA_ValueValuePropertyId, old.m_Info.m_Value, node->m_Info.m_Value);

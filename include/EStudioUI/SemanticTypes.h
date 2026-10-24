@@ -113,6 +113,14 @@ SemanticAction operator|(SemanticAction left, SemanticAction right) noexcept;
 //! Tests whether an interaction is advertised.
 bool HasSemanticAction(SemanticAction actions, SemanticAction action) noexcept;
 
+//! Accessibility announcement priority for a live feedback region.
+enum class SemanticLiveSetting
+{
+    Off,
+    Polite,
+    Assertive
+};
+
 //! Owned control metadata supplied by built-in or custom widgets.
 struct SemanticInfo
 {
@@ -122,6 +130,8 @@ struct SemanticInfo
     std::string m_Name{};
     //! Additional accessible explanation.
     std::string m_Description{};
+    //! Announcement priority; ordinary controls default to no live announcements.
+    SemanticLiveSetting m_Live = SemanticLiveSetting::Off;
     //! Current textual value, independent of the name.
     std::string m_Value{};
     //! Optional current numeric value.

@@ -35,6 +35,20 @@ command history, geometry, and persistence; these are not promised modules or
 current standalone SDKs. Public API usability and supported extension points
 remain acceptance criteria throughout.
 
+## Implementation status: 0.26, search/feedback and common controls
+
+The next two catalog priorities are implemented using the delivered foundations.
+They add receiver-bound deadline timers, bounded viewport overlays, asynchronous
+completion request IDs, shared Action palettes, inline/live feedback, a bounded
+worker log inbox, and typed bindings for interval/tag/font/civil values. No new
+runtime dependency or document engine is introduced. Static feedback deadlines
+wake the existing native scheduler without requesting continuous GPU work.
+
+See [search and feedback](SEARCH_FEEDBACK.md), [common controls](COMMON_PICKERS.md)
+and the widget roadmap for exact bounds and remaining scope. The existing manual
+Windows IME, real assistive technology and physical mixed-monitor/hardware
+performance gates remain separate. F10b and F14 are still deferred.
+
 ## Implementation status: 0.25, stronger data views and source adapters
 
 The 0.25 increment extends F06 with worker-safe generic source adapters, bounded

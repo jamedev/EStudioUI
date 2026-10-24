@@ -4,6 +4,7 @@
 #include <EStudioUI/BoxLayout.h>
 #include <EStudioUI/MemoryPlatformServices.h>
 #include <EStudioUI/SemanticTree.h>
+#include "UiTimers.h"
 
 #include <algorithm>
 #include <cmath>
@@ -38,6 +39,7 @@ UiContext::UiContext(FontFace& font)
     : m_Font(font), m_Animations(*this), m_CssMotion(std::make_unique<CssMotion>(*this))
 {
     m_Idle = std::make_shared<IdleData>();
+    m_Timers = std::make_unique<Detail::UiTimers>();
     m_Font.VerifyAccess();
     m_FontRevision = m_Font.GetRevision();
     m_Root.Attach(this, nullptr);
@@ -59,6 +61,7 @@ UiContext::~UiContext()
         m_CompositionClient = {};
     }
     m_Closing = true;
+    m_Timers.reset();
     ClosePlatformServices();
     const auto popups = std::move(m_Popups);
     for (auto entry = popups.rbegin(); entry != popups.rend(); ++entry)
@@ -162,7 +165,58 @@ void UiContext::PumpPlatformServices()
     if (!root.Get())
         return;
     std::erase_if(m_RetiredPlatforms, [](const auto& services) { return !services->HasPendingNativeWork(); });
+    m_Timers->Pump(GetTime());
+    if (!root.Get())
+    {
+        return;
+    }
     idle->m_Callbacks.Emit();
+}
+
+Widget& UiContext::AddOverlay(std::unique_ptr<Widget> overlay, OverlayCorner corner, float margin)
+{
+    VerifyStructuralMutation();
+    if (!overlay || !std::isfinite(margin) || margin < 0 || corner < OverlayCorner::TopLeft ||
+        corner > OverlayCorner::BottomRight)
+    {
+        throw std::invalid_argument("An overlay requires a widget, a viewport corner and a finite nonnegative inset.");
+    }
+    std::erase_if(m_Overlays,
+                  [this](const auto& entry)
+                  {
+                      const auto* widget = entry.m_Widget.Get();
+                      return !widget || widget->m_Context != this || widget->m_Parent != &m_Root;
+                  });
+    if (m_Overlays.size() >= 64)
+    {
+        throw std::length_error("A UI context accepts at most 64 nonmodal overlays.");
+    }
+    auto& added = m_Root.AddChild(std::move(overlay));
+    added.m_Overlay = true;
+    m_Overlays.push_back({WidgetRef(&added), corner, margin});
+    Invalidate(m_Root, Invalidation::Content);
+    return added;
+}
+
+bool UiContext::IsPinnedOverlay(const Widget& widget) const
+{
+    return std::any_of(
+        m_Overlays.begin(), m_Overlays.end(), [&](const auto& entry)
+        { return entry.m_Widget.Get() == &widget && widget.m_Context == this && widget.m_Parent == &m_Root; });
+}
+
+UiTimer UiContext::After(double delay, std::function<void()> callback)
+{
+    VerifyDispatchPhase();
+    auto timer = m_Timers->Add(GetTime(), delay, std::move(callback));
+    m_Dispatcher.Wake();
+    return timer;
+}
+
+double UiContext::NextTimerDeadline() const
+{
+    VerifyAccess();
+    return m_Timers ? m_Timers->NextDeadline() : -1;
 }
 
 Signal<>& UiContext::IdleTurn()
@@ -1325,6 +1379,28 @@ void UiContext::Arrange()
 void UiContext::ArrangePopups()
 {
     const PhaseScope phase(*this, UiPhase::Layout);
+    for (const auto& entry : m_Overlays)
+    {
+        if (auto* overlay = entry.m_Widget.Get();
+            overlay && overlay->m_Context == this && overlay->m_Parent == &m_Root && overlay->IsVisible())
+        {
+            const float availableWidth = std::max(0.0f, m_Width - 2 * entry.m_Margin);
+            const float availableHeight = std::max(0.0f, m_Height - 2 * entry.m_Margin);
+            auto measured = Measure(*overlay, {availableWidth, availableHeight});
+            const float width = std::clamp(measured.m_Preferred.m_X, 0.0f, availableWidth);
+            measured = Measure(*overlay, {availableWidth, availableHeight}, {width, std::nullopt}, true, false);
+            const float height = std::clamp(measured.m_Preferred.m_Y, 0.0f, availableHeight);
+            const bool right =
+                entry.m_Corner == OverlayCorner::TopRight || entry.m_Corner == OverlayCorner::BottomRight;
+            const bool bottom =
+                entry.m_Corner == OverlayCorner::BottomLeft || entry.m_Corner == OverlayCorner::BottomRight;
+            Layout(*overlay,
+                   {right ? std::max(0.0f, m_Width - entry.m_Margin - width) : entry.m_Margin,
+                    bottom ? std::max(0.0f, m_Height - entry.m_Margin - height) : entry.m_Margin, width, height},
+                   {0, 0, m_Width, m_Height});
+        }
+    }
+
     for (const auto& entry : m_Popups)
         if (auto* popup = entry.m_Widget.Get(); popup && popup->IsVisible())
         {
@@ -1426,6 +1502,14 @@ void UiContext::Paint(Renderer& renderer, double time)
     try
     {
         PaintTree(m_Root, renderer, time, 1);
+        for (const auto& entry : m_Overlays)
+        {
+            if (auto* overlay = entry.m_Widget.Get();
+                overlay && overlay->m_Context == this && overlay->m_Parent == &m_Root)
+            {
+                PaintTree(*overlay, renderer, time, 1);
+            }
+        }
         for (const auto& entry : m_Popups)
             if (auto* popup = entry.m_Widget.Get())
                 PaintTree(*popup, renderer, time, 1);

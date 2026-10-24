@@ -766,6 +766,12 @@ struct Window::Impl : std::enable_shared_from_this<Window::Impl>
             m_Headless || (glfwGetWindowAttrib(m_Window, GLFW_VISIBLE) &&
                            !glfwGetWindowAttrib(m_Window, GLFW_ICONIFIED) && (GroupHasFocus() || m_RenderWhenUnfocused));
         double wake = dispatcher.HasPending() ? now : -1;
+        const double timerDeadline = m_Ui->NextTimerDeadline();
+        if (timerDeadline >= 0 && (wake < 0 || timerDeadline - m_TimeOffset < wake))
+        {
+            wake = timerDeadline - m_TimeOffset;
+        }
+
         if (!active)
         {
             if (m_Accessibility)

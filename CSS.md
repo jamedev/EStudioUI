@@ -507,3 +507,33 @@ tablewidget::drop-indicator { background: #2563eb; opacity: 0.9; }
 .cell-apply { color: #175c3a; }
 .cell-cancel { color: #9a352e; }
 ```
+
+## Search, feedback and common-control styling (0.26)
+
+All existing selectors, compiled effects and ordinary widget animations also apply
+to the new controls. Their composed editors/buttons use ordinary child selectors.
+Predefined themes cover every family in light, dark and high-contrast modes.
+
+| Control | Style boundary |
+| --- | --- |
+| SearchBox | `searchbox`, nested `textbox` and `toolbutton`; `completionpopup` owns a virtual `listwidget` |
+| CommandPalette | `commandpalette`, nested search and result list; modal scope uses the shared popup stack |
+| ValidationMessage | `validationmessage.information`, `.success`, `.warning`, `.error` |
+| NotificationCenter | `notificationcenter`, `notification`, nested feedback text and analytic dismiss button |
+| LogView | `logview`, ordinary `tablewidget` cell/header/scrollbar parts |
+| SegmentedControl | `segmentedcontrol`, `radiobutton.segment`, `:checked`, normal label/indicator parts |
+| MultiSelect / tags | `multiselectcombobox`, `.multi-select-popup`, `tageditor`, `tagchips`, `.tag-chip` |
+| RangeSlider | `::groove`, `::fill`, `::lower-handle`, `::upper-handle`; `:horizontal`, `:vertical`, active handle `:selected` and fixed-part motion |
+| Selectable / link label | `textbox.selectable-label`, `textbox.link-label`, normal caret/selection/read-only parts |
+| Fonts | `fonteditor`, `.font-preview`, `toolbutton.fontpicker`, `.font-picker-popup` |
+| Dates / clock | `dateedit`, `timeedit`, `datetimeedit`, `.calendar-popup`, `.time-picker-popup` |
+| Calendar | `calendar::header`, `calendar::day`, day `:selected`; `:selected:focus` decorates its focused selection |
+
+Calendar day parts use bounded shared style variants; they do not allocate or
+start a separate CSS animation for every date. Range handles use the fixed-part
+animation path. Inline severity colors adapt to light/dark and OS high contrast.
+Picker/close/arrow icons are analytic GPU primitives, independent of font glyph
+coverage. Text remains shaped/cached by the shared font service.
+
+See [SEARCH_FEEDBACK.md](SEARCH_FEEDBACK.md) and
+[COMMON_PICKERS.md](COMMON_PICKERS.md) for public APIs, bounds and examples.
