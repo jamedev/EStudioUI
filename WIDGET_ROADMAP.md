@@ -304,3 +304,9 @@ Further catalog work includes IconGrid/ThumbnailView, guided navigation, richer
 property adapters, a command console and application-specific model extensions.
 This increment does not claim OS-wide font enumeration, timezone conversion or
 complete specialized Creator serialization of every new value.
+
+Final 0.26 source `790d039` is verified: Windows Release/Debug 56/56 each,
+native demo/Creator/browser framebuffer integration, five extra native Debug
+lifecycle runs, Linux 56/56, isolated TSan 6/6 and local ASan/UBSan 56/56.
+See the [verification and captures](verification/PRODUCTIVITY_0_26.md) and
+[source CI](https://github.com/jamedev/EStudioUI/actions/runs/40111062486).

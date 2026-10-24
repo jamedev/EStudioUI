@@ -741,3 +741,9 @@ isolated TSan 6/6 and local ASan/UBSan 54/54. See the
 [CI run](https://github.com/jamedev/EStudioUI/actions/runs/40099945384) and
 [verification/captures](verification/DATA_VIEWS_0_25.md).
 F10b document editing and F14 extraction remain deferred.
+
+Final 0.26 source `790d039` is verified: Windows Release/Debug 56/56 each,
+native demo/Creator/browser framebuffer integration, five extra native Debug
+lifecycle runs, Linux 56/56, isolated TSan 6/6 and local ASan/UBSan 56/56.
+See the [verification and captures](verification/PRODUCTIVITY_0_26.md) and
+[source CI](https://github.com/jamedev/EStudioUI/actions/runs/40111062486).
