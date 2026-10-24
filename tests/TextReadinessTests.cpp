@@ -46,7 +46,7 @@ void FontContracts()
           "UTF-8 quoted lists share one font admission contract");
     for (const std::string family :
          {std::string{}, std::string("'unfinished"), std::string("A,,B"), std::string("A\nB"),
-          std::string(1, char(0xff)), std::string(1025, 'x'), std::string("A\0B", 3)})
+          std::string("\xff"), std::string(1025, 'x'), std::string("A\0B", 3)})
     {
         selection.m_Family = family;
         Throws([&] { selection.Validate(); }, "Malformed or oversized family lists reject before font resolution");

@@ -3,6 +3,7 @@
 0.26.1 adds [text-readiness hardening](TEXT_READINESS.md): shared font validation,
 safe automatic GPU glyph compaction, deterministic text profiles and a focused
 Windows acceptance runner. Multiline document editing remains the next track.
+See [verification and captures](verification/TEXT_READINESS_0_26_1.md).
 
 0.26 adds [search and application feedback](SEARCH_FEEDBACK.md) and
 [remaining common controls](COMMON_PICKERS.md). Try the new **Search & feedback**

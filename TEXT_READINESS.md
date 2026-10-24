@@ -153,3 +153,6 @@ multiline accessibility/text-range semantics with the editor, rather than
 pretending the existing single-line provider already supplies them. Rich spans,
 embedded images/tables, pagination and document tooling follow that plain-text
 layer. Human acceptance stays open until the recorded target sessions occur.
+
+[Verification and actual renderer captures](verification/TEXT_READINESS_0_26_1.md)
+record exact tested sources, platform results and the remaining human gates.
