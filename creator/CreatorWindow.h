@@ -1,6 +1,8 @@
 #pragma once
 
 #include "DesignerSurface.h"
+#include "WidgetPalette.h"
+#include <EStudioUI/ThemeController.h>
 
 #include <EStudioUI/Application.h>
 #include <EStudioUI/MainWindow.h>
@@ -33,7 +35,16 @@ class CreatorWindow
     void SelectNode(std::string id);
 
     //! Adds an actual registered widget to a selected/explicit container.
-    std::string AddWidget(std::string type, std::string parent = {});
+    std::string AddWidget(std::string type, std::string parent = {}, std::optional<Point> position = {});
+
+    //! Captures a selected subtree as a reusable session palette composition.
+    void RegisterComponent(std::string name, std::string id = {});
+    //! Sets edge/center/grid and persistent-relationship authoring preferences.
+    void SetSnapping(DesignSnapSettings settings);
+    //! Returns current snapping preferences.
+    const DesignSnapSettings& GetSnapping() const;
+    //! Returns the live application theme controller.
+    ThemeController& Themes() const;
 
     //! Deletes the selected subtree and its direct sibling constraints.
     void DeleteSelected();
@@ -84,11 +95,15 @@ class CreatorWindow
     //! Applies captured geometry provisionally and commits once per completed gesture.
     void EditGeometry(std::string id, Point delta, bool resize, bool finished);
 
+    //! Cancels provisional geometry without changing canonical state or history.
+    void CancelGeometry();
+    //! Builds the appearance settings inspector from ordinary property controls.
+    void BuildAppearance();
     //! Opens an asynchronous JSON file picker and reads owned bytes on a worker.
     void Open(bool discardConfirmed = false);
 
     //! Writes the selected independent JSON or C++ output on a worker.
-    void Save(bool cpp);
+    void Save(bool cpp, bool selected = false);
 
     //! Applies edited constraint rows after complete prevalidation.
     void ApplyConstraints();
@@ -127,7 +142,7 @@ class CreatorWindow
     PropertyGrid* m_Inspector = nullptr;
 
     //! Observes the virtual palette and outline.
-    ListWidget* m_Palette = nullptr;
+    WidgetPalette* m_Palette = nullptr;
 
     //! Observes the virtual document outline.
     ListWidget* m_Outline = nullptr;
@@ -155,6 +170,27 @@ class CreatorWindow
 
     //! Remembers the CSS last applied to avoid parsing on ordinary edits.
     std::string m_AppliedCss;
+
+    //! Owns live application appearance independently of design state.
+    ThemeController* m_Theme = nullptr;
+    //! Coalesces interactive appearance editing to the next frame.
+    std::optional<Theme> m_PendingTheme;
+    //! Owns appearance inspector state.
+    std::shared_ptr<PropertyModel> m_AppearanceModel;
+    //! Observes the appearance inspector.
+    PropertyGrid* m_AppearanceGrid = nullptr;
+    //! Owns reusable flattened design templates; instances serialize as ordinary nodes.
+    std::map<std::string, UiDocument> m_Components;
+    //! Owns geometry authoring preferences.
+    DesignSnapSettings m_Snapping;
+    //! Captures parent content bounds and sibling geometry once per gesture.
+    Rect m_GestureParent;
+    //! Owns the bounded sibling snapshot for snapping.
+    std::vector<DesignReference> m_GestureReferences;
+    //! Observes the provisional geometry target.
+    WidgetRef m_GestureTarget;
+    //! Suppresses a gesture invalidated by another document publication.
+    bool m_AbortGesture = false;
 
     //! Owns bounded history snapshots.
     std::vector<std::shared_ptr<const UiDocument>> m_Undo, m_Redo;

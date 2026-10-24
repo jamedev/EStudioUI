@@ -22,6 +22,9 @@ class MemoryPlatformServices final : public PlatformServices
     //! Queues one owned picker result; an unscripted request cancels at its next owner turn.
     void QueueFileDialogResult(FileDialogResult result);
 
+    //! Injects an owned preference snapshot for deterministic System-mode testing.
+    void SetSystemAppearance(SystemAppearance appearance);
+
   protected:
     //! Reports emulated clipboard and picker support.
     PlatformCapabilities DescribeCapabilities() const override;
@@ -37,6 +40,14 @@ class MemoryPlatformServices final : public PlatformServices
                          std::function<void(FileDialogResult)> complete) override;
 
   private:
+    //! Returns the deterministic appearance snapshot.
+    SystemAppearance ReadSystemAppearanceCore() const override;
+    //! Coalesces injected changes until the next ordinary pump.
+    std::optional<SystemAppearance> PollSystemAppearanceCore() override;
+    //! Owns the injected appearance and pending notification.
+    SystemAppearance m_Appearance;
+    //! Marks one coalesced appearance notification.
+    bool m_AppearanceDirty = false;
     //! Owns clipboard formats independently of caller storage.
     ClipboardData m_Clipboard;
 

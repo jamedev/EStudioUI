@@ -4,13 +4,10 @@ collapsiblepanel > .section-header { background: #243147; color: #dce7fa; border
 collapsiblepanel > .section-header:hover { background: #30425d; }
 collapsiblepanel:expanded > .section-header { color: #a7dfff; }
 section-content { padding: 6px 0; gap: 6px; }
-propertygrid { background: #172131; color: #dce7fa; border: 1px solid #30405a; border-radius: 5px; padding: 0; font-size: 13px; }
-propertygrid::row:alternate { background: #1b2739; }
-propertygrid::row:selected { background: #234668; color: white; }
+propertygrid { background: #172131; color: #dce7fa; border: 1px solid #30405a; border-radius: 5px; padding: 0; font-size: 13px; alternate-background: #1b2739; selection-background-color: #234668; selection-color: white; header-background: #28364c; }
 propertygrid::row:read-only { color: #8a9db7; }
 propertygrid::row:invalid { background: #623646; }
-propertygrid::category { background: #28364c; color: #afc7eb; font-weight: 600; }
-propertygrid::category:expanded { color: #cde8ff; }
+propertygrid::category { font-weight: 600; }
 .property-editor { margin: 2px; }
 uniteditor, vectoreditor, coloreditor { background: transparent; padding: 0; gap: 4px; }
 vector-component { padding: 0; gap: 2px; }

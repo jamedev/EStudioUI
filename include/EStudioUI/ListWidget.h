@@ -7,7 +7,7 @@
 namespace EStudioUI
 {
 //! A single-selection UTF-8 list that paints only rows intersecting its viewport.
-class ListWidget final : public ScrollWidget
+class ListWidget : public ScrollWidget
 {
   public:
     //! Creates an empty, focusable list.

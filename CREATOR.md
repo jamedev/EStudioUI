@@ -31,13 +31,21 @@ not hardware performance.
 
 1. Select a widget on the design surface or the Document outline. Use the Widgets
    palette to add a registered control to a selected container; selecting a leaf
-   adds to the design root. Nested containers use their explicit content slot.
+   adds to the design root. GPU-drawn icons identify widget categories. Drag a
+   palette row onto a visible container to add there; the highlighted content
+   slot receives the widget. Flow layouts use the drop location for insertion
+   order; Constraints layouts use its content-relative position. Nested
+   containers use their explicit registered content slot.
 2. Edit canonical widget values, size contracts and a first set of typed CSS
    properties in the Inspector. Categories and the inspector section collapse.
    Numeric dimensions offer logical pixels and points; vectors edit positions.
 3. Choose Column, Row, Grid, Flow or Constraints on a container. Drag widgets under
    a Constraints parent, or resize a selected widget with its corner handle.
-   A completed gesture is one undo step. Flow layouts retain their item ordering.
+   Container/sibling edges and centers provide snapping guides. Optional 8 px
+   grid snapping uses the parent origin; Keep alignment constraints turns matched
+   guides into ordinary named solver anchors. Escape/capture loss cancels an
+   unfinished geometry gesture. A completed gesture is one undo step. Flow
+   layouts retain their item ordering.
 4. Edit named linear anchor rules in the Constraints panel and apply the complete
    table. References are stable sibling IDs or `parent`, with a multiplier,
    offset, equality/inequality and solver strength. Invalid references and values
@@ -81,6 +89,28 @@ at runtime. `UiStyleSheet()` returns optional CSS source for the application to
 apply explicitly; the host supplies fonts, resources and business logic. The
 build-time generator exports a catalog, compiles that generated C++, and checks
 it against runtime JSON construction. The generated code remains editable.
+
+The Creator export command now uses `ToCppClass(registry, className)` and writes
+a complete `ClassName.h` / `ClassName.cpp` pair. It defines a Widget-derived class
+with owned child construction, readable typed child observer members, `Content()`,
+`StyleSheet()` and a `ConnectEvents()` hook. Guidance comments describe where to
+add actions, bindings, validators and application logic. Both output files are
+staged before replacing existing exports; failed installation attempts restore
+previous files or retain backups with a diagnostic. Regeneration is an explicit
+new export: preserve your hand-written additions before replacing it. It does not
+merge edited source automatically. The build compiles an exported class containing
+every registered catalog type.
+
+Select a container subtree, enter a class name in the Widgets dock, and choose
+**Add composition to palette**. Its children, constraints, properties and CSS form
+a reusable session palette entry. Each insertion clones ordinary registered nodes
+with fresh IDs and remapped internal constraints/ID selectors. Instances therefore
+remain independent, editable and portable in the existing JSON format, with no
+custom runtime loader dependency. **Export selected component** exports just the
+selected subtree as the same standalone class pair. Up to 64 session compositions
+are retained; save JSON or export source to keep one independently. A persistent
+component catalog, linked-instance updates and arbitrary user C++ imports remain
+future work.
 
 Runtime construction deliberately leaves stylesheet installation explicit:
 
@@ -140,7 +170,7 @@ or application-level adapters rather than arbitrary child factories.
 | 1 | Complete widget adapters and named/multiple slots | Author combo choices, list/tree/table models, tab/stack pages, menu/tool actions, resources, units and command properties without losing information on either output path |
 | 2 | Document-safe application services | Dirty close prompts, crash recovery, history byte budgets, migration policies and workspace preferences; open already confirms discarding edits and async file completion preserves newer data |
 | 3 | Scoped styles and richer visual CSS editing | Keep theme editing inside a preview subtree, distinguish inherited/computed/overridden values, edit pseudo states/parts, gradients, shadows and keyframes without rebuilding controls |
-| 4 | Visual hierarchy and constraints | Reparent/reorder by drag, snapping and alignment guides, multi-selection, relationship handles and visible solver conflict reports |
+| 4 | Visual hierarchy and constraints | Existing-widget reparent/reorder by drag, multi-selection, relationship handles and visible solver conflict reports; container/sibling snapping guides now ship |
 | 5 | Canvas dashboard authoring | Build on existing sparse widget hosts; add visual host placement, document persistence of host bounds, zoom policy and large-scene widget lifecycle/resource budgets |
 | 6 | Resource and data/action authoring | Stable image/font references, shared actions, model schemas and application binding hooks; exclude executable logic from untrusted descriptions |
 | 7 | Multiline plain/code editor | Replace the temporary CSS line table; add selection, undo, composition and large-document text behavior through the deferred F10b track |
@@ -151,3 +181,10 @@ It does not pull F10b document editing, a universal reflection system, or F14 mo
 extraction into this increment. Performance-sensitive property edits preserve
 preview widget identity; structure/layout changes rebuild a staged preview. Full
 scene diffing and large-design authoring remain explicit future work.
+
+## Application appearance
+
+Creator now starts with the neutral Minimal/System theme. The Appearance dock
+selects light/dark or System mode and tunes presets, colors, font, density and
+corners. See [THEMES.md](THEMES.md) for the shared framework API and explicit
+platform-support limits. Design CSS remains independent of the authoring theme.

@@ -30,6 +30,13 @@ int main(int argc, char** argv)
         std::filesystem::create_directories(std::filesystem::path(argv[1]).parent_path());
         std::ofstream source(argv[1], std::ios::binary);
         source << catalog.ToCpp(registry);
+        const auto pair = catalog.ToCppClass(registry, "GeneratedComposite");
+        const auto folder = std::filesystem::path(argv[1]).parent_path();
+        std::ofstream classHeader(folder / "GeneratedComposite.h", std::ios::binary);
+        std::ofstream classSource(folder / "GeneratedComposite.cpp", std::ios::binary);
+        classHeader << pair.m_Header;
+        classSource << pair.m_Source;
+        if (!classHeader || !classSource) return 1;
         std::ofstream json(argv[2], std::ios::binary);
         json << catalog.ToJson(registry);
         if (!source || !json)

@@ -220,6 +220,7 @@ struct Window::Impl : std::enable_shared_from_this<Window::Impl>
     GLFWwindow* m_Window = nullptr;
     std::unique_ptr<FontFace> m_Font;
     std::unique_ptr<UiContext> m_Ui;
+    std::unique_ptr<ThemeController> m_Theme;
     std::unique_ptr<Renderer> m_Renderer;
     std::unique_ptr<Detail::NativeResizePump> m_ResizePump;
     std::unique_ptr<Detail::NativeWindowChrome> m_Chrome;
@@ -465,6 +466,7 @@ struct Window::Impl : std::enable_shared_from_this<Window::Impl>
             m_Ui->GetDispatcher().Close();
         if (m_Window)
             glfwMakeContextCurrent(m_Window);
+        m_Theme.reset();
         m_Ui.reset();
         // Widget destruction can run lifetime observers that visit other windows.
         if (m_Window)
@@ -964,6 +966,7 @@ Window::Window(const WindowOptions& options, const std::filesystem::path& fontPa
                     : options.m_Headless      ? std::make_unique<MemoryPlatformServices>(std::move(host))
                                               : Detail::CreateNativePlatformServices(std::move(host));
     self.m_Ui->SetPlatformServices(std::move(services));
+    self.m_Theme = std::make_unique<ThemeController>(*self.m_Ui);
 #ifdef _WIN32
     if (!self.m_Headless)
     {
@@ -1334,6 +1337,12 @@ void Window::RenderFrame(double time)
         self->m_TimeOffset = time - glfwGetTime();
     }
     Detail::FlushRetiredWindows();
+}
+
+ThemeController& Window::Themes()
+{
+    VerifyAccess();
+    return *m_Impl->m_Theme;
 }
 
 int Window::Run()

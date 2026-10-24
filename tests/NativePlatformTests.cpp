@@ -1330,6 +1330,26 @@ int main()
         ui.SetPlatformServices(Detail::CreateNativePlatformServices(Host(ui, native.m_Window)));
         Check(ui.Platform().GetCapabilities().Get(PlatformFeature::ClipboardHtml) == PlatformSupport::Native,
               "Windows adapter reports actual rich clipboard capability");
+        const auto appearance = ui.Platform().GetSystemAppearance();
+        appearance.Validate();
+        Check(appearance.m_Support == PlatformSupport::Native &&
+                  ui.Platform().GetCapabilities().Get(PlatformFeature::Appearance) == PlatformSupport::Native,
+              "Windows exposes owned native appearance colors and capabilities");
+        ui.PumpPlatformServices();
+        int appearanceChanges = 0;
+        auto appearanceConnection = ui.Platform().AppearanceChanged().Connect(
+            [&](const SystemAppearance& snapshot)
+            {
+                snapshot.Validate();
+                ++appearanceChanges;
+            });
+        SendMessageW(native.m_Window, WM_SETTINGCHANGE, 0, 0);
+        SendMessageW(native.m_Window, WM_THEMECHANGED, 0, 0);
+        Check(appearanceChanges == 0, "Native appearance messages never execute application callbacks");
+        ui.PumpPlatformServices();
+        Check(appearanceChanges == 1, "Appearance messages coalesce into one owned idle snapshot");
+        ui.PumpPlatformServices();
+        Check(appearanceChanges == 1, "An unchanged native turn performs no extra appearance publication");
         try
         {
             bool accessibilityPassed = true;

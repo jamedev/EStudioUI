@@ -6,6 +6,7 @@
 #include <EStudioUI/Label.h>
 #include <EStudioUI/UnitEditor.h>
 #include <EStudioUI/VectorEditor.h>
+#include <EStudioUI/TabWidget.h>
 
 #include <filesystem>
 #include <cmath>
@@ -35,6 +36,127 @@ void Check(bool condition, const char* description, int& count)
         throw std::runtime_error(description);
     }
     ++count;
+}
+
+int VerifyAuthoring(CreatorWindow& creator, Window& window, const std::filesystem::path& output)
+{
+    int checks = 0;
+    creator.LoadDocument(CreatorWindow::ExampleDocument());
+    auto& ui = window.Ui();
+    ui.CloseAllPopups();
+    const auto frame = [&]
+    {
+        creator.Refresh();
+        window.RenderFrame(ui.GetTime() + .1);
+    };
+    frame();
+    auto* palette = dynamic_cast<WidgetPalette*>(ui.Root().FindById("creator-widget-palette"));
+    Check(palette != nullptr, "The palette is an ordinary extensible virtual ListWidget", checks);
+    for (auto* ancestor = palette->GetParent(); ancestor; ancestor = ancestor->GetParent())
+    {
+        if (auto* tabs = dynamic_cast<TabWidget*>(ancestor))
+        {
+            for (int index = 0; index < tabs->GetTabCount(); ++index)
+            {
+                for (auto* child = static_cast<Widget*>(palette); child && child != tabs; child = child->GetParent())
+                {
+                    if (child == &tabs->GetPage(index))
+                    {
+                        tabs->SetCurrentIndex(index);
+                    }
+                }
+            }
+        }
+    }
+    int buttonIndex = -1;
+    for (int index = 0; index < palette->GetItemCount(); ++index)
+    {
+        if (palette->GetItem(index) == "Button")
+        {
+            buttonIndex = index;
+        }
+    }
+    Check(buttonIndex >= 0, "The palette exposes registered widget identities", checks);
+    palette->SetCurrentIndex(buttonIndex);
+    frame();
+    const auto view = palette->GetViewport();
+    const Point from{view.m_X + 50, view.m_Y +
+                                        (static_cast<float>(buttonIndex) + .5f) * palette->GetStyle().m_RowHeight -
+                                        palette->GetScrollOffset().m_Y};
+    auto* settings = creator.Surface().Host().FindById("settings");
+    auto& slot = creator.Registry().Find("GroupBox").m_Content(*settings);
+    const auto area = slot.GetContentBounds();
+    const Point to{area.m_X + 20, area.m_Y + 20};
+    Check(creator.Surface().ContainerAt(to) == "settings",
+          "Drop hit testing chooses the deepest registered content slot", checks);
+    ui.PointerDown(from);
+    ui.PointerMove(to);
+    frame();
+    window.Graphics().SavePpm(output / "creator-palette-drag.ppm");
+    ui.PointerUp(to);
+    frame();
+    Check(creator.Document().Get().Find("Button1") && creator.Document().Get().Find("settings")->m_Children.size() == 6,
+          "Captured palette dragging creates the actual widget inside the targeted nested container", checks);
+    creator.Undo();
+    frame();
+    Check(!creator.Document().Get().Find("Button1"), "A complete palette drop is one undoable document edit", checks);
+    creator.RegisterComponent("AcquisitionPanel", "settings");
+    const auto component = creator.AddWidget("AcquisitionPanel", "design-root", Point{320, 430});
+    frame();
+    const auto* instance = creator.Document().Get().Find(component);
+    Check(instance && instance->m_Children.size() == 5 && instance->m_Children.front().m_Id != "channel",
+          "Reusable compositions clone owned children with collision-free identities", checks);
+    Check(UiDocument::FromJson(creator.Document().Get().ToJson(creator.Registry()), creator.Registry()) ==
+              creator.Document().Get(),
+          "Compositions remain independent open JSON without an external template catalog", checks);
+    creator.Undo();
+    frame();
+    creator.SelectNode("settings");
+    DesignSnapSettings snapping;
+    snapping.m_KeepRelations = true;
+    creator.SetSnapping(snapping);
+    settings = creator.Surface().Host().FindById("settings");
+    const auto bounds = settings->GetBounds();
+    const auto parent = creator.Surface().Host().FindById("design-root")->GetContentBounds();
+    const Point start{bounds.m_X + 40, bounds.m_Y + 12};
+    const Point end{start.m_X + parent.m_X + 3 - bounds.m_X, start.m_Y};
+    ui.PointerDown(start);
+    ui.PointerMove(end);
+    frame();
+    Check(!creator.Surface().GetGuides().empty(), "Moving a real widget displays GPU alignment guides", checks);
+    window.Graphics().SavePpm(output / "creator-snap-guides.ppm");
+    ui.PointerUp(end);
+    frame();
+    bool linked = false;
+    for (const auto& rule : creator.Document().Get().m_Root.m_Constraints)
+    {
+        linked = linked || (rule.m_Item == "settings" && rule.m_Anchor == "Left" && rule.m_Target == "parent" &&
+                            rule.m_Offset == 0);
+    }
+    Check(linked, "Keep alignment commits an actual named parent-anchor constraint", checks);
+    creator.LoadDocument(CreatorWindow::ExampleDocument());
+    frame();
+    creator.SetSnapping({});
+    auto* retained = creator.Surface().Host().FindById("submit");
+    for (int preset = 0; preset < 6; ++preset)
+    {
+        for (const auto mode : {ThemeMode::Light, ThemeMode::Dark})
+        {
+            Theme theme;
+            theme.m_Family = static_cast<ThemeFamily>(preset);
+            theme.m_Mode = mode;
+            creator.Themes().SetTheme(theme);
+            frame();
+            window.RenderFrame(ui.GetTime() + .25);
+            const auto stem = std::string(Theme::Name(theme.m_Family)) + (mode == ThemeMode::Dark ? "-dark" : "-light");
+            window.Graphics().SavePpm(output / ("theme-" + stem + ".ppm"));
+            Check(creator.Surface().Host().FindById("submit") == retained,
+                  "Theme switching retains live widget identities", checks);
+        }
+    }
+    creator.Themes().SetTheme(Theme{});
+    frame();
+    return checks;
 }
 
 int Verify(CreatorWindow& creator, Window& window, const std::filesystem::path& assets,
@@ -116,6 +238,10 @@ int Verify(CreatorWindow& creator, Window& window, const std::filesystem::path& 
     window.RenderFrame(.5);
     window.Graphics().SavePpm(output / "creator-restored.ppm");
     creator.SelectNode("headline");
+    const auto snapSettings = creator.GetSnapping();
+    auto unsnapped = snapSettings;
+    unsnapped.m_Enabled = false;
+    creator.SetSnapping(unsnapped);
     window.RenderFrame(.51);
     const auto headlineBounds = creator.Surface().Host().FindById("headline")->GetBounds();
     const Point dragStart{headlineBounds.m_X + 20, headlineBounds.m_Y + 20};
@@ -147,6 +273,7 @@ int Verify(CreatorWindow& creator, Window& window, const std::filesystem::path& 
     creator.Undo();
     creator.Refresh();
     window.RenderFrame(.55);
+    creator.SetSnapping(snapSettings);
     window.RenderFrame(.6);
     Check(window.Graphics().GetStats().m_RepaintPixels == 0, "Unchanged Creator frames perform no framebuffer repaint",
           checks);
@@ -203,6 +330,7 @@ int Verify(CreatorWindow& creator, Window& window, const std::filesystem::path& 
         canvasWindow->Graphics().SavePpm(output / "creator-canvas.ppm");
         canvasWindow->Close();
     }
+    checks += VerifyAuthoring(creator, window, output);
     checks += VerifyGpuProbeChrome(window, assets, output);
     std::cout << "Creator GPU integration: " << checks << " checks passed\n";
     return checks;

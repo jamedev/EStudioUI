@@ -2,6 +2,7 @@
 
 #include "ClipboardData.h"
 #include "FileDialogSession.h"
+#include "Signal.h"
 
 namespace EStudioUI
 {
@@ -38,6 +39,12 @@ class PlatformServices
 
     //! Reads coordinate metrics without exposing a native handle.
     WindowMetrics GetWindowMetrics() const;
+
+    //! Reads owned OS appearance preferences at an idle owner boundary.
+    SystemAppearance GetSystemAppearance() const;
+
+    //! Reports coalesced preference changes during ordinary platform pumping.
+    Signal<const SystemAppearance&>& AppearanceChanged();
 
     //! Selects a standard native pointer shape.
     PlatformResult SetCursor(CursorShape shape);
@@ -88,6 +95,12 @@ class PlatformServices
 
     //! Reports unfinished adapter workers without waiting for them.
     virtual bool NativeWorkPending() const;
+
+    //! Reads native preferences; the default reports Unsupported.
+    virtual SystemAppearance ReadSystemAppearanceCore() const;
+
+    //! Returns one coalesced native preference change, or no work.
+    virtual std::optional<SystemAppearance> PollSystemAppearanceCore();
 
   private:
     friend class UiContext;

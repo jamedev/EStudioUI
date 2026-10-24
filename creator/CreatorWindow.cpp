@@ -13,6 +13,7 @@
 #include <EStudioUI/VectorEditor.h>
 
 #include <algorithm>
+#include <array>
 #include <charconv>
 #include <cmath>
 #include <fstream>
@@ -21,7 +22,9 @@
 #include <stdexcept>
 
 #ifdef _WIN32
+#ifndef NOMINMAX
 #define NOMINMAX
+#endif
 #include <windows.h>
 // Keep the Win32 convenience macro out of the framework class namespace.
 #ifdef MessageBox
@@ -64,7 +67,7 @@ void Position(UiNode& parent, const std::string& id, double x, double y)
 {
     parent.m_Constraints.erase(
         std::remove_if(parent.m_Constraints.begin(), parent.m_Constraints.end(), [&](const UiConstraint& rule)
-                       { return rule.m_Item == id && (rule.m_Anchor == "Left" || rule.m_Anchor == "Top"); }),
+                       { return rule.m_Item == id && rule.m_Anchor != "Width" && rule.m_Anchor != "Height"; }),
         parent.m_Constraints.end());
     for (const auto& [anchor, offset] : {std::pair{"Left", x}, std::pair{"Top", y}})
     {
@@ -231,11 +234,112 @@ void WriteFile(const std::filesystem::path& path, const std::string& text)
         throw;
     }
 }
+
+void WriteCppPair(const std::filesystem::path& path, const UiCppClass& source)
+{
+    auto header = path;
+    header.replace_extension(".h");
+    if (header == path)
+    {
+        throw std::invalid_argument("Select a C++ source path; its companion header is written beside it.");
+    }
+    const auto token = ".estudioui-" + std::to_string(UiDispatcher::AllocateTargetKey());
+
+    struct Entry
+    {
+        std::filesystem::path m_Target, m_Stage, m_Backup;
+        bool m_Existed = false, m_Installed = false;
+    };
+
+    std::array<Entry, 2> files;
+    files[0].m_Target = header;
+    files[1].m_Target = path;
+    const auto install = [](const std::filesystem::path& from, const std::filesystem::path& to)
+    {
+#ifdef _WIN32
+        if (!MoveFileExW(from.c_str(), to.c_str(), MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH))
+            throw std::runtime_error("Cannot replace a generated source file.");
+#else
+        std::filesystem::rename(from, to);
+#endif
+    };
+    const auto clean = [&]
+    {
+        std::error_code ignored;
+        for (const auto& file : files)
+        {
+            std::filesystem::remove(file.m_Stage, ignored);
+            std::filesystem::remove(file.m_Backup, ignored);
+        }
+    };
+    try
+    {
+        for (auto& file : files)
+        {
+            file.m_Stage = file.m_Target;
+            file.m_Stage += token + ".new";
+            file.m_Backup = file.m_Target;
+            file.m_Backup += token + ".bak";
+            file.m_Existed = std::filesystem::exists(file.m_Target);
+            if (file.m_Existed)
+            {
+                std::filesystem::copy_file(file.m_Target, file.m_Backup);
+            }
+        }
+        WriteFile(files[0].m_Stage, source.m_Header);
+        WriteFile(files[1].m_Stage, source.m_Source);
+        for (auto& file : files)
+        {
+            install(file.m_Stage, file.m_Target);
+            file.m_Installed = true;
+        }
+    }
+    catch (...)
+    {
+        const auto failure = std::current_exception();
+        bool restored = true;
+        for (auto& file : files)
+        {
+            if (file.m_Installed)
+            {
+                try
+                {
+                    if (file.m_Existed)
+                    {
+                        install(file.m_Backup, file.m_Target);
+                    }
+                    else
+                    {
+                        std::filesystem::remove(file.m_Target);
+                    }
+                }
+                catch (...)
+                {
+                    restored = false;
+                }
+            }
+        }
+        if (restored)
+        {
+            clean();
+        }
+        else
+        {
+            throw std::runtime_error(
+                "Source export failed and rollback was incomplete; retained .bak files contain the previous source.");
+        }
+        std::rethrow_exception(failure);
+    }
+    clean();
+}
+
 } // namespace
 
 CreatorWindow::CreatorWindow(Application& application, Window& window, std::string baseCss)
     : m_Application(application), m_Window(window), m_BaseCss(std::move(baseCss))
 {
+    m_Theme = &window.Themes();
+    m_Theme->Configure(Theme{}, m_BaseCss);
     auto initial = ExampleDocument();
     initial.Validate(m_Registry);
     m_Document = std::make_unique<State<UiDocument>>(
@@ -279,6 +383,10 @@ CreatorWindow::~CreatorWindow()
     {
         m_Inspector->SetModel({});
     }
+    if (m_AppearanceGrid)
+    {
+        m_AppearanceGrid->SetModel({});
+    }
 }
 
 State<UiDocument>& CreatorWindow::Document()
@@ -296,7 +404,7 @@ void CreatorWindow::BuildShell()
     auto& ui = m_Window.Ui();
     m_Shell = &ui.Root().Add<MainWindow>(m_Window);
     m_Shell->TitleBar().SetCaption("EStudioUI Creator");
-    auto& marker = m_Shell->TitleBar().Content().Add<Label>("UI AUTHORING / 0.23");
+    auto& marker = m_Shell->TitleBar().Content().Add<Label>("Layout designer");
     marker.AddClass("creator-mark");
     const std::weak_ptr<void> lifetime = m_Lifetime;
     auto& file = m_Shell->TitleBar().Menus().AddMenu("File");
@@ -317,7 +425,8 @@ void CreatorWindow::BuildShell()
     };
     command("Open UI...", Key::O, [this] { Open(); }, file);
     command("Save JSON...", Key::S, [this] { Save(false); }, file);
-    command("Export C++...", Key::Unknown, [this] { Save(true); }, file);
+    command("Export C++ class...", Key::Unknown, [this] { Save(true); }, file);
+    command("Export selected component...", Key::Unknown, [this] { Save(true, true); }, file);
     toolbar.AddSeparator();
     command("Undo", Key::Z, [this] { Undo(); }, edit);
     command("Redo", Key::Y, [this] { Redo(); }, edit);
@@ -360,7 +469,8 @@ void CreatorWindow::BuildShell()
     auto& search = palette.Add<TextBox>();
     search.SetPlaceholder("Filter widget types");
     search.TextChanged().Connect(Alive(lifetime, [this](const std::string& query) { FilterPalette(query); }));
-    m_Palette = &palette.Add<ListWidget>();
+    m_Palette = &palette.Add<WidgetPalette>();
+    m_Palette->SetId("creator-widget-palette");
     m_Palette->SetHeight(SizeRule::Fill());
     auto& add = palette.Add<Button>("Add selected widget");
     add.Clicked().Connect(Alive(lifetime,
@@ -372,6 +482,27 @@ void CreatorWindow::BuildShell()
                                         AddWidget(m_PaletteIds[static_cast<std::size_t>(index)]);
                                     }
                                 }));
+    auto& componentName = palette.Add<TextBox>("CompositePanel");
+    componentName.SetId("component-name");
+    componentName.SetPlaceholder("Reusable component class name");
+    const WidgetRef componentNameRef(&componentName);
+    palette.Add<Button>("Add composition to palette")
+        .Clicked()
+        .Connect(Alive(lifetime,
+                       [this, componentNameRef]
+                       {
+                           try
+                           {
+                               if (auto* input = dynamic_cast<TextBox*>(componentNameRef.Get()))
+                               {
+                                   RegisterComponent(input->GetText());
+                               }
+                           }
+                           catch (const std::exception& error)
+                           {
+                               Status(error.what());
+                           }
+                       }));
     FilterPalette({});
     auto& outlineDock = m_Shell->Docks().AddDock("creator-outline", "Document", DockArea::Left);
     m_Shell->Docks().Tabify(outlineDock, paletteDock);
@@ -395,6 +526,49 @@ void CreatorWindow::BuildShell()
     m_Inspector->EditRejected().Connect(Alive(lifetime, [this](const std::string& error) { Status(error); }));
     m_Surface = &m_Shell->Central().Add<DesignerSurface>();
     m_Surface->Selected().Connect(Alive(lifetime, [this](const std::string& id) { SelectNode(id); }));
+    m_Surface->GestureCancelled().Connect(Alive(lifetime, [this] { CancelGeometry(); }));
+    m_Palette->Dragged().Connect(Alive(lifetime,
+                                       [this](const std::string& type, Point point, bool finished)
+                                       {
+                                           const auto container =
+                                               type.empty() ? std::string{} : m_Surface->ContainerAt(point);
+                                           m_Surface->SetDropTarget(finished ? std::string{} : container);
+                                           if (finished && !type.empty() && !container.empty())
+                                           {
+                                               const auto local = m_Surface->ContainerPoint(container, point);
+                                               const std::weak_ptr<void> receiver = m_Lifetime;
+                                               m_Window.Ui().Defer(
+                                                   [this, receiver, type, container, local](UiContext&)
+                                                   {
+                                                       if (receiver.expired())
+                                                       {
+                                                           return;
+                                                       }
+                                                       try
+                                                       {
+                                                           AddWidget(type, container, local);
+                                                       }
+                                                       catch (const std::exception& error)
+                                                       {
+                                                           Status(error.what());
+                                                       }
+                                                   });
+                                           }
+                                           else if (finished && !type.empty())
+                                           {
+                                               Status("Drop onto a visible container in Design mode.");
+                                           }
+                                       }));
+    auto& snapping = toolbar.AddButton("Snap guides");
+    snapping.SetCheckable(true);
+    snapping.SetChecked(true);
+    snapping.Toggled().Connect(Alive(lifetime, [this](bool checked) { m_Snapping.m_Enabled = checked; }));
+    auto& grid = toolbar.AddButton("8 px grid");
+    grid.SetCheckable(true);
+    grid.Toggled().Connect(Alive(lifetime, [this](bool checked) { m_Snapping.m_Grid = checked; }));
+    auto& keep = toolbar.AddButton("Keep alignment constraints");
+    keep.SetCheckable(true);
+    keep.Toggled().Connect(Alive(lifetime, [this](bool checked) { m_Snapping.m_KeepRelations = checked; }));
     m_Surface->GeometryEdited().Connect(Alive(lifetime,
                                               [this](const std::string& id, Point delta, bool resize, bool finished)
                                               { EditGeometry(id, delta, resize, finished); }));
@@ -507,7 +681,120 @@ void CreatorWindow::BuildShell()
                                {"Strength", SizeRule::Fixed(90)},
                                {"Rule name", SizeRule::Fill(1, 140)}});
     m_Constraints->SetHeight(SizeRule::Fill());
+    BuildAppearance();
+    m_Shell->Docks().SetDockVisible(paletteDock, true);
+    if (auto* inspector = m_Shell->Docks().FindDock("creator-properties"))
+    {
+        m_Shell->Docks().SetDockVisible(*inspector, true);
+    }
     m_Shell->Status().SetMessage("Design mode / add widgets, edit properties, export JSON or C++");
+}
+
+void CreatorWindow::BuildAppearance()
+{
+    auto& dock = m_Shell->Docks().AddDock("creator-appearance", "Appearance", DockArea::Right);
+    auto* inspector = m_Shell->Docks().FindDock("creator-properties");
+    if (inspector)
+    {
+        m_Shell->Docks().Tabify(dock, *inspector);
+    }
+    const auto palette = m_Theme->GetTheme().Resolve(m_Theme->GetSystemAppearance());
+    std::vector<PropertyDefinition> definitions;
+    PropertyDefinition family{"family", "Style preset", "Appearance", PropertyKind::Choice, std::string("Minimal")};
+    family.m_Choices = {"Minimal", "Engineering", "Office", "Studio", "Game", "System"};
+    definitions.push_back(std::move(family));
+    PropertyDefinition mode{"mode", "Color mode", "Appearance", PropertyKind::Choice, std::string("System")};
+    mode.m_Choices = {"System", "Light", "Dark"};
+    definitions.push_back(std::move(mode));
+    PropertyDefinition font{"font", "UI font size", "Typography", PropertyKind::Number, 14.0};
+    font.m_Minimum = 9;
+    font.m_Maximum = 32;
+    font.m_Decimals = 0;
+    definitions.push_back(std::move(font));
+    PropertyDefinition density{"density", "Control density", "Typography", PropertyKind::Number, 1.0};
+    density.m_Minimum = .75;
+    density.m_Maximum = 1.5;
+    density.m_Step = .05;
+    definitions.push_back(std::move(density));
+    definitions.emplace_back("useAccent", "Custom accent", "Colors", PropertyKind::Boolean, false);
+    definitions.emplace_back("accent", "Accent", "Colors", PropertyKind::Color, palette.m_Accent);
+    definitions.emplace_back("useBackground", "Custom background", "Colors", PropertyKind::Boolean, false);
+    definitions.emplace_back("background", "Background", "Colors", PropertyKind::Color, palette.m_Background);
+    definitions.emplace_back("useForeground", "Custom foreground", "Colors", PropertyKind::Boolean, false);
+    definitions.emplace_back("foreground", "Foreground", "Colors", PropertyKind::Color, palette.m_Foreground);
+    definitions.emplace_back("useRadius", "Custom rounding", "Geometry", PropertyKind::Boolean, false);
+    PropertyDefinition radius{"radius", "Corner radius", "Geometry", PropertyKind::Number, 6.0};
+    radius.m_Minimum = 0;
+    radius.m_Maximum = 24;
+    definitions.push_back(std::move(radius));
+    PropertyDefinition motion{"motion", "Reduced motion", "Accessibility", PropertyKind::Choice, std::string("System")};
+    motion.m_Choices = {"System", "Reduce", "Allow"};
+    definitions.push_back(std::move(motion));
+    m_AppearanceModel = std::make_shared<PropertyModel>(m_Window.Ui().States(), std::move(definitions));
+    m_AppearanceGrid = &dock.Content().Add<PropertyGrid>();
+    m_AppearanceGrid->SetId("creator-appearance-grid");
+    m_AppearanceGrid->SetHeight(SizeRule::Fill());
+    m_AppearanceGrid->SetModel(m_AppearanceModel);
+    const auto candidate = [this](const std::vector<PropertyValue>& values)
+    {
+        if (values.size() != 13)
+        {
+            throw std::invalid_argument("Appearance schema changed during editing.");
+        }
+        Theme theme;
+        const auto& familyName = std::get<std::string>(values[0]);
+        for (int i = 0; i < 6; ++i)
+        {
+            if (Theme::Name(static_cast<ThemeFamily>(i)) == familyName)
+            {
+                theme.m_Family = static_cast<ThemeFamily>(i);
+            }
+        }
+        const auto& modeName = std::get<std::string>(values[1]);
+        theme.m_Mode = modeName == "Dark"    ? ThemeMode::Dark
+                       : modeName == "Light" ? ThemeMode::Light
+                                             : ThemeMode::System;
+        theme.m_FontSize = static_cast<float>(std::get<double>(values[2]));
+        theme.m_Density = static_cast<float>(std::get<double>(values[3]));
+        if (std::get<bool>(values[4]))
+        {
+            theme.m_Accent = std::get<Color>(values[5]);
+        }
+        if (std::get<bool>(values[6]))
+        {
+            theme.m_Background = std::get<Color>(values[7]);
+        }
+        if (std::get<bool>(values[8]))
+        {
+            theme.m_Foreground = std::get<Color>(values[9]);
+        }
+        if (std::get<bool>(values[10]))
+        {
+            theme.m_Radius = static_cast<float>(std::get<double>(values[11]));
+        }
+        const auto& reduce = std::get<std::string>(values[12]);
+        if (reduce != "System")
+        {
+            theme.m_ReducedMotion = reduce == "Reduce";
+        }
+        (void)theme.Resolve(m_Theme->GetSystemAppearance());
+        return theme;
+    };
+    const std::weak_ptr<void> lifetime = m_Lifetime;
+    m_Connections.emplace_back(m_AppearanceModel->Values().AddValidator(
+        Alive(lifetime, [candidate](const std::vector<PropertyValue>& values) { (void)candidate(values); })));
+    m_Connections.emplace_back(m_AppearanceModel->Values().Subscribe(
+        Alive(lifetime,
+              [this, candidate](const StateChange<std::vector<PropertyValue>>& change)
+              {
+                  m_PendingTheme = candidate(change.GetAfter());
+                  m_Window.RequestRepaint();
+              })));
+    m_AppearanceGrid->EditRejected().Connect(Alive(lifetime, [this](const std::string& message) { Status(message); }));
+    dock.Content()
+        .Add<Label>("System follows available OS colors and contrast preferences. Custom color switches retain "
+                    "independent overrides.")
+        .SetWordWrap(true);
 }
 
 void CreatorWindow::FilterPalette(std::string_view query)
@@ -523,7 +810,16 @@ void CreatorWindow::FilterPalette(std::string_view query)
             m_PaletteIds.push_back(name);
         }
     }
-    m_Palette->SetItems(std::move(items));
+    for (const auto& [name, component] : m_Components)
+    {
+        (void)component;
+        if (query.empty() || name.find(query) != std::string::npos)
+        {
+            items.push_back(name);
+            m_PaletteIds.push_back(name);
+        }
+    }
+    m_Palette->SetEntries(std::move(items));
     if (!m_PaletteIds.empty())
     {
         m_Palette->SetCurrentIndex(0);
@@ -571,9 +867,10 @@ void CreatorWindow::SelectNode(std::string id)
     Status("Selected " + m_Selected + " / properties use canonical validated values");
 }
 
-std::string CreatorWindow::AddWidget(std::string type, std::string parent)
+std::string CreatorWindow::AddWidget(std::string type, std::string parent, std::optional<Point> position)
 {
-    const auto& descriptor = m_Registry.Find(type);
+    const auto component = m_Components.find(type);
+    const auto& descriptor = m_Registry.Find(component == m_Components.end() ? type : component->second.m_Root.m_Type);
     auto candidate = m_Document->Get();
     if (parent.empty())
     {
@@ -583,38 +880,214 @@ std::string CreatorWindow::AddWidget(std::string type, std::string parent)
     auto* container = candidate.Find(parent);
     if (!container || !m_Registry.Find(container->m_Type).m_Content)
     {
-        throw std::invalid_argument("Choose a widget with a registered content slot before adding children.");
+        throw std::invalid_argument("Choose a registered content slot before adding children.");
     }
     UiNode node;
     node.m_Type = type;
+    std::string id;
     for (std::size_t suffix = 1;; ++suffix)
     {
-        node.m_Id = type + std::to_string(suffix);
-        if (!candidate.Find(node.m_Id))
+        id = type + std::to_string(suffix);
+        if (!candidate.Find(id))
         {
             break;
         }
     }
-    for (const auto& property : descriptor.m_Properties)
+    if (component != m_Components.end())
     {
-        if (property.m_Definition.m_Id == "text" || property.m_Definition.m_Id == "title" ||
-            property.m_Definition.m_Id == "placeholder")
+        node = component->second.m_Root;
+        std::map<std::string, std::string> ids;
+        std::size_t serial = 0;
+        const auto rename = [&](const auto& self, UiNode& item) -> void
         {
-            node.m_Properties.emplace(property.m_Definition.m_Id, property.m_Definition.m_Default);
+            const auto fresh = serial++ == 0 ? id : id + "_n" + std::to_string(serial);
+            ids[item.m_Id] = fresh;
+            item.m_Id = fresh;
+            for (auto& child : item.m_Children)
+            {
+                self(self, child);
+            }
+        };
+        rename(rename, node);
+        const auto rules = [&](const auto& self, UiNode& item) -> void
+        {
+            for (auto& rule : item.m_Constraints)
+            {
+                rule.m_Item = ids.at(rule.m_Item);
+                if (rule.m_Target != "parent")
+                {
+                    rule.m_Target = ids.at(rule.m_Target);
+                }
+            }
+            for (auto& child : item.m_Children)
+            {
+                self(self, child);
+            }
+        };
+        rules(rules, node);
+        auto css = component->second.m_StyleSheet;
+        int depth = 0;
+        bool quoted = false, comment = false;
+        char quote = 0;
+        for (std::size_t i = 0; i < css.size(); ++i)
+        {
+            if (comment)
+            {
+                if (i && css[i - 1] == '*' && css[i] == '/')
+                {
+                    comment = false;
+                }
+                continue;
+            }
+            if (quoted)
+            {
+                if (css[i] == '\\')
+                {
+                    ++i;
+                }
+                else if (css[i] == quote)
+                {
+                    quoted = false;
+                }
+                continue;
+            }
+            if (css[i] == '/' && i + 1 < css.size() && css[i + 1] == '*')
+            {
+                comment = true;
+                ++i;
+                continue;
+            }
+            if (css[i] == '\'' || css[i] == '"')
+            {
+                quoted = true;
+                quote = css[i];
+                continue;
+            }
+            if (css[i] == '{')
+            {
+                ++depth;
+                continue;
+            }
+            if (css[i] == '}')
+            {
+                --depth;
+                continue;
+            }
+            if (depth == 0 && css[i] == '#')
+            {
+                const auto start = i + 1;
+                auto end = start;
+                while (end < css.size() &&
+                       ((css[end] >= 'a' && css[end] <= 'z') || (css[end] >= 'A' && css[end] <= 'Z') ||
+                        (css[end] >= '0' && css[end] <= '9') || css[end] == '_' || css[end] == '-'))
+                {
+                    ++end;
+                }
+                const auto found = ids.find(css.substr(start, end - start));
+                if (found != ids.end())
+                {
+                    css.replace(start, end - start, found->second);
+                    i = start + found->second.size() - 1;
+                }
+                else
+                {
+                    i = end ? end - 1 : i;
+                }
+            }
+        }
+        candidate.m_StyleSheet += '\n' + css;
+    }
+    else
+    {
+        node.m_Id = id;
+        for (const auto& property : descriptor.m_Properties)
+        {
+            if (property.m_Definition.m_Id == "text" || property.m_Definition.m_Id == "title" ||
+                property.m_Definition.m_Id == "placeholder")
+            {
+                node.m_Properties.emplace(property.m_Definition.m_Id, property.m_Definition.m_Default);
+            }
+        }
+        node.m_Properties["width"] = 180.0;
+        node.m_Properties["height"] = descriptor.m_Content ? 180.0 : 38.0;
+    }
+    std::size_t insertion = container->m_Children.size();
+    if (position && container->m_Layout != "Constraints")
+    {
+        const auto owner = m_Built.m_Widgets.find(parent);
+        if (owner != m_Built.m_Widgets.end() && owner->second.Get())
+        {
+            const auto area = m_Registry.Find(container->m_Type).m_Content(*owner->second.Get()).GetContentBounds();
+            for (std::size_t i = 0; i < container->m_Children.size(); ++i)
+            {
+                const auto sibling = m_Built.m_Widgets.find(container->m_Children[i].m_Id);
+                if (sibling == m_Built.m_Widgets.end() || !sibling->second.Get())
+                {
+                    continue;
+                }
+                const auto bounds = sibling->second.Get()->GetBounds();
+                const bool before = container->m_Layout == "Row"
+                                        ? position->m_X + area.m_X < bounds.m_X + bounds.m_Width / 2
+                                        : position->m_Y + area.m_Y < bounds.m_Y + bounds.m_Height / 2;
+                if (before)
+                {
+                    insertion = i;
+                    break;
+                }
+            }
         }
     }
-    node.m_Properties["width"] = 180.0;
-    node.m_Properties["height"] = descriptor.m_Content ? 180.0 : 38.0;
-    const auto id = node.m_Id;
-    container->m_Children.push_back(std::move(node));
+    container->m_Children.insert(container->m_Children.begin() + static_cast<std::ptrdiff_t>(insertion),
+                                 std::move(node));
     if (container->m_Layout == "Constraints")
     {
-        const double offset = 24 + static_cast<double>(container->m_Children.size() % 8) * 24;
-        Position(*container, id, offset, offset);
+        const float offset = 24 + static_cast<float>(container->m_Children.size() % 8) * 24;
+        auto point = position.value_or(Point{offset, offset});
+        Position(*container, id, point.m_X, point.m_Y);
     }
     m_Document->Set(std::move(candidate));
     SelectNode(id);
     return id;
+}
+
+void CreatorWindow::RegisterComponent(std::string name, std::string id)
+{
+    const auto* selected = m_Document->Get().Find(id.empty() ? m_Selected : id);
+    if (!selected)
+    {
+        throw std::invalid_argument("Select a composition before adding it to the palette.");
+    }
+    if (m_Components.size() >= 64)
+    {
+        throw std::length_error("A session palette supports at most 64 reusable compositions.");
+    }
+    if (m_Components.contains(name))
+    {
+        throw std::invalid_argument("That session component name already exists.");
+    }
+    UiDocument component;
+    component.m_Root = *selected;
+    component.m_StyleSheet = m_Document->Get().m_StyleSheet;
+    (void)component.ToCppClass(m_Registry, name);
+    m_Components.emplace(std::move(name), std::move(component));
+    FilterPalette({});
+    Status("Composition added to the session palette; export its class or save JSON to retain it independently.");
+}
+
+void CreatorWindow::SetSnapping(DesignSnapSettings settings)
+{
+    (void)SnapDesign({}, false, {}, {}, settings);
+    m_Snapping = settings;
+}
+
+const DesignSnapSettings& CreatorWindow::GetSnapping() const
+{
+    return m_Snapping;
+}
+
+ThemeController& CreatorWindow::Themes() const
+{
+    return *m_Theme;
 }
 
 void CreatorWindow::DeleteSelected()
@@ -714,6 +1187,16 @@ void CreatorWindow::ApplyCss(std::string css)
 
 void CreatorWindow::Refresh()
 {
+    if (m_PendingTheme)
+    {
+        m_Theme->SetTheme(*m_PendingTheme);
+        m_PendingTheme.reset();
+    }
+    if (m_Gesture && m_Document->GetSnapshot() != m_Gesture)
+    {
+        CancelGeometry();
+        m_AbortGesture = true;
+    }
     if (!m_PreviewDirty)
     {
         return;
@@ -722,11 +1205,7 @@ void CreatorWindow::Refresh()
     const bool cssChanged = !m_Previewed || document->m_StyleSheet != m_AppliedCss;
     if (cssChanged)
     {
-        std::string error;
-        if (!m_Window.Ui().SetStyleSheet(m_BaseCss + '\n' + document->m_StyleSheet, error))
-        {
-            throw std::invalid_argument("Creator stylesheet: " + error);
-        }
+        m_Theme->SetOverrideCss(document->m_StyleSheet);
         m_AppliedCss = document->m_StyleSheet;
         std::vector<std::vector<std::string>> lines;
         std::istringstream source(document->m_StyleSheet);
@@ -764,7 +1243,17 @@ void CreatorWindow::Refresh()
         }
     };
     gather(gather, document->m_Root);
-    m_Surface->SetWidgets(m_Built, std::move(order));
+    std::unordered_map<std::string, WidgetRef> containers;
+    for (const auto& id : order)
+    {
+        const auto* node = document->Find(id);
+        const auto& descriptor = m_Registry.Find(node->m_Type);
+        if (descriptor.m_Content)
+        {
+            containers.emplace(id, WidgetRef(&descriptor.m_Content(*m_Built.m_Widgets.at(id).Get())));
+        }
+    }
+    m_Surface->SetWidgets(m_Built, std::move(order), std::move(containers));
     m_Surface->SetSelected(m_Selected);
     m_Previewed = document;
     m_PreviewDirty = false;
@@ -1001,55 +1490,122 @@ UiDocument CreatorWindow::FromInspector(const std::vector<PropertyValue>& values
     return candidate;
 }
 
+void CreatorWindow::CancelGeometry()
+{
+    if (auto* target = m_GestureTarget.Get())
+    {
+        target->ClearFloatingBounds();
+    }
+    m_Gesture.reset();
+    m_GestureTarget = {};
+    m_GestureReferences.clear();
+    if (m_Surface)
+    {
+        m_Surface->SetGuides({});
+    }
+}
+
 void CreatorWindow::EditGeometry(std::string id, Point delta, bool resize, bool finished)
 {
+    if (m_AbortGesture)
+    {
+        if (finished)
+        {
+            m_AbortGesture = false;
+        }
+        return;
+    }
     const auto found = m_Built.m_Widgets.find(id);
     auto* widget = found == m_Built.m_Widgets.end() ? nullptr : found->second.Get();
     if (!widget)
     {
         return;
     }
+    auto copy = m_Document->Get();
+    auto* owner = ParentOf(copy.m_Root, id);
+    if (!owner || (!resize && owner->m_Layout != "Constraints"))
+    {
+        Status("Movement follows layout ordering; choose Constraints for free placement and alignment guides.");
+        return;
+    }
     if (!m_Gesture)
     {
         m_Gesture = m_Document->GetSnapshot();
         m_GestureBounds = widget->GetBounds();
+        m_GestureTarget = WidgetRef(widget);
+        auto* parentWidget = m_Built.m_Widgets.at(owner->m_Id).Get();
+        m_GestureParent = m_Registry.Find(owner->m_Type).m_Content(*parentWidget).GetContentBounds();
+        m_GestureReferences.clear();
+        for (const auto& sibling : owner->m_Children)
+        {
+            if (sibling.m_Id == id)
+            {
+                continue;
+            }
+            auto* target = m_Built.m_Widgets.at(sibling.m_Id).Get();
+            if (target && target->IsVisible())
+            {
+                m_GestureReferences.push_back({sibling.m_Id, target->GetBounds()});
+            }
+        }
     }
     auto candidate = *m_Gesture;
     auto* node = candidate.Find(id);
     auto* parent = ParentOf(candidate.m_Root, id);
-    if (!node || (!resize && (!parent || parent->m_Layout != "Constraints")))
-    {
-        Status("Free movement uses a Constraints parent; flow layouts retain their ordering.");
-        if (finished)
-        {
-            m_Gesture.reset();
-        }
-        return;
-    }
     auto bounds = m_GestureBounds;
     if (resize)
     {
         bounds.m_Width = std::clamp(bounds.m_Width + delta.m_X, 24.0f, 10000.0f);
         bounds.m_Height = std::clamp(bounds.m_Height + delta.m_Y, 24.0f, 10000.0f);
+    }
+    else
+    {
+        bounds.m_X += delta.m_X;
+        bounds.m_Y += delta.m_Y;
+    }
+    const auto snapped = parent->m_Layout == "Constraints"
+                             ? SnapDesign(bounds, resize, m_GestureParent, m_GestureReferences, m_Snapping)
+                             : DesignSnapResult{bounds, {}};
+    bounds = snapped.m_Bounds;
+    if (resize)
+    {
         node->m_Properties["width"] = static_cast<double>(bounds.m_Width);
         node->m_Properties["height"] = static_cast<double>(bounds.m_Height);
         node->m_Properties["widthPolicy"] = std::string("Fixed");
         node->m_Properties["heightPolicy"] = std::string("Fixed");
     }
-    else
+    if (parent->m_Layout == "Constraints")
     {
-        const auto origin = PositionOf(*parent, id);
-        Position(*parent, id, std::clamp(origin[0] + delta.m_X, -1e6, 1e6),
-                 std::clamp(origin[1] + delta.m_Y, -1e6, 1e6));
-        bounds.m_X += delta.m_X;
-        bounds.m_Y += delta.m_Y;
+        Position(*parent, id, bounds.m_X - m_GestureParent.m_X, bounds.m_Y - m_GestureParent.m_Y);
+        if (m_Snapping.m_KeepRelations)
+        {
+            for (const auto& guide : snapped.m_Guides)
+            {
+                if (guide.m_Rule.m_Target.empty())
+                {
+                    continue;
+                }
+                std::erase_if(parent->m_Constraints,
+                              [&](const UiConstraint& rule)
+                              {
+                                  return rule.m_Item == id &&
+                                         (guide.m_X ? rule.m_Anchor == "Left" || rule.m_Anchor == "Right" ||
+                                                          rule.m_Anchor == "CenterX"
+                                                    : rule.m_Anchor == "Top" || rule.m_Anchor == "Bottom" ||
+                                                          rule.m_Anchor == "CenterY");
+                              });
+                auto rule = guide.m_Rule;
+                rule.m_Item = id;
+                rule.m_Name = id + (guide.m_X ? ".snap-x" : ".snap-y");
+                parent->m_Constraints.push_back(std::move(rule));
+            }
+        }
     }
     widget->SetFloatingBounds(bounds);
-    m_Surface->SetSelected(id);
+    m_Surface->SetGuides(snapped.m_Guides);
     if (finished)
     {
-        widget->ClearFloatingBounds();
-        m_Gesture.reset();
+        CancelGeometry();
         m_Document->Set(std::move(candidate));
         m_PreviewDirty = true;
     }
@@ -1196,7 +1752,7 @@ void CreatorWindow::Open(bool discardConfirmed)
                   }));
 }
 
-void CreatorWindow::Save(bool cpp)
+void CreatorWindow::Save(bool cpp, bool selected)
 {
     m_Tasks.erase(std::remove_if(m_Tasks.begin(), m_Tasks.end(), [](const Task& task) { return task.IsReady(); }),
                   m_Tasks.end());
@@ -1206,69 +1762,102 @@ void CreatorWindow::Save(bool cpp)
         return;
     }
     const auto snapshot = m_Document->GetSnapshot();
-    const auto text = cpp ? snapshot->ToCpp(m_Registry) : snapshot->ToJson(m_Registry);
+    auto design = *snapshot;
+    if (selected)
+    {
+        const auto* node = design.Find(m_Selected);
+        if (!node)
+        {
+            Status("Select a component before exporting.");
+            return;
+        }
+        auto root = *node;
+        design.m_Root = std::move(root);
+    }
+    const auto json = cpp ? std::string{} : design.ToJson(m_Registry);
     FileDialogOptions options;
-    options.m_Title = cpp ? "Export editable C++" : "Save EStudioUI JSON";
+    options.m_Title = cpp ? "Export composed C++ widget (.h and .cpp)" : "Save EStudioUI JSON";
     options.m_DefaultExtension = cpp ? "cpp" : "json";
     options.m_FileName =
-        cpp ? "GeneratedUi.cpp" : (m_Path.empty() ? std::filesystem::path("dashboard.json") : m_Path.filename());
-    options.m_Filters = {{cpp ? "C++ source" : "EStudioUI JSON", cpp ? "*.cpp" : "*.json"}};
+        cpp ? "GeneratedWidget.cpp" : (m_Path.empty() ? std::filesystem::path("dashboard.json") : m_Path.filename());
+    options.m_Filters = {{cpp ? "C++ widget source pair" : "EStudioUI JSON", cpp ? "*.cpp" : "*.json"}};
     const auto generation = ++m_FileGeneration;
     const std::weak_ptr<void> lifetime = m_Lifetime;
     FileDialog::Save(*m_Shell, std::move(options))
-        .OnFinished(
-            Alive(lifetime,
-                  [this, snapshot, text, cpp, generation, lifetime](FileDialogResult result)
-                  {
-                      if (generation != m_FileGeneration)
-                      {
-                          return;
-                      }
-                      if (result.m_Status != FileDialogStatus::Accepted || result.m_Paths.empty())
-                      {
-                          Status(result.m_Message.empty() ? "Save cancelled or unavailable on this platform"
-                                                          : result.m_Message);
-                          return;
-                      }
-                      const auto path = result.m_Paths.front();
-                      UiTaskOptions<MainWindow> taskOptions;
-                      taskOptions.m_Error = Alive(lifetime,
-                                                  [this](MainWindow&, std::exception_ptr error)
-                                                  {
-                                                      try
-                                                      {
-                                                          std::rethrow_exception(error);
-                                                      }
-                                                      catch (const std::exception& failure)
-                                                      {
-                                                          Status(failure.what());
-                                                      }
-                                                  });
-                      m_Tasks.push_back(m_Application.Tasks().Run(
-                          m_Window.Ui().GetHandle(*m_Shell),
-                          [path, text]
-                          {
-                              WriteFile(path, text);
-                              return path;
-                          },
-                          Alive(lifetime,
-                                [this, snapshot, cpp, generation](MainWindow&, const std::filesystem::path& saved)
-                                {
-                                    if (generation != m_FileGeneration)
-                                    {
-                                        return;
-                                    }
-                                    if (!cpp)
-                                    {
-                                        m_Saved = snapshot;
-                                        m_Path = saved;
-                                    }
-                                    Status(cpp ? "Editable C++ exported / compile BuildUi in your project"
-                                               : (IsDirty() ? "Snapshot saved / newer edits remain modified"
-                                                            : "UI JSON saved"));
-                                }),
-                          std::move(taskOptions)));
-                  }));
+        .OnFinished(Alive(
+            lifetime,
+            [this, snapshot, design = std::move(design), json, cpp, generation, lifetime](FileDialogResult result)
+            {
+                if (generation != m_FileGeneration)
+                {
+                    return;
+                }
+                if (result.m_Status != FileDialogStatus::Accepted || result.m_Paths.empty())
+                {
+                    Status(result.m_Message.empty() ? "Save cancelled or unavailable" : result.m_Message);
+                    return;
+                }
+                const auto path = result.m_Paths.front();
+                UiCppClass source;
+                try
+                {
+                    if (cpp)
+                    {
+                        source = design.ToCppClass(m_Registry, path.stem().string());
+                    }
+                }
+                catch (const std::exception& error)
+                {
+                    Status(error.what());
+                    return;
+                }
+                UiTaskOptions<MainWindow> taskOptions;
+                taskOptions.m_Error = Alive(lifetime,
+                                            [this](MainWindow&, std::exception_ptr error)
+                                            {
+                                                try
+                                                {
+                                                    std::rethrow_exception(error);
+                                                }
+                                                catch (const std::exception& failure)
+                                                {
+                                                    Status(failure.what());
+                                                }
+                                            });
+                m_Tasks.push_back(m_Application.Tasks().Run(
+                    m_Window.Ui().GetHandle(*m_Shell),
+                    [path, json, source = std::move(source), cpp]
+                    {
+                        if (cpp)
+                        {
+                            WriteCppPair(path, source);
+                        }
+                        else
+                        {
+                            WriteFile(path, json);
+                        }
+                        return path;
+                    },
+                    Alive(
+                        lifetime,
+                        [this, snapshot, cpp, generation](MainWindow&, const std::filesystem::path& saved)
+                        {
+                            if (generation != m_FileGeneration)
+                            {
+                                return;
+                            }
+                            if (!cpp)
+                            {
+                                m_Saved = snapshot;
+                                m_Path = saved;
+                            }
+                            Status(
+                                cpp ? "Editable .h/.cpp class exported / complete ConnectEvents with application logic"
+                                : IsDirty() ? "Snapshot saved / newer edits remain modified"
+                                            : "UI JSON saved");
+                        }),
+                    std::move(taskOptions)));
+            }));
 }
 
 void CreatorWindow::Status(std::string message)
@@ -1327,12 +1916,10 @@ UiDocument CreatorWindow::ExampleDocument()
                              {"progress", "ProgressBar", {{"value", 68.0}, {"height", 20.0}}}};
     auto& note = add("export-note", "Label", 24, 430, 570, 70);
     note.m_Properties["text"] = std::string("JSON for runtime dashboards. Direct C++ for your own application.");
-    document.m_StyleSheet =
-        "#design-root { background: #111827; padding: 12px; }\n"
-        "#design-root groupbox { background: #1b2537; border: 1px solid #344661; border-radius: 10px; padding: 12px; "
-        "gap: 10px; }\n"
-        "#submit { background: linear-gradient(120deg, #1477c9, #5e55dd); color: white; border-radius: 8px; }\n"
-        "#submit:hover { background: #347cce; }\n";
+    document.m_StyleSheet = "#design-root { padding: 12px; }\n"
+                            "#design-root groupbox { padding: 12px; "
+                            "gap: 10px; }\n"
+                            "#design-root label { font-size: 14px; }\n";
     return document;
 }
 } // namespace EStudioUI

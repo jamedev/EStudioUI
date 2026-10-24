@@ -58,6 +58,16 @@ void WindowMetrics::Validate() const
         throw std::invalid_argument("Window metrics require finite sizes and positive scales.");
 }
 
+void SystemAppearance::Validate() const
+{
+    if (m_Support < PlatformSupport::Unsupported || m_Support > PlatformSupport::Native)
+        throw std::invalid_argument("Invalid appearance capability.");
+    for (const auto color : {m_Accent, m_Foreground, m_Background})
+        for (const float channel : {color.m_R, color.m_G, color.m_B, color.m_A})
+            if (!std::isfinite(channel) || channel < 0 || channel > 1)
+                throw std::invalid_argument("Appearance colors require normalized finite channels.");
+}
+
 Point WindowMetrics::FromNative(Point point) const
 {
     Validate();

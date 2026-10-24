@@ -692,3 +692,22 @@ property-only updates and commits one document snapshot per completed geometry
 gesture. Structural changes rebuild a staged preview. F14 packaging/module
 extraction remains deferred; this boundary is evidence from a real consumer,
 not a new SDK compatibility commitment. See [CREATOR.md](CREATOR.md).
+
+
+`Window` owns its `ThemeController` before the UI is released. Theme values and
+semantic palette resolution are independent of native/GL handles. Only changed
+CSS is compiled; existing widgets and normal caches remain shared. Platform
+appearance notifications carry owned snapshots and use the existing owner-side
+service pump. Windows messages mark dirty state without executing application
+callbacks; recursive service pumping is diagnosed. Other platform adapters report
+support explicitly. The generated cascade preserves a direct stylesheet escape
+hatch and normal CSS specificity; no recurring appearance timer is introduced.
+
+Creator palette icons are bounded visible-row paint records inside one ListWidget,
+not one child per entry. Captured pointer gestures preview registered content-slot
+targets and defer document insertion until after input delivery. Geometry gestures
+cache sibling references once, preview at most two snap guides and commit one
+canonical snapshot. Optional relationships use the existing constraint solver.
+Reusable compositions are flattened owned document subtrees with remapped IDs;
+source class generation reuses the direct C++ node/property/layout emitters and
+is compiled in the catalog test, without a runtime registry/JSON requirement.

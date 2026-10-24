@@ -717,6 +717,139 @@ std::string UiDocument::ToCpp(const WidgetRegistry& registry) const
     return output.str();
 }
 
+UiCppClass UiDocument::ToCppClass(const WidgetRegistry& registry, std::string_view className) const
+{
+    Validate(registry);
+    const std::string name(className);
+    const std::set<std::string> keywords{
+        "alignas",     "alignof",   "and",        "and_eq",    "asm",      "auto",         "bitand",
+        "bitor",       "bool",      "break",      "case",      "catch",    "char",         "char8_t",
+        "char16_t",    "char32_t",  "class",      "compl",     "concept",  "const",        "consteval",
+        "constexpr",   "constinit", "const_cast", "continue",  "co_await", "co_return",    "co_yield",
+        "decltype",    "default",   "delete",     "do",        "double",   "dynamic_cast", "else",
+        "enum",        "explicit",  "export",     "extern",    "false",    "float",        "for",
+        "friend",      "goto",      "if",         "inline",    "int",      "long",         "mutable",
+        "namespace",   "new",       "noexcept",   "not",       "not_eq",   "nullptr",      "operator",
+        "or",          "or_eq",     "private",    "protected", "public",   "register",     "reinterpret_cast",
+        "requires",    "return",    "short",      "signed",    "sizeof",   "static",       "static_assert",
+        "static_cast", "struct",    "switch",     "template",  "this",     "thread_local", "throw",
+        "true",        "try",       "typedef",    "typeid",    "typename", "union",        "unsigned",
+        "using",       "virtual",   "void",       "volatile",  "wchar_t",  "while",        "xor",
+        "xor_eq"};
+    if (name.empty() || name.size() > 96 || name[0] == '_' || name.find("__") != std::string::npos ||
+        keywords.contains(name) || name == "Content" || name == "BuildUi" || name == "ConnectEvents" ||
+        name == "StyleSheet" || name == "std" || name == "EStudioUI")
+    {
+        throw std::invalid_argument("Choose a non-reserved C++ class name beginning with a letter.");
+    }
+    for (std::size_t index = 0; index < name.size(); ++index)
+    {
+        const char c = name[index];
+        if (!((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (index && (c == '_' || (c >= '0' && c <= '9')))))
+        {
+            throw std::invalid_argument("A C++ class name may contain only ASCII letters, digits and underscores.");
+        }
+    }
+    if (registry.GetTypes().contains(name))
+    {
+        throw std::invalid_argument("The component class name conflicts with a registered widget type.");
+    }
+    std::vector<const UiNode*> nodes;
+    std::set<std::string> includes{"EStudioUI/Widget.h"};
+    const auto gather = [&](const auto& self, const UiNode& node) -> void
+    {
+        nodes.push_back(&node);
+        includes.insert(registry.Find(node.m_Type).m_Include);
+        for (const auto& child : node.m_Children)
+        {
+            self(self, child);
+        }
+    };
+    gather(gather, m_Root);
+    std::map<std::string, std::string> members;
+    std::set<std::string> used;
+    for (const auto* node : nodes)
+    {
+        std::string member = "m_";
+        bool upper = true;
+        for (const char c : node->m_Id)
+        {
+            if (c == '-' || c == '_')
+            {
+                upper = true;
+                continue;
+            }
+            member += upper && c >= 'a' && c <= 'z' ? static_cast<char>(c - 'a' + 'A') : c;
+            upper = false;
+        }
+        const auto stem = member;
+        for (std::size_t suffix = 2; used.contains(member); ++suffix)
+        {
+            member = stem + std::to_string(suffix);
+        }
+        used.insert(member);
+        members[node->m_Id] = std::move(member);
+    }
+    std::ostringstream header, source;
+    header << "#pragma once\n\n";
+    for (const auto& include : includes)
+    {
+        header << "#include <" << include << ">\n";
+    }
+    header << "#include <string_view>\n\n//! Editable composed widget exported by EStudioUICreator.\nclass " << name
+           << " : public EStudioUI::Widget\n{\n  public:\n"
+           << "    //! Constructs all owned controls and connects application hooks.\n    " << name << "();\n\n"
+           << "    //! Returns the owned design root for ordinary widget composition.\n    EStudioUI::Widget& "
+              "Content() const;\n\n"
+           << "    //! Returns optional design CSS; apply it once after the application theme.\n    static "
+              "std::string_view StyleSheet();\n\n  protected:\n"
+           << "    //! Connect application signals, state bindings and validators here.\n    void ConnectEvents();\n\n";
+    for (const auto* node : nodes)
+    {
+        const auto& descriptor = registry.Find(node->m_Type);
+        const auto cppType =
+            descriptor.m_Include.starts_with("EStudioUI/") && descriptor.m_CppType.find("::") == std::string::npos
+                ? "EStudioUI::" + descriptor.m_CppType
+                : descriptor.m_CppType;
+        header << "    //! Observes owned " << node->m_Id << "; do not delete this child pointer.\n    " << cppType
+               << "* " << members.at(node->m_Id) << " = nullptr;\n\n";
+    }
+    header << "  private:\n    //! Installs the exported children and layouts without JSON or registry lookup.\n    "
+              "void BuildUi();\n};\n";
+    source << "#include \"" << name
+           << ".h\"\n#include <EStudioUI/BoxLayout.h>\n#include <EStudioUI/GridLayout.h>\n#include "
+              "<EStudioUI/FlowLayout.h>\n#include <EStudioUI/ConstraintLayout.h>\n#include "
+              "<EStudioUI/PropertyValue.h>\n#include <utility>\n#include <vector>\n\n"
+           << name << "::" << name
+           << "() : Widget(\"composite-widget\")\n{\n    SetStyleProperty(EStudioUI::StyleProperty::Padding, "
+              "EStudioUI::Insets{});\n    SetGap(0);\n    SetWidth(EStudioUI::SizeRule::Fill());\n    "
+              "SetHeight(EStudioUI::SizeRule::Fill());\n    BuildUi();\n    ConnectEvents();\n}\n\n"
+           << "EStudioUI::Widget& " << name << "::Content() const\n{\n    VerifyAccess();\n    return *"
+           << members.at(m_Root.m_Id) << ";\n}\n\n"
+           << "std::string_view " << name << "::StyleSheet()\n{\n    return " << UiCppString(m_StyleSheet) << ";\n}\n\n"
+           << "void " << name
+           << "::ConnectEvents()\n{\n    // Add application logic here after all children have been constructed.\n    "
+              "// Prefer shared Action objects, State/Bindings and receiver-bound UiHandle tasks.\n    // Child "
+              "pointers are owned by this widget; ordinary signal connections expire with them.\n    // Apply "
+              "StyleSheet() to the containing UI once, after its ThemeController.\n    // Export creates a new source "
+              "pair: retain your custom code before exporting over it.\n}\n\n"
+           << "void " << name << "::BuildUi()\n{\n    using namespace EStudioUI;\n";
+    std::map<std::string, std::string> variables;
+    std::size_t serial = 0;
+    EmitNode(source, m_Root, "(*this)", registry, variables, serial);
+    for (const auto* node : nodes)
+    {
+        source << "    " << members.at(node->m_Id) << " = &" << variables.at(node->m_Id) << ";\n";
+    }
+    source << "}\n";
+    UiCppClass result{header.str(), source.str()};
+    if (result.m_Header.size() + result.m_Source.size() > 16 * 1024 * 1024)
+    {
+        throw std::length_error("Generated class source exceeds 16 MiB.");
+    }
+    return result;
+}
+
 UiNode* UiDocument::Find(std::string_view id)
 {
     return FindNode(m_Root, id);

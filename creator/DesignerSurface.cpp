@@ -2,6 +2,7 @@
 
 #include <EStudioUI/Renderer.h>
 #include <EStudioUI/UiContext.h>
+#include <utility>
 
 namespace EStudioUI
 {
@@ -14,19 +15,57 @@ class DesignOverlay final : public Widget
     {
     }
 
+    void Refresh()
+    {
+        RequestRepaint();
+    }
+
     std::function<void(Point)> m_Select;
     std::function<Rect()> m_Bounds;
     std::function<void(Point, bool, bool)> m_Edit;
+    std::function<Rect()> m_Drop;
+    std::function<std::vector<DesignGuide>()> m_Guides;
+    std::function<void()> m_Cancel;
+
+    bool IsFocusable() const override
+    {
+        return true;
+    }
 
   protected:
     void Paint(Renderer& renderer, FontFace&, double, float opacity) const override
     {
+        auto color = GetStyle().m_Color;
+        color.m_A *= opacity;
+        const auto area = GetBounds();
+        if (m_Guides)
+        {
+            for (const auto& guide : m_Guides())
+            {
+                renderer.DrawLine(guide.m_X ? Point{guide.m_Position, area.m_Y} : Point{area.m_X, guide.m_Position},
+                                  guide.m_X ? Point{guide.m_Position, area.m_Y + area.m_Height}
+                                            : Point{area.m_X + area.m_Width, guide.m_Position},
+                                  color, 1, GetClip());
+            }
+        }
+        if (m_Drop)
+        {
+            const auto drop = m_Drop();
+            if (drop.m_Width > 0 && drop.m_Height > 0)
+            {
+                Style highlight;
+                highlight.m_Background = color;
+                highlight.m_Background.m_A = .08f;
+                highlight.m_BorderColor = color;
+                highlight.m_BorderWidth = 2;
+                renderer.DrawBox(drop, highlight, GetClip(), opacity);
+            }
+        }
         const auto bounds = m_Bounds ? m_Bounds() : Rect{};
         if (bounds.m_Width <= 0 || bounds.m_Height <= 0)
         {
             return;
         }
-        const Color color{0.35f, 0.8f, 1, opacity};
         renderer.DrawLine({bounds.m_X, bounds.m_Y}, {bounds.m_X + bounds.m_Width, bounds.m_Y}, color, 2, GetClip());
         renderer.DrawLine({bounds.m_X, bounds.m_Y}, {bounds.m_X, bounds.m_Y + bounds.m_Height}, color, 2, GetClip());
         renderer.DrawLine({bounds.m_X + bounds.m_Width, bounds.m_Y},
@@ -43,12 +82,12 @@ class DesignOverlay final : public Widget
     {
         const auto old = m_Bounds ? m_Bounds() : Rect{};
         m_Resize = Rect{old.m_X + old.m_Width - 10, old.m_Y + old.m_Height - 10, 16, 16}.Contains(event.m_Position);
+        m_Start = event.m_Position;
+        m_Dragging = true;
         if (!m_Resize && m_Select)
         {
             m_Select(event.m_Position);
         }
-        m_Start = event.m_Position;
-        m_Dragging = true;
     }
 
     void OnPointerMove(const PointerEvent& event) override
@@ -61,16 +100,28 @@ class DesignOverlay final : public Widget
 
     void OnPointerUp(const PointerEvent& event) override
     {
-        if (m_Dragging && m_Edit)
+        const bool dragging = std::exchange(m_Dragging, false);
+        if (dragging && m_Edit)
         {
             m_Edit({event.m_Position.m_X - m_Start.m_X, event.m_Position.m_Y - m_Start.m_Y}, m_Resize, true);
         }
-        m_Dragging = false;
     }
 
     void OnCaptureLost() override
     {
-        m_Dragging = false;
+        const bool active = std::exchange(m_Dragging, false);
+        if (active && m_Cancel)
+        {
+            m_Cancel();
+        }
+    }
+
+    void OnKey(Key key, bool down, bool, Modifiers) override
+    {
+        if (key == Key::Escape && down)
+        {
+            OnCaptureLost();
+        }
     }
 
   private:
@@ -91,6 +142,29 @@ DesignerSurface::DesignerSurface() : Widget("designer-surface")
     m_Overlay = &overlay;
     overlay.SetFloatingBounds({});
     const WidgetRef self(this);
+    overlay.m_Cancel = [self]
+    {
+        if (auto* live = dynamic_cast<DesignerSurface*>(self.Get()))
+        {
+            live->m_Cancelled.Emit();
+        }
+    };
+    overlay.m_Drop = [self]
+    {
+        const auto* live = dynamic_cast<DesignerSurface*>(self.Get());
+        if (!live)
+        {
+            return Rect{};
+        }
+        const auto found = live->m_Containers.find(live->m_DropTarget);
+        return found == live->m_Containers.end() || !found->second.Get() ? Rect{}
+                                                                         : found->second.Get()->GetContentBounds();
+    };
+    overlay.m_Guides = [self]
+    {
+        const auto* live = dynamic_cast<DesignerSurface*>(self.Get());
+        return live ? live->m_Guides : std::vector<DesignGuide>{};
+    };
     overlay.m_Bounds = [self]
     {
         const auto* live = dynamic_cast<DesignerSurface*>(self.Get());
@@ -140,12 +214,85 @@ Widget& DesignerSurface::Host() const
     return *m_Host;
 }
 
-void DesignerSurface::SetWidgets(UiBuildResult result, std::vector<std::string> order)
+void DesignerSurface::SetWidgets(UiBuildResult result, std::vector<std::string> order,
+                                 std::unordered_map<std::string, WidgetRef> containers)
 {
     VerifyStructuralMutation();
     m_Built = std::move(result);
     m_Order = std::move(order);
+    m_Containers = std::move(containers);
     RequestRepaint();
+}
+
+std::string DesignerSurface::ContainerAt(Point point) const
+{
+    VerifyAccess();
+    if (!m_Overlay->IsVisible() || !GetClip().Contains(point))
+    {
+        return {};
+    }
+    for (auto id = m_Order.rbegin(); id != m_Order.rend(); ++id)
+    {
+        const auto found = m_Containers.find(*id);
+        auto* content = found == m_Containers.end() ? nullptr : found->second.Get();
+        bool visible = content != nullptr;
+        for (auto* ancestor = content; ancestor; ancestor = ancestor->GetParent())
+        {
+            visible = visible && ancestor->IsVisible();
+        }
+        if (visible && content->GetClip().Contains(point) &&
+            content->GetContentBounds().Contains(GetContext()->ToLayoutPoint(*content, point)))
+        {
+            return *id;
+        }
+    }
+    return {};
+}
+
+Point DesignerSurface::ContainerPoint(std::string_view id, Point point) const
+{
+    VerifyAccess();
+    const auto found = m_Containers.find(std::string(id));
+    auto* content = found == m_Containers.end() ? nullptr : found->second.Get();
+    if (!content)
+    {
+        throw std::invalid_argument("The drop container expired.");
+    }
+    const auto local = GetContext()->ToLayoutPoint(*content, point);
+    const auto bounds = content->GetContentBounds();
+    return {local.m_X - bounds.m_X, local.m_Y - bounds.m_Y};
+}
+
+void DesignerSurface::SetDropTarget(std::string id)
+{
+    VerifyStructuralMutation();
+    if (m_DropTarget != id)
+    {
+        m_DropTarget = std::move(id);
+        static_cast<DesignOverlay*>(m_Overlay)->Refresh();
+    }
+}
+
+void DesignerSurface::SetGuides(std::vector<DesignGuide> guides)
+{
+    VerifyStructuralMutation();
+    if (guides.size() > 2)
+    {
+        throw std::invalid_argument("At most two design guides are displayed.");
+    }
+    m_Guides = std::move(guides);
+    static_cast<DesignOverlay*>(m_Overlay)->Refresh();
+}
+
+const std::vector<DesignGuide>& DesignerSurface::GetGuides() const
+{
+    VerifyAccess();
+    return m_Guides;
+}
+
+Signal<>& DesignerSurface::GestureCancelled()
+{
+    return m_Cancelled;
 }
 
 void DesignerSurface::SetSelected(std::string id)

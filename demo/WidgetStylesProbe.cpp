@@ -61,7 +61,7 @@ bool Magenta(Color color)
     return color.m_R > .8f && color.m_B > .6f && color.m_G < .3f;
 }
 
-std::string Theme(bool alternate)
+std::string ProbeTheme(bool alternate)
 {
     return std::string(R"CSS(
         window { background: #101828; color: #ffffff; font-size: 14px; padding: 0; }
@@ -187,7 +187,7 @@ void VerifyWidgetStyles(const std::filesystem::path& assets, const std::filesyst
         tree.AddItem(branch, "Primitive " + std::to_string(item));
     tree.SetExpanded(branch, true);
     std::string error;
-    Check(ui.SetStyleSheet(Theme(false), error), "rich part stylesheet parses: " + error);
+    Check(ui.SetStyleSheet(ProbeTheme(false), error), "rich part stylesheet parses: " + error);
     window.RenderFrame(0);
     AllowOversizedGpuProbe(window);
 
@@ -245,7 +245,7 @@ void VerifyWidgetStyles(const std::filesystem::path& assets, const std::filesyst
         table.SetScrollOffset({});
         ui.SetFocus(nullptr);
         ui.PointerMove({810, 550});
-        Check(ui.SetStyleSheet(Theme(false), error), error);
+        Check(ui.SetStyleSheet(ProbeTheme(false), error), error);
         compareFrame("initial parts");
 
         const auto sliderBounds = slider.GetContentBounds();
@@ -338,7 +338,7 @@ void VerifyWidgetStyles(const std::filesystem::path& assets, const std::filesyst
         compareFrame("transformed collection");
         list.RemoveClass("moved");
         compareFrame("transform removed");
-        Check(ui.SetStyleSheet(Theme(true), error), error);
+        Check(ui.SetStyleSheet(ProbeTheme(true), error), error);
         compareFrame("theme replacement");
         Check(slider.GetBounds().m_Width == 320 && list.GetBounds().m_Width == 240 &&
                   table.GetColumnWidths() == std::vector<float>{120, 180},

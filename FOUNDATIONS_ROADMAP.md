@@ -37,6 +37,15 @@ remain acceptance criteria throughout.
 
 ## Implementation status: 0.23, property editing and the first Creator application
 
+The appearance/authoring follow-up adds neutral configurable preset families,
+coalesced owned OS appearance snapshots, palette icons and container drag insertion,
+geometry snapping and optional persistent anchors, session composition templates,
+and complete compiled C++ class exports. See [THEMES.md](THEMES.md) and
+[CREATOR.md](CREATOR.md). Native desktop fidelity, persistent template catalogs,
+multiple authored content slots and existing-widget reparenting remain separate
+acceptance work; this increment does not advance the deferred F10b/F14 scope.
+
+
 The 0.14.1 maintenance increment fixes retained native window closure, stable
 GPU capture after presentation, and MSVC conversion warnings before the initial F11 increment.
 Its regression evidence is in

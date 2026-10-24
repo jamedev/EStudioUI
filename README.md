@@ -21,6 +21,19 @@ packaging are deferred until that use informs reusable boundaries, including
 services for applications without a UI. Standalone modules are planned, not
 current package capabilities; see the roadmaps for acceptance criteria.
 
+## Neutral themes and Creator authoring tools
+
+New windows default to the restrained **Minimal** style. Minimal, Engineering,
+Office, Studio, Game and System presets each support light/dark, with tunable
+colors, typography size, density and corners. Windows can follow OS appearance;
+other adapters expose their support explicitly. The gallery has a preset selector,
+and Creator has an Appearance inspector. See [THEMES.md](THEMES.md).
+
+Creator also offers widget palette icons, drag into nested content containers,
+container/sibling snapping with optional persistent constraints, reusable session
+compositions and complete editable C++ class exports (`.h`/`.cpp`). The generated
+class compiles directly and needs no runtime JSON. See [CREATOR.md](CREATOR.md).
+
 ## Property editing and EStudioUICreator (0.23)
 
 The framework now provides collapsible inspector sections, a virtual `PropertyGrid`,

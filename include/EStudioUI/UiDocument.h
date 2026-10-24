@@ -78,6 +78,15 @@ struct UiNode
     bool operator==(const UiNode&) const = default;
 };
 
+//! Complete editable source pair for a composed C++ widget class.
+struct UiCppClass
+{
+    //! Public class declaration with brief ownership and extension comments.
+    std::string m_Header;
+    //! Direct construction, layout and application event hook definitions.
+    std::string m_Source;
+};
+
 //! A versioned bounded open UI description with separate JSON and direct C++ outputs.
 class UiDocument
 {
@@ -105,6 +114,9 @@ class UiDocument
 
     //! Writes direct editable C++ BuildUi(parent), containing no JSON parser or serialized design.
     std::string ToCpp(const WidgetRegistry& registry) const;
+
+    //! Exports a complete Widget-derived class as independent .h/.cpp source strings.
+    UiCppClass ToCppClass(const WidgetRegistry& registry, std::string_view className = "GeneratedWidget") const;
 
     //! Finds a design node by stable identity; null means absent.
     UiNode* Find(std::string_view id);

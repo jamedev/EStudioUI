@@ -46,7 +46,7 @@ void Compare(const std::vector<unsigned char>& first, const std::vector<unsigned
               "retained and full control pixels match");
 }
 
-std::string Theme(bool light)
+std::string ProbeTheme(bool light)
 {
     const std::string common =
         "window { padding: 24px; gap: 12px; font-size: 16px; } "
@@ -118,7 +118,7 @@ void VerifyInputControls(const std::filesystem::path& assets, const std::filesys
             ++commands;
         });
     std::string error;
-    Check(ui.SetStyleSheet(Theme(false), error), "dark probe CSS parses");
+    Check(ui.SetStyleSheet(ProbeTheme(false), error), "dark probe CSS parses");
     window.RenderFrame(0);
     Check(numeric.GetBounds().m_Width == 360 && slider.GetBounds().m_Width == 360,
           "explicit control widths survive CSS");
@@ -192,7 +192,7 @@ void VerifyInputControls(const std::filesystem::path& assets, const std::filesys
     {
         ui.SetFocus(nullptr);
         ui.PointerMove({550, 380});
-        Check(ui.SetStyleSheet(Theme(light), error), "probe theme reload parses");
+        Check(ui.SetStyleSheet(ProbeTheme(light), error), "probe theme reload parses");
         window.RenderFrame(.3);
         Check(numeric.GetBounds().m_Width == 360 && slider.GetBounds().m_Width == 360,
               "Fixed control sizes survive a theme reload");

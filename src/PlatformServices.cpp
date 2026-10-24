@@ -81,6 +81,8 @@ struct PlatformServices::Data : std::enable_shared_from_this<Data>
     PlatformResult m_LastResult;
     std::vector<Pending> m_Pending;
     bool m_Pumping = false;
+    bool m_ServicePumping = false;
+    Signal<const SystemAppearance&> m_AppearanceChanged;
     const std::string m_PublicationKey = "platform-results:" + std::to_string(UiDispatcher::AllocateTargetKey());
 
     explicit Data(PlatformHost host) : m_Host(std::move(host))
@@ -382,7 +384,50 @@ const PlatformHost& PlatformServices::GetHost() const
 void PlatformServices::Pump()
 {
     const auto data = m_Data;
+    data->Verify(true);
+    if (data->m_ServicePumping)
+        throw std::logic_error("Platform services cannot be pumped recursively.");
+    struct Scope
+    {
+        bool& m_Active;
+        ~Scope() { m_Active = false; }
+    } scope{data->m_ServicePumping};
+    data->m_ServicePumping = true;
+    const auto ownerLease = data->m_Host.m_OwnerLifetime.lock();
     data->Pump();
+    if (!data->m_Closed)
+        if (auto appearance = PollSystemAppearanceCore())
+        {
+            appearance->Validate();
+            data->m_AppearanceChanged.Emit(*appearance);
+        }
+}
+
+SystemAppearance PlatformServices::GetSystemAppearance() const
+{
+    const auto data = m_Data;
+    data->Verify(true);
+    if (data->m_Closed)
+        throw std::logic_error("The appearance service has closed.");
+    auto result = ReadSystemAppearanceCore();
+    result.Validate();
+    return result;
+}
+
+Signal<const SystemAppearance&>& PlatformServices::AppearanceChanged()
+{
+    m_Data->Verify();
+    return m_Data->m_AppearanceChanged;
+}
+
+SystemAppearance PlatformServices::ReadSystemAppearanceCore() const
+{
+    return {};
+}
+
+std::optional<SystemAppearance> PlatformServices::PollSystemAppearanceCore()
+{
+    return {};
 }
 
 void PlatformServices::Close()

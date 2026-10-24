@@ -1,4 +1,5 @@
 #include <EStudioUI/UiDocument.h>
+#include "GeneratedComposite.h"
 #include <EStudioUI/UiContext.h>
 #include <EStudioUI/Label.h>
 
@@ -25,6 +26,17 @@ int main()
         {
             throw std::runtime_error(error);
         }
+        UiContext componentUi(font);
+        auto& component = componentUi.Root().Add<GeneratedComposite>();
+        componentUi.Prepare(1800, 1400);
+        for (const auto& [type, descriptor] : registry.GetTypes())
+        {
+            (void)descriptor;
+            if (!component.Content().FindById("catalog-" + type))
+                throw std::runtime_error("The exported class omitted a registered control: " + type);
+        }
+        if (GeneratedComposite::StyleSheet() != document.m_StyleSheet)
+            throw std::runtime_error("The class export did not preserve stylesheet bytes.");
         const auto built = BuildUiDocument(runtime.Root(), document, registry);
         auto& actual = BuildUi(compiled.Root());
         runtime.Prepare(1800, 1400);

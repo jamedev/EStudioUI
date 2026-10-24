@@ -29,6 +29,7 @@ enum class PlatformFeature
     OwnedWindows,
     Accessibility,
     TextComposition,
+    Appearance,
     Count
 };
 
@@ -38,6 +39,29 @@ enum class PlatformSupport
     Unsupported,
     Emulated,
     Native
+};
+
+//! Owned OS appearance preferences; unsupported adapters keep explicit fallback values.
+struct SystemAppearance
+{
+    //! Identifies native, injected or unavailable preferences.
+    PlatformSupport m_Support = PlatformSupport::Unsupported;
+    //! Reports whether the application color-mode preference is known.
+    bool m_ModeKnown = false;
+    //! Preferred application color mode.
+    bool m_Dark = false;
+    //! Requests system foreground/background colors without decorative effects.
+    bool m_HighContrast = false;
+    //! Reports the user's animation preference.
+    bool m_ReducedMotion = false;
+    //! Reports whether the OS supplies an accent color.
+    bool m_AccentKnown = false;
+    //! Preferred accent, foreground and background colors.
+    Color m_Accent{0.20f, 0.40f, 0.92f, 1}, m_Foreground{0.05f, 0.05f, 0.05f, 1}, m_Background{0.99f, 0.99f, 0.99f, 1};
+    //! Validates owned color channels.
+    void Validate() const;
+    //! Compares complete preference snapshots.
+    bool operator==(const SystemAppearance&) const = default;
 };
 
 //! Owns an adapter's feature report.

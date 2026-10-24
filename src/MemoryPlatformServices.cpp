@@ -11,6 +11,8 @@ MemoryPlatformServices::MemoryPlatformServices(UiDispatcher dispatcher)
 
 MemoryPlatformServices::MemoryPlatformServices(PlatformHost host) : PlatformServices(std::move(host))
 {
+    m_Appearance.m_Support = PlatformSupport::Emulated;
+    m_Appearance.m_ModeKnown = true;
 }
 
 MemoryPlatformServices::~MemoryPlatformServices()
@@ -32,11 +34,36 @@ PlatformCapabilities MemoryPlatformServices::DescribeCapabilities() const
 {
     PlatformCapabilities result;
     result.m_Adapter = "Deterministic memory services";
+    result.Set(PlatformFeature::Appearance, PlatformSupport::Emulated);
     for (const auto feature :
          {PlatformFeature::ClipboardText, PlatformFeature::ClipboardHtml, PlatformFeature::ClipboardFiles,
           PlatformFeature::ClipboardCustom, PlatformFeature::FileDialogs})
         result.Set(feature, PlatformSupport::Emulated);
     return result;
+}
+
+void MemoryPlatformServices::SetSystemAppearance(SystemAppearance appearance)
+{
+    (void)GetSystemAppearance();
+    appearance.Validate();
+    appearance.m_Support = PlatformSupport::Emulated;
+    if (m_Appearance != appearance)
+    {
+        m_Appearance = appearance;
+        m_AppearanceDirty = true;
+    }
+}
+
+SystemAppearance MemoryPlatformServices::ReadSystemAppearanceCore() const
+{
+    return m_Appearance;
+}
+
+std::optional<SystemAppearance> MemoryPlatformServices::PollSystemAppearanceCore()
+{
+    if (!std::exchange(m_AppearanceDirty, false))
+        return {};
+    return m_Appearance;
 }
 
 ClipboardResult MemoryPlatformServices::ReadClipboardCore()

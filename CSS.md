@@ -452,3 +452,14 @@ covers common colors, border width/radius, opacity and font size; source editing
 supports the full existing parser. A document stylesheet is installed explicitly
 on its UI context, so preview-only selectors should use the design root ID until
 subtree stylesheet scoping is implemented. See [CREATOR.md](CREATOR.md).
+
+## Semantic application themes
+
+`Window::Themes()` owns a `ThemeController`. Its Minimal default and Engineering,
+Office, Studio, Game and System families produce ordinary CSS for the existing
+controls/parts. Each supports Light, Dark and System mode, with optional semantic
+color/radius/motion overrides and bounded font/density settings. These add no CSS
+grammar or paint-time parsing. Structural CSS precedes the generated rules;
+application overrides follow them, with normal specificity preserved. Raw
+`SetStyleSheet` is an explicit handoff until the controller is configured again.
+See [THEMES.md](THEMES.md) for the small API and platform support.

@@ -86,6 +86,7 @@ add_library(EStudioUIGl STATIC third_party/glad/src/gl.c)
 target_include_directories(EStudioUIGl PUBLIC third_party/glad/include)
 
 add_library(EStudioUI STATIC
+    src/Theme.cpp src/ThemeController.cpp
     src/UiDocument.cpp src/WidgetRegistry.cpp
     src/PropertyValue.cpp src/PropertyModel.cpp src/PropertyGrid.cpp src/CollapsiblePanel.cpp
     src/UnitEditor.cpp src/VectorEditor.cpp src/ColorEditor.cpp src/ColorPicker.cpp
@@ -125,6 +126,9 @@ target_include_directories(EStudioUI PUBLIC include)
 target_include_directories(EStudioUI SYSTEM PRIVATE "${ESTUDIOUI_KIWI_INCLUDE_DIR}")
 target_include_directories(EStudioUI SYSTEM PRIVATE "${ESTUDIOUI_STB_INCLUDE_DIR}")
 if(WIN32)
+    if(MSVC)
+        target_link_libraries(EStudioUI PRIVATE windowsapp runtimeobject)
+    endif()
     target_link_libraries(EStudioUI PRIVATE dwmapi comctl32 ole32 oleaut32 shell32 uuid uiautomationcore imm32)
 endif()
 target_link_libraries(EStudioUI PRIVATE nlohmann_json::nlohmann_json EStudioUIGl glfw Freetype::Freetype harfbuzz::harfbuzz SheenBidi::SheenBidi libunibreak::libunibreak ${ESTUDIOUI_UTF8PROC_TARGET})
@@ -145,7 +149,7 @@ if(ESTUDIOUI_BUILD_DEMO OR ESTUDIOUI_BUILD_CREATOR OR ESTUDIOUI_BUILD_TESTS)
 endif()
 
 if(ESTUDIOUI_BUILD_CREATOR OR ESTUDIOUI_BUILD_TESTS)
-    add_library(EStudioUICreatorApp STATIC creator/CreatorWindow.cpp creator/DesignerSurface.cpp)
+    add_library(EStudioUICreatorApp STATIC creator/CreatorWindow.cpp creator/DesignerSurface.cpp creator/WidgetPalette.cpp creator/DesignSnap.cpp)
     target_include_directories(EStudioUICreatorApp PUBLIC creator)
     target_link_libraries(EStudioUICreatorApp PUBLIC EStudioUI::EStudioUI)
     if(MSVC)
@@ -248,7 +252,7 @@ endif()
 
 if(ESTUDIOUI_BUILD_TESTS)
     enable_testing()
-    foreach(suite PropertyEditing UiDocument)
+    foreach(suite PropertyEditing UiDocument Theme)
         add_executable(EStudioUI${suite}Tests tests/${suite}Tests.cpp)
         target_link_libraries(EStudioUI${suite}Tests PRIVATE EStudioUI::EStudioUI)
         target_compile_definitions(EStudioUI${suite}Tests PRIVATE ESTUDIOUI_FONT_PATH="${CMAKE_CURRENT_SOURCE_DIR}/third_party/fonts/NotoSans.ttf")
@@ -257,15 +261,23 @@ if(ESTUDIOUI_BUILD_TESTS)
         endif()
         add_test(NAME ${suite} COMMAND EStudioUI${suite}Tests)
     endforeach()
-    if(NOT CMAKE_CROSSCOMPILING)
+    if(TARGET EStudioUICreatorApp)
+        add_executable(EStudioUIDesignSnapTests tests/DesignSnapTests.cpp)
+        target_link_libraries(EStudioUIDesignSnapTests PRIVATE EStudioUICreatorApp)
+        add_test(NAME DesignSnap COMMAND EStudioUIDesignSnapTests)
+    endif()
+    if(NOT CMAKE_CROSSCOMPILING AND TARGET EStudioUICreatorApp)
         add_executable(EStudioUICreatorGenerator tests/CreatorGenerator.cpp)
         target_link_libraries(EStudioUICreatorGenerator PRIVATE EStudioUICreatorApp)
         set(generated_ui "${CMAKE_CURRENT_BINARY_DIR}/generated/CreatorGenerated.cpp")
         set(generated_json "${CMAKE_CURRENT_BINARY_DIR}/generated/creator-catalog.json")
-        add_custom_command(OUTPUT "${generated_ui}" "${generated_json}"
+        set(generated_class "${CMAKE_CURRENT_BINARY_DIR}/generated/GeneratedComposite.cpp")
+        set(generated_header "${CMAKE_CURRENT_BINARY_DIR}/generated/GeneratedComposite.h")
+        add_custom_command(OUTPUT "${generated_ui}" "${generated_json}" "${generated_class}" "${generated_header}"
             COMMAND EStudioUICreatorGenerator "${generated_ui}" "${generated_json}"
             DEPENDS EStudioUICreatorGenerator VERBATIM)
-        add_executable(EStudioUICreatorGeneratedTests tests/CreatorGeneratedTests.cpp "${generated_ui}")
+        add_executable(EStudioUICreatorGeneratedTests tests/CreatorGeneratedTests.cpp "${generated_ui}" "${generated_class}")
+        target_include_directories(EStudioUICreatorGeneratedTests PRIVATE "${CMAKE_CURRENT_BINARY_DIR}/generated")
         target_link_libraries(EStudioUICreatorGeneratedTests PRIVATE EStudioUI::EStudioUI)
         target_compile_definitions(EStudioUICreatorGeneratedTests PRIVATE
             ESTUDIOUI_FONT_PATH="${CMAKE_CURRENT_SOURCE_DIR}/third_party/fonts/NotoSans.ttf"

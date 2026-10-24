@@ -4,6 +4,7 @@
 #include "ThreadAffinity.h"
 #include "UiHandle.h"
 #include "UiContext.h"
+#include "ThemeController.h"
 
 namespace EStudioUI
 {
@@ -92,6 +93,9 @@ class Window
 
     //! Returns whether this window uses the null platform and OSMesa.
     bool IsHeadless() const;
+
+    //! Returns the default live theme; use override CSS to customize its cascade.
+    ThemeController& Themes();
 
     //! Runs the native event loop, sleeping between changes and caret deadlines.
     int Run();

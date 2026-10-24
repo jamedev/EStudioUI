@@ -1,3 +1,5 @@
+#include <EStudioUI/ThemeController.h>
+#include <EStudioUI/ComboBox.h>
 #include "GpuWorkload.h"
 #include "WidgetGallery.h"
 #include "CanvasPrimitiveProbe.h"
@@ -137,6 +139,7 @@ class Demo
     Demo(Window& window, fs::path assets, fs::path initialCss)
         : m_Window(window), m_Assets(std::move(assets)), m_CurrentCss(std::move(initialCss))
     {
+        m_Theme = &window.Themes();
         auto& root = window.Ui().Root();
         auto& header = root.Add<Widget>();
         header.SetId("header");
@@ -151,6 +154,20 @@ class Demo
         auto& dark = themes.Add<Button>("Dark");
         auto& light = themes.Add<Button>("Light");
         auto& reload = themes.Add<Button>("Reload CSS");
+        auto& family = themes.Add<ComboBox>();
+        family.SetWidth(SizeRule::Fixed(140));
+        family.SetItems({"Minimal", "Engineering", "Office", "Studio", "Game", "System"});
+        family.SetCurrentIndex(0);
+        family.CurrentChanged().Connect([this](int index)
+        {
+            if (index >= 0 && index < 6)
+            {
+                auto theme = m_Theme->GetTheme();
+                theme.m_Family = static_cast<ThemeFamily>(index);
+                if (theme.m_Family == ThemeFamily::System) theme.m_Mode = ThemeMode::System;
+                m_Theme->SetTheme(std::move(theme));
+            }
+        });
         m_Tabs = &root.Add<TabWidget>();
         m_Tabs->SetId("gallery");
         m_Tabs->SetHeight(SizeRule::Fill());
@@ -289,16 +306,27 @@ class Demo
         std::ifstream imageStyles(m_Assets / "image-widgets.css", std::ios::binary);
         bool loaded = false;
         if (theme && animation && rich && widgets && textStyles && essentialStyles && commandStyles && imageStyles)
-            loaded =
-                m_Window.Ui().SetStyleSheet(std::string(std::istreambuf_iterator<char>(theme), {}) + "\n" +
+        {
+            const auto themeCss = std::string(std::istreambuf_iterator<char>(theme), {});
+            auto css = themeCss + "\n" +
                                                 std::string(std::istreambuf_iterator<char>(animation), {}) + "\n" +
                                                 std::string(std::istreambuf_iterator<char>(rich), {}) + "\n" +
                                                 std::string(std::istreambuf_iterator<char>(widgets), {}) + "\n" +
                                                 std::string(std::istreambuf_iterator<char>(textStyles), {}) + "\n" +
                                                 std::string(std::istreambuf_iterator<char>(essentialStyles), {}) +
                                                 "\n" + std::string(std::istreambuf_iterator<char>(commandStyles), {}) +
-                                                "\n" + std::string(std::istreambuf_iterator<char>(imageStyles), {}),
-                                            error);
+                                                "\n" + std::string(std::istreambuf_iterator<char>(imageStyles), {});
+            auto selected = m_Theme->GetTheme();
+            selected.m_Mode = path.filename() == "dark.css" ? ThemeMode::Dark :
+                              path.filename() == "light.css" ? ThemeMode::Light : ThemeMode::System;
+            try
+            {
+                const bool custom = path.filename() != "dark.css" && path.filename() != "light.css";
+                m_Theme->Configure(selected, std::move(css), custom ? themeCss : std::string{});
+                loaded = true;
+            }
+            catch (const std::exception& failure) { error = failure.what(); }
+        }
         else
         {
             error = "Cannot read stylesheet(s):";
@@ -337,6 +365,7 @@ class Demo
         AllowOversizedGpuProbe(m_Window);
         auto& ui = m_Window.Ui();
         auto& gpu = m_Window.Graphics();
+        Check(LoadCss(m_Assets / "dark.css"), "explicit dark preset loads before the dark framebuffer checks");
         m_Tabs->SetCurrentIndex(0);
         m_Window.RenderFrame();
         gpu.SavePpm(output / "dark.ppm");
@@ -347,8 +376,8 @@ class Demo
         m_Window.RenderFrame();
         Check(gpu.GetStats().m_FontBytes == cachedBytes, "stable glyph cache across frames");
         Check(gpu.ReadPixel({4, 4}).m_R < 0.1f, "dark CSS reaches framebuffer");
-        Check(ui.Root().FindById("themes")->GetChildren().size() == 3,
-              "demo header contains only theme controls without duplicated page shortcuts");
+        Check(ui.Root().FindById("themes")->GetChildren().size() == 4,
+              "demo header contains the theme preset and mode controls without duplicated page shortcuts");
         m_Tabs->SetCurrentIndex(m_Tabs->GetTabCount() - 1);
         m_Window.RenderFrame();
         auto* tabChooser = FindTabChooser(*m_Tabs);
@@ -521,6 +550,7 @@ class Demo
 
     TabWidget* m_Tabs = nullptr;
     std::unique_ptr<WidgetGallery> m_Gallery;
+    ThemeController* m_Theme = nullptr;
     Window& m_Window;
     fs::path m_Assets;
     fs::path m_CurrentCss;
@@ -549,7 +579,7 @@ int main(int argc, char** argv)
         const auto executable = fs::absolute(argv[0]);
         const auto assets = executable.parent_path() / "assets";
         fs::path font = assets / "NotoSans.ttf";
-        fs::path css = assets / "dark.css";
+        fs::path css = assets / "light.css";
         fs::path output = "verification";
         WindowOptions options;
         options.m_Width = 1280;
