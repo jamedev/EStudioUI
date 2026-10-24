@@ -41,8 +41,8 @@ include the raw client/framebuffer dimensions and content scale.
 
 ## Verification
 
-The final source revision and CI run are recorded after native verification
-completes on `feature/canvas-sketcher`.
+Verified source: `313090938a0d58f27848382317873d71bc4f3a71` on
+`feature/canvas-sketcher`.
 
 Local GNU 13 Release passes all 46 suites in 17.77 s, including actual
 retained/full GPU framebuffer, workspace and focus/composition checks.
@@ -50,8 +50,8 @@ Focused AddressSanitizer/UndefinedBehaviorSanitizer verification passes
 `CreatorGpuIntegration`, `WorkspaceCore`, `InputFoundation` and `GpuIntegration`
 (4/4, 46.68 s; leak detection disabled for this graphics run).
 
-A MinGW-w64 C++20
-cross-syntax pass compiles the Windows branches of `NativeWindowChrome.cpp`,
+A MinGW-w64 C++20 cross-syntax pass compiles the Windows branches of
+`NativeWindowChrome.cpp`,
 its native tests, the GLFW caption probe, `Window.cpp`, `WindowTitleBar.cpp`
 and `WindowCommandButton.cpp` with `-Wall -Wextra -Wconversion`, without warnings.
 This compile check is separate from execution on Windows.
@@ -85,8 +85,24 @@ border pixel, and six scheduler ticks during the `SC_SIZE` probe. It builds
 directly from the existing three native test/backend sources with the Windows
 system libraries, providing quick regression feedback before the full build.
 
-The full Windows/Linux rerun using the protected caption-command frame boundary
-is pending.
+The full [Windows/Linux CI run](https://github.com/jamedev/EStudioUI/actions/runs/40045223246)
+passed on this exact source revision. MSVC emitted no C++ compiler warnings.
+
+| CI check | Result |
+| --- | --- |
+| Windows MSVC Release | 47/47 suites; 8.12 s |
+| Windows MSVC Debug | 47/47 suites; 81.54 s |
+| Native GLFW title bar | 24/24 checks in both gallery and Creator |
+| Native Creator GPU integration | 48/48 checks |
+| Native rendering profile smoke | Passed, full and retained cases |
+| Native Debug platform lifecycle | Five repetitions, 99/99 checks each |
+| Linux Release | 46/46 suites; 25.15 s |
+| Linux ThreadSanitizer | 6/6 suites; 3.02 s |
+
+The native GPU run used Win32/WGL with llvmpipe (LLVM 23.1.2), OpenGL 4.6
+Mesa 26.2.4. It establishes native behavior and renderer correctness, not
+hardware GPU throughput.
+
 Windows 11 Snap flyout appearance, physical snap gestures and actual
 mixed-monitor DPI transitions remain interactive acceptance checks; the native
 hit-test contract alone does not establish those experiences.
