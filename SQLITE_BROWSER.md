@@ -21,6 +21,7 @@ exist. It contains load cases, materials, assemblies and a read-only view. Creat
 publishes a completed staging file without replacing an existing database. An
 existing user database is never created implicitly and opens read-only. Check
 **Enable editing** explicitly to allow addressable non-key cells to be changed.
+Switching read-only/editable access retains the active table, filter, sort and page.
 The Windows command line and file pickers preserve native Unicode paths.
 
 - Choose a table/view from the left schema TreeTable. Expand it to inspect fields.

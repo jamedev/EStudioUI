@@ -41,7 +41,8 @@ std::string Read(const std::filesystem::path& path)
 }
 } // namespace
 
-void VerifyDatabaseBrowser(DatabaseBrowserWindow& browser, Window& window, const std::filesystem::path& output)
+void VerifyDatabaseBrowser(DatabaseBrowserWindow& browser, Window& window, const std::filesystem::path& assets,
+                           const std::filesystem::path& output)
 {
     std::filesystem::create_directories(output);
     AllowOversizedGpuProbe(window);
@@ -54,6 +55,9 @@ void VerifyDatabaseBrowser(DatabaseBrowserWindow& browser, Window& window, const
             throw std::runtime_error(std::string("Database browser: ") + description);
         }
     };
+    check(std::filesystem::is_regular_file(assets / "dark.css") &&
+              std::filesystem::is_regular_file(assets / "essential-widgets.css"),
+          "The native caption probe receives the staged production assets");
     const auto frame = [&] { window.RenderFrame(window.Ui().GetTime() + .01); };
     const auto wait = [&](const std::function<bool()>& ready)
     {
@@ -149,6 +153,30 @@ void VerifyDatabaseBrowser(DatabaseBrowserWindow& browser, Window& window, const
           "Confirmed worker edits preserve stable identity and exact values");
     const auto rejected = model->RequestEdit({{record, 0, std::int64_t{999}}});
     check(rejected.GetResult()->m_Status == ModelEditStatus::Failed, "Primary key editing is rejected before a write");
+    frame(); // Let the app reflect the confirmed idle state before clicking its write-mode control.
+    auto* editMode = dynamic_cast<CheckBox*>(window.Ui().Root().FindById("browser-edit-mode"));
+    check(editMode != nullptr, "The browser exposes explicit database write opt-in");
+    const auto preservedQuery = model->GetStatus().m_Query;
+    editMode->Trigger();
+    model = browser.GetModel();
+    wait(
+        [&]
+        {
+            return model->GetStatus().m_Operation == AdapterOperation::Idle &&
+                   model->GetStatus().m_Query == preservedQuery;
+        });
+    check(!model->GetSnapshot().GetColumns()[3].m_Editable,
+          "Switching to read-only preserves the current table, filter, order and page");
+    editMode->Trigger();
+    model = browser.GetModel();
+    wait(
+        [&]
+        {
+            return model->GetStatus().m_Operation == AdapterOperation::Idle &&
+                   model->GetStatus().m_Query == preservedQuery;
+        });
+    check(model->GetSnapshot().GetColumns()[3].m_Editable,
+          "Re-enabling edits preserves the same query and restores writable cells");
     auto obsolete = model->GetStatus().m_Query;
     obsolete.m_Filter = {};
     ModelFilter none;
@@ -256,7 +284,7 @@ void VerifyDatabaseBrowser(DatabaseBrowserWindow& browser, Window& window, const
     window.Graphics().SavePpm(output / "data-views-full.ppm");
     check(Read(output / "data-views-retained.ppm") == Read(output / "data-views-full.ppm"),
           "Retained and forced-full data-view framebuffers are identical");
-    checks += VerifyGpuProbeChrome(window, output, output);
+    checks += VerifyGpuProbeChrome(window, assets, output);
     std::ofstream report(output / "database-browser-report.txt");
     report << "Database browser: " << checks
            << " checks passed.\nActual C++ views, SQLite worker transactions, captured drag/drop and framebuffer "

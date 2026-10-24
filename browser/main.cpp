@@ -59,7 +59,7 @@ int Run(const std::vector<std::filesystem::path>& arguments)
             const auto path = output / "browser-sample.sqlite";
             std::filesystem::remove(path);
             browser.OpenExample(path, 100000);
-            EStudioUI::VerifyDatabaseBrowser(browser, window, output);
+            EStudioUI::VerifyDatabaseBrowser(browser, window, assets, output);
             return 0;
         }
         if (open.empty())

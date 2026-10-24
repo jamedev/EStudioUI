@@ -134,6 +134,7 @@ struct DatabaseBrowserWindow::Data : std::enable_shared_from_this<Data>
     std::optional<ScopedConnection> m_ModelChanged;
     RequestScope m_OpenScope;
     State<ModelQuery> m_Draft;
+    std::optional<ModelQuery> m_RestoreQuery;
     std::filesystem::path m_Path;
     std::string m_ControlsDataSet;
     bool m_RefreshPosted = false;
@@ -272,6 +273,17 @@ struct DatabaseBrowserWindow::Data : std::enable_shared_from_this<Data>
             m_Catalog = catalog;
             BuildSchema();
         }
+        if (m_RestoreQuery && !catalog->empty())
+        {
+            auto query = std::exchange(m_RestoreQuery, {}).value();
+            if (std::any_of(catalog->begin(), catalog->end(),
+                            [&](const ModelDataSet& set) { return set.m_Id == query.m_DataSet; }))
+            {
+                query.m_SchemaRevision = 0;
+                m_Model->SetQuery(std::move(query));
+                return;
+            }
+        }
         const bool writing = status.m_Operation == AdapterOperation::Committing;
         m_Schema->SetEnabled(!writing);
         m_Editing->SetEnabled(!writing);
@@ -363,6 +375,11 @@ struct DatabaseBrowserWindow::Data : std::enable_shared_from_this<Data>
         if (m_Model && m_Model->GetStatus().m_Operation == AdapterOperation::Committing)
         {
             throw std::logic_error("Wait for the current database edit before opening another file.");
+        }
+        m_RestoreQuery.reset();
+        if (m_Model && path == m_Path && !m_Model->GetStatus().m_Query.m_DataSet.empty())
+        {
+            m_RestoreQuery = m_Model->GetStatus().m_Query;
         }
         m_ModelChanged.reset();
         m_Model.reset();
@@ -859,6 +876,7 @@ DatabaseBrowserWindow::DatabaseBrowserWindow(Application& application, Window& w
             }
         });
     data.m_Editing = &tools.Add<CheckBox>("Enable editing");
+    data.m_Editing->SetId("browser-edit-mode");
     data.m_Editing->Toggled().Connect(
         [weak](bool write)
         {
