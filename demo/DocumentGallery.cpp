@@ -6,6 +6,7 @@
 #include <EStudioUI/FileDialog.h>
 #include <EStudioUI/MainWindow.h>
 #include <EStudioUI/MessageBox.h>
+#include <EStudioUI/MemoryPlatformServices.h>
 #include <EStudioUI/NumericInput.h>
 #include <EStudioUI/ProgressBar.h>
 #include <EStudioUI/TextBox.h>
@@ -25,6 +26,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <chrono>
 #include <fstream>
 #include <iostream>
 #include <iomanip>
@@ -54,6 +56,121 @@ std::string Read(const std::filesystem::path& path)
 {
     std::ifstream input(path, std::ios::binary);
     return {std::istreambuf_iterator<char>(input), std::istreambuf_iterator<char>()};
+}
+
+template <class T> T* FindWidget(Widget& widget)
+{
+    if (auto* value = dynamic_cast<T*>(&widget))
+    {
+        return value;
+    }
+    for (const auto& child : widget.GetChildren())
+    {
+        if (auto* value = FindWidget<T>(*child))
+        {
+            return value;
+        }
+    }
+    return nullptr;
+}
+
+ToolButton* FindCommand(Widget& widget, std::string_view text)
+{
+    if (auto* value = dynamic_cast<ToolButton*>(&widget); value && value->GetText() == text)
+    {
+        return value;
+    }
+    for (const auto& child : widget.GetChildren())
+    {
+        if (auto* value = FindCommand(*child, text))
+        {
+            return value;
+        }
+    }
+    return nullptr;
+}
+
+//! Uses the production gallery and file worker with only its picker result injected.
+void VerifyPersistence(Window& owner, const std::filesystem::path& output,
+                       const std::function<void(bool, const char*)>& check)
+{
+    WindowOptions options;
+    options.m_Title = "EStudioUI / Documents & history";
+    options.m_Width = 1280;
+    options.m_Height = 760;
+    options.m_PlatformFactory = [](PlatformHost host)
+    { return std::make_unique<MemoryPlatformServices>(std::move(host)); };
+    auto window = owner.CreateOwnedWindow(options);
+    AllowOversizedGpuProbe(*window);
+    Theme theme;
+    theme.m_Mode = ThemeMode::Light;
+    window->Themes().SetTheme(theme);
+    auto& shell = window->Ui().Root().Add<MainWindow>(*window);
+    DocumentGallery gallery(*window, shell.Central());
+    auto& workspace = *FindWidget<DocumentWorkspace>(shell.Central());
+    auto& platform = dynamic_cast<MemoryPlatformServices&>(window->Ui().Platform());
+    const auto frame = [&] { window->RenderFrame(window->Ui().GetTime() + .01); };
+    const auto waitFor = [&](const std::function<bool()>& ready)
+    {
+        const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(10);
+        do
+        {
+            frame();
+            if (ready())
+            {
+                return;
+            }
+            std::this_thread::sleep_for(std::chrono::milliseconds(1));
+        } while (std::chrono::steady_clock::now() < deadline);
+        throw std::runtime_error("Document gallery persistence did not settle within ten seconds.");
+    };
+    const auto folder = output / "documents-save";
+    std::filesystem::create_directories(folder);
+    const auto path = folder / std::filesystem::path(u8"café-load.json");
+    std::filesystem::remove(path);
+    frame();
+    const auto id = workspace.GetCurrentDocument();
+    auto* increase = FindCommand(workspace.Content(id), "Increase load +10 kN");
+    check(increase && increase->Trigger(), "The actual gallery action changes its canonical model");
+    platform.QueueFileDialogResult({FileDialogStatus::Accepted, {path}});
+    workspace.SaveDocument(id);
+    increase->Trigger();
+    waitFor([&] { return !workspace.GetDocumentInfo(id).m_Saving; });
+    check(Read(path).find("\"load_kN\": 50") != std::string::npos,
+          "The actual file worker writes the captured older value to a Unicode JSON path");
+    waitFor([&] { return workspace.GetDocumentInfo(id).m_Title == "café-load.json"; });
+    check(workspace.GetDocumentInfo(id).m_Title == "café-load.json",
+          "A Unicode native filename is presented as UTF-8 independently of the Windows code page");
+    check(workspace.GetDocumentInfo(id).m_Modified, "A newer edit remains dirty after the actual older disk save");
+    workspace.SaveDocument(id);
+    waitFor([&] { return !workspace.GetDocumentInfo(id).m_Saving; });
+    check(Read(path).find("\"load_kN\": 60") != std::string::npos && !workspace.GetDocumentInfo(id).m_Modified,
+          "Atomic file replacement saves the current value and exact clean checkpoint");
+    check(FindCommand(shell.Central(), "New engineering case")->Trigger(),
+          "The gallery creates another independent document");
+    const auto fresh = workspace.GetCurrentDocument();
+    FindCommand(workspace.Content(fresh), "Increase load +10 kN")->Trigger();
+    workspace.SaveDocument(fresh);
+    waitFor([&] { return !workspace.GetDocumentInfo(fresh).m_Saving; });
+    check(workspace.GetDocumentInfo(fresh).m_Modified,
+          "Scripted picker cancellation settles the actual gallery save and retains dirty data");
+    window->Graphics().SavePpm(output / "documents-gallery.ppm");
+    const auto missing = folder / ("missing-parent-" + std::to_string(UiDispatcher::AllocateTargetKey()));
+    platform.QueueFileDialogResult({FileDialogStatus::Accepted, {missing / "case.json"}});
+    workspace.SaveDocument(fresh);
+    waitFor([&] { return !workspace.GetDocumentInfo(fresh).m_Saving; });
+    const auto failed = workspace.GetDocumentInfo(fresh);
+    check(failed.m_Modified && !failed.m_SaveError.empty() && workspace.GetDocumentIds().size() == 3,
+          "Actual filesystem failure settles with an error and retains all document views");
+    std::size_t leftovers = 0;
+    for (const auto& entry : std::filesystem::directory_iterator(folder))
+    {
+        if (entry.path().extension() == ".new")
+        {
+            ++leftovers;
+        }
+    }
+    check(leftovers == 0, "Atomic file replacement leaves no temporary file behind");
 }
 
 void WriteCase(const std::filesystem::path& path, const std::string& bytes)
@@ -180,7 +297,9 @@ struct DocumentGallery::Data : std::enable_shared_from_this<Data>
                 if (const auto data = weak.lock(); data && data->Workspace())
                 {
                     model->m_Path = saved;
-                    data->Workspace()->SetDocumentTitle(model->m_Id, saved.filename().string());
+                    const auto caption = saved.filename().u8string();
+                    data->Workspace()->SetDocumentTitle(
+                        model->m_Id, std::string(reinterpret_cast<const char*>(caption.data()), caption.size()));
                     data->Status("Engineering case saved; changes made during I/O stay modified.");
                 }
             },
@@ -478,6 +597,7 @@ void DocumentGallery::Verify(const std::filesystem::path& assets, const std::fil
             throw std::runtime_error(std::string("Document workspace GPU: ") + message);
         }
     };
+    VerifyPersistence(*m_Data->m_Owner, output, check);
     WindowOptions options;
     options.m_Title = "Document workspace verification";
     options.m_Width = 1180;
