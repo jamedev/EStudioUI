@@ -718,3 +718,12 @@ smoke and five extra native Debug lifecycle runs of 99 checks each. Linux passes
 42/42 and isolated TSan 6/6; local ASan/UBSan passes 42/42. Both CI builds have
 zero C++ compiler warnings. [Evidence](verification/WORKSPACES_0_22.md) links the
 exact-source workflow and actual renderer captures; interactive F11 gates stay open.
+
+
+The final 0.25 source `5d304a8` is verified: Windows Release/Debug 54/54 each,
+actual Win32/WGL browser 308 checks, native caption 51 checks with desktop-pixel
+coverage, five extra native Debug lifecycle runs of 103 checks, Linux 54/54,
+isolated TSan 6/6 and local ASan/UBSan 54/54. See the
+[CI run](https://github.com/jamedev/EStudioUI/actions/runs/40099945384) and
+[verification/captures](verification/DATA_VIEWS_0_25.md).
+F10b document editing and F14 extraction remain deferred.

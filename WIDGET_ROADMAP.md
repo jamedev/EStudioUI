@@ -272,3 +272,11 @@ portable typed filters, multi-key sort and bounded result windows. See
 [DATA_VIEWS.md](DATA_VIEWS.md) and the working [database browser](SQLITE_BROWSER.md).
 Selection is scoped to loaded records; persistent global selection, OS/cross-window
 data drags, structural SQL operations and keyset pagination remain later work.
+
+
+Final 0.25 source `5d304a8` passes Windows Release/Debug 54/54 each and native
+Win32/WGL integration (browser 308 checks), native caption desktop-pixel checks,
+Linux 54/54, isolated TSan 6/6 and local ASan/UBSan 54/54. The
+[verification record](verification/DATA_VIEWS_0_25.md) includes actual captures and
+remaining scope limits; [CI](https://github.com/jamedev/EStudioUI/actions/runs/40099945384)
+is green for that exact source.

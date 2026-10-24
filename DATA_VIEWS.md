@@ -176,3 +176,8 @@ All tables inherit existing rich row/cell/header/scroll CSS. TreeTable additiona
 registers `::branch` with `:expanded`. Typed editors compose ordinary styled
 controls under `.cell-editor`, with `.cell-editor-value`, `.cell-null`,
 `.cell-apply` and `.cell-cancel` hooks.
+
+
+[0.25 verification](verification/DATA_VIEWS_0_25.md) records the exact source,
+actual application captures, native caption pixels, Release/Debug, sanitizer and
+concurrency results, plus explicit platform and provider limits.

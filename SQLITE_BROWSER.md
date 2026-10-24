@@ -69,3 +69,8 @@ a native caption painted over the client area, which client-rectangle assertions
 alone did not detect. Native resize/shell hit testing remains independently tested.
 Physical Windows 11 Snap flyouts, mixed-DPI monitors and real assistive technology
 remain interactive platform acceptance items.
+
+
+[Final-source verification and actual captures](verification/DATA_VIEWS_0_25.md)
+record Windows Release/Debug 54/54 each, native browser 308 checks,
+Linux 54/54, isolated TSan 6/6 and local ASan/UBSan 54/54.
